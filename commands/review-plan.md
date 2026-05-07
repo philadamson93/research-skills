@@ -236,7 +236,7 @@ Report the line delta in the Phase 7 hand-off line so the user knows the pass ra
 
 Offer next step in one line, naming the reviewer used and the concision pass result if it ran:
 
-> Plan revised against <Codex|fresh Claude> review (<n> findings applied; <m> open questions; concision pass <pre>→<post> lines, -X%). Want to `/read-plan` it now, run the *other* reviewer (`/review-plan <plan-path> --reviewer <other>`) for a second pass, `/plan-check` first, or commit?
+> Plan revised against <Codex|fresh Claude> review (<n> findings applied; <m> open questions; concision pass <pre>→<post> lines, -X%). Want to `/read-plan` it now, run the *other* reviewer (`/review-plan <plan-path> --reviewer <other>`) for a second pass, `/plan-handoff-readiness` first, or commit?
 
 Do not auto-invoke any of these. Suggesting the other reviewer is a useful prompt when the first review found mostly trivial gaps (a sign the plan was already strong) or when the user explicitly wants both perspectives — but it's just an offer; don't push.
 

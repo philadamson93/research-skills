@@ -5,12 +5,11 @@ Personal Claude Code skills, shared in case they're useful. These are slash comm
 ## Contents
 
 - `commands/` — slash commands loaded by Claude Code from `~/.claude/commands/`
-  - `commit.md` / `commit-review.md` — commit workflow (with appropriateness review for accidentally-leaked content)
+  - `commit-review.md` — commit workflow with an appropriateness review (catches accidentally-leaked private content) before commit + push
   - `review-plan.md` — independent design audit of a plan doc by Codex CLI or a fresh Claude Code subagent, then *applies* agreed feedback
-  - `review-implementation.md` — independent implementation audit against a plan doc
-  - `review-tests.md` — independent test-coverage audit
-  - `review.md` — PR review template
-  - `plan-check.md` — checks whether a plan is fresh-agent-ready
+  - `review-implementation.md` — independent implementation audit of uncommitted code against a plan doc
+  - `review-tests.md` — independent test-coverage audit of uncommitted code against a plan doc
+  - `plan-handoff-readiness.md` — pre-implementation handoff check: does the plan POINT AT or STATE DIRECTLY everything a fresh agent needs to implement it?
   - `read-plan.md` — opens a plan doc in the user's default `.md` app
   - `next.md` — "where did we leave off?" session-opener
   - `wrapup.md` — end-of-session cleanup

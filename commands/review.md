@@ -1,1 +1,0 @@
-Please deploy review agents per claude_ops.

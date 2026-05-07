@@ -1,1 +1,0 @@
-Please commit per claude_ops. No review agents necessary. No new feature branch necessary.

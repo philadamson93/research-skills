@@ -1,9 +1,9 @@
 ---
-name: plan-check
+name: plan-handoff-readiness
 description: A plan doc is a fresh-agent handoff. The current session has accumulated context the plan needs to either POINT AT (name the docs / files / memories the fresh agent should read first) or STATE DIRECTLY (when the context is load-bearing and brittle to indirection). After writing or substantially editing an implementation plan doc — anything in docs/plans/, plans/, design/, rfcs/, or files named PLAN.md / DESIGN.md / RFC.md / IMPLEMENTATION.md / PROPOSAL.md — run this check to surface gaps where the fresh agent would arrive context-starved. Pauses for user sign-off if gaps found. TRIGGER right after a Write or Edit tool call that produces a multi-step implementation plan, BEFORE invoking commit-review or moving on to the next conversation thread. Extensible per-project — see the bottom section.
 ---
 
-# plan-check
+# plan-handoff-readiness
 
 ## The principle
 
@@ -16,7 +16,7 @@ A plan doc is written at the end of a conversation that has accumulated a lot of
 
 If the plan implicitly assumes the fresh agent already knows something the current conversation worked out, the implementation will start by re-deriving it (slower, error-prone) or skip it (silently wrong). Both outcomes are bad.
 
-The job of `plan-check` is to surface these implicit assumptions and decide, per gap, between two fixes:
+The job of `plan-handoff-readiness` is to surface these implicit assumptions and decide, per gap, between two fixes:
 
 1. **POINT AT** the source of the context — "read `<file>` first," "see memory `<name>`," "see `docs/journal/<entry>` for decision rationale," "see `<sister-feature-plan>` for the related design."
 2. **STATE DIRECTLY** in the plan — when the context is load-bearing for implementation AND brittle to indirection (the source may move, get archived, or rot; the line numbers may shift; the memory may decay).
@@ -158,10 +158,10 @@ Plan states a non-obvious decision ("we use approach X, not Y") without saying w
 
 This skill is the universal base. Individual projects accumulate their own gap patterns — file-path conventions, common cross-stage surfaces, recurring "Pre-step does X" misframings against that project's actual code structure.
 
-If the current project has its own `.claude/skills/plan-check.md` (or `.claude/skills/plan-doc-readiness-check.md`, the older name), read it as an extension of this global skill — not a replacement. The project skill should:
+If the current project has its own `.claude/skills/plan-handoff-readiness.md` (or earlier names: `.claude/skills/plan-check.md`, `.claude/skills/plan-doc-readiness-check.md`), read it as an extension of this global skill — not a replacement. The project skill should:
 
 - Reference this global skill rather than duplicate the universal checks above.
 - Add project-specific names: actual file paths, schema files, the project's particular orchestrator-or-pipeline shape.
 - List project-specific common gap patterns observed in past reviews of that project's plans.
 
-If you find yourself running this skill in a project that doesn't have a `.claude/skills/plan-check.md`, the global skill alone is sufficient. The extension is a refinement, not a prerequisite.
+If you find yourself running this skill in a project that doesn't have a `.claude/skills/plan-handoff-readiness.md`, the global skill alone is sufficient. The extension is a refinement, not a prerequisite.

@@ -6,6 +6,7 @@ Personal Claude Code skills, shared in case they're useful. These are slash comm
 
 - `commands/` — slash commands loaded by Claude Code from `~/.claude/commands/`
   - `commit-review.md` — commit workflow with an appropriateness review (catches accidentally-leaked private content) before commit + push
+  - `phi-vet.md` — hard pre-commit gate for medical-data repos that scans files for PHI leakage (patient/encounter/study identifiers, sample row data, free-text excerpts, image files); `commit-review` escalates to this when working in an OMOP/NeuralFrame/EHR/DICOM context
   - `review-plan.md` — independent design audit of a plan doc by Codex CLI or a fresh Claude Code subagent, then *applies* agreed feedback
   - `review-implementation.md` — independent implementation audit of uncommitted code against a plan doc
   - `review-tests.md` — independent test-coverage audit of uncommitted code against a plan doc
@@ -19,11 +20,25 @@ Personal Claude Code skills, shared in case they're useful. These are slash comm
 
 This repo is a snapshot of my `~/.claude/`. To use one of these commands:
 
-1. Clone: `git clone https://github.com/philadamson93/research-skills.git`
+1. Clone: `git clone git@github.com:philadamson93/research-skills.git`
 2. Copy a command to `~/.claude/commands/` (or symlink the whole dir).
 3. Optionally copy `CLAUDE.md` to `~/.claude/CLAUDE.md`.
 
 The skills assume Claude Code as the harness. Some reference companion tools (`codex` CLI, `gh`); install as needed.
+
+### One-shot setup on a fresh VM (or local Mac)
+
+To wire this repo up as the source of truth for `~/.claude/commands/` and `~/.claude/CLAUDE.md` so future updates flow both ways, run once after cloning:
+
+```bash
+git clone git@github.com:philadamson93/research-skills.git ~/code/research-skills
+ln -s ~/code/research-skills/commands ~/.claude/commands
+ln -s ~/code/research-skills/CLAUDE.md ~/.claude/CLAUDE.md
+```
+
+After this, `git -C ~/code/research-skills pull` (or push, after `commit-review`) updates the live commands. Symlinks survive Claude Code restarts; no rebuild needed.
+
+**Session-start sync habit:** at the start of any work session on a machine that has this repo cloned, do `git -C ~/code/research-skills pull --ff-only` to pick up cross-machine updates. Worth bookkeeping in a per-machine memory note (e.g., `feedback_research_skills_sync.md`) so future sessions remember.
 
 ## Notes
 

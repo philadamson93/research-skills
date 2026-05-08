@@ -12,7 +12,7 @@ Scan all uncommitted content (staged, unstaged, and untracked files) with the qu
 - **Third-party commentary beyond published-work analysis** — speculation about specific researchers, institutions, motivations, career decisions. Critique of a published paper is fine; speculation about the author's reasoning is not.
 - **Private working-group deliberations** — internal decisions, working-relationship dynamics, partner-referencing budget or cost discussions.
 - **Asides marked conversationally as "shouldn't log" / "neither here nor there"** that may have leaked into structured docs.
-- **PHI / credentials / API keys** — low-probability in plan/journal docs, sweep anyway.
+- **PHI / credentials / API keys** — low-probability in plan/journal docs, sweep anyway. **In medical-data repos** (cues: project CLAUDE.md mentions PHI handling; the repo touches BigQuery / OMOP / NeuralFrame / DICOM / EHR; an existing memory note flags this repo as PHI-risk), ESCALATE to `/phi-vet` for the depth-pass instead of relying on this inline sweep — `phi-vet` carries the full identifier catalog (person_id formats, DICOM UIDs, accession numbers, sample-row re-identification rules) and is the canonical pre-commit gate for this class of repo. Do not silently fall back to inline sweep when escalation is warranted.
 
 Scientific content is fine to commit without flagging:
 - Critique of published papers (standard related-work analysis).

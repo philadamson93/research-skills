@@ -32,7 +32,9 @@ Show the user the list of files you'll review and confirm. If the list is short 
 
 ## Step 2 — Threat catalog (what to look for)
 
-For each file, scan for the following PHI categories. **In medical-data repos (OMOP/NeuralFrame/EHR/DICOM context), the priors are HIGH** — assume any concrete data value is suspect until proven safe.
+**Read every in-scope file in full with the Read tool before evaluating.** Pattern-grep alone is not sufficient — several PHI categories below (narrative re-identification where placeholder + unique clinical features re-identify, sample-row composition across multiple OMOP columns, sentence-length free-text dictation excerpts, indirect cancer-pair / treatment-interval narratives) won't surface through regex. Use grep as a supplementary check *after* the Read pass, never as a substitute for it. This applies to every file regardless of size — tiny CLAUDE.md tweaks and 50-line bash scripts included.
+
+For each file, evaluate against the following PHI categories. **In medical-data repos (OMOP/NeuralFrame/EHR/DICOM context), the priors are HIGH** — assume any concrete data value is suspect until proven safe.
 
 ### PHI categories — flag if present
 
@@ -72,7 +74,7 @@ If the file is large (>500 lines), or contains many sample tables / heterogeneou
 - Explicit "do not run code, read-only" instruction
 - Required output format: per-line VERDICT (SAFE / FLAGGED / BORDERLINE) with file:line and exact-quoted content for any flag, plus a summary recommendation
 
-Sub-agent escalation is OPTIONAL; for short obvious files (a 50-line bash script, a CLAUDE.md tweak), inline review is fine.
+Sub-agent escalation is OPTIONAL; for short obvious files (a 50-line bash script, a CLAUDE.md tweak), inline Read+evaluate by the running Claude is fine. **What is never fine: skipping the Read pass and relying on regex/grep alone** — even tiny files get a full Read per Step 2, since the threat catalog includes narrative re-id risks that grep won't catch.
 
 ---
 

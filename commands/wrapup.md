@@ -1,4 +1,4 @@
-End-of-session cleanup. Do the six steps below in order.
+End-of-session cleanup. Do the seven steps below in order.
 
 ## Scope
 
@@ -61,7 +61,46 @@ If no backlog file exists but the immediate-tracking doc has a "Deferred / Backl
 
 Update `MEMORY.md` to reflect the current project state, open items, and any new preferences or facts learned this session. Evict stale entries. Save new memories per the auto-memory rules in the system prompt — do not duplicate facts already covered by `CLAUDE.md` or derivable from the code.
 
-## Step 6 — Summary + commit gate
+## Step 6 — Global skills sync (separate repo)
+
+The user's global skills live in their own git repo, which is **a different repo from the project being worked on** — it has its own commit gate and its own push target. There are often TWO related paths to consider:
+
+- **Runtime cache** — `~/.claude/commands/` and `~/.claude/skills/`. These are what Claude Code loads at session start. Often its own local git repo, but may accumulate untracked drift since the canonical source is elsewhere.
+- **Canonical repo** — a user-maintained git repo with a GitHub remote, often named `*-skills` / `claude-skills` / `research-skills` and located under the user's `~/Documents/` or projects directory. Authoritative source of truth.
+
+**Detection:**
+1. Always check the runtime cache: `git -C ~/.claude/commands status --short` (and `git -C ~/.claude/skills status --short` if that path exists).
+2. Check the canonical repo if one exists. Look for `~/.claude/canonical-skills-repo` (a single-line file containing the absolute path to the canonical repo). If that pointer file doesn't exist, fall back to scanning common locations (`find ~/Documents -maxdepth 4 -type d \( -name 'research-skills' -o -name 'claude-skills' \) 2>/dev/null | head -5`) and surface a candidate via `AskUserQuestion` if exactly one match is found. If zero or many, skip and surface in Step 7 summary as "no canonical skills repo detected."
+3. If the output is empty in all candidate paths, **skip this step silently** — nothing to sync.
+
+**Sync direction matters.** Edits often happen in the runtime cache (because that's what Claude Code is reading from), but the canonical repo is the source of truth that gets pushed to GitHub. Before committing, copy your session edits from the runtime cache → canonical:
+
+```bash
+cp ~/.claude/commands/<file>.md <canonical-repo>/commands/<file>.md
+# (or cp ~/.claude/skills/<name>/SKILL.md → <canonical-repo>/commands/<name>.md
+#  if the canonical repo uses the flatter `commands/<name>.md` convention)
+```
+
+Then commit + push in the canonical repo. Optionally cp the canonical version back to the runtime cache to keep them in sync (so the next session reads the same content the remote has).
+
+If non-empty AND any of the changed files were touched by you this session (cross-check against your edit log; do not commit unrelated drift the user may have stashed there for their own reasons):
+
+Raise an `AskUserQuestion` with three options:
+
+1. **"Commit and push global skills" (Recommended)** — commit your session changes and push to the configured remote in one action.
+2. **"Commit only (no push)"** — create the commit locally; defer the push.
+3. **"Skip"** — leave global-skills changes uncommitted; flag in the Step 7 summary as needing attention.
+
+Based on the answer:
+
+- *Commit and push* / *Commit only*: stage only the files you touched (`git -C <repo> add <file1> <file2>`; do **not** use `git -C <repo> add -A`), then commit with a short single-line thematic message describing what changed (e.g., `plan-handoff-readiness: add implementation-forward principle`). No AI attribution lines, matching the project commit-message convention. Push only if the option chosen requires it.
+- *Skip*: do nothing; surface in Step 7 summary.
+
+The `-C <path>` form keeps the project's cwd intact; do not `cd` into the skills repo.
+
+**Why a separate gate from Step 7:** two independent repos, two independent push targets. The user might want to push the project but defer the skills sync, or vice versa. One gate per repo.
+
+## Step 7 — Summary + commit gate
 
 **Summarize as bullet points** (not a paragraph). Use these headings; omit any that are empty:
 

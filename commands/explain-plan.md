@@ -57,14 +57,31 @@ The HTML embeds:
 
 Concrete syntax landmines that have broken diagrams in real plans. Avoid up-front; don't wait for the user to report "syntax error in text, mermaid version X.Y.Z."
 
-- **Never put `{{` or `}}` in node labels or edge labels** — Mermaid's parser treats `{` as a rhombus-node opener even inside quoted strings, and Jinja-style `{{ INDEX_FOO }}` will break the diagram. If you must reference a Jinja variable visually, write it as `INDEX_FOO` (drop the braces) and explain in surrounding prose that it's a Jinja template var.
+- **Never put `{` or `}` in node labels, subgraph titles, or edge labels** — not even single braces. Mermaid's parser treats `{` as a rhombus-node opener even inside quoted strings, and even inside subgraph quoted titles. This breaks placeholders like `{dataset}/{pair_key}` or `{model_a/b}_per_example.parquet` that look perfectly natural in a path-template label. Rewrite as `(dataset)/(pair_key)/` or `(model_a or b)_per_example.parquet` — parentheses inside `[...]` labels are literal text. Same hazard for Jinja `{{ INDEX_FOO }}` — drop braces.
+- **Never put `|` (pipe) in node labels** — `|` is the edge-label delimiter in `A -->|label| B`, and the parser gets confused when a pipe appears inside a node's `[...]` label. Replace with `/`, `,`, or the word `or`. E.g., `[results/{ct|ehr|path}/...]` is doubly broken — both `{` and `|` are hazards; rewrite as `[results/(ct, ehr, or path)/...]`.
+- **Never put double or triple dashes (`--`, `---`) inside node labels** — Mermaid uses `-->`, `---`, `===` as edge tokens, and a label containing `--verify-against-solo` or `---` (from a separator line) tokenizes ambiguously. Common failure mode: bullet replacement (`• --foo` → `- --foo`) silently creates `---foo` which the parser splits as edge-then-node. Strip leading `--` from labels (drop the CLI-flag dashes when used as a *label*; keep them in the surrounding prose), and avoid `---`/`━━━`/`═══` as visual separators inside labels.
+- **Avoid Unicode arrows (`→`, `←`, `↔`) in node labels** — 10.x parsers sometimes choke. Replace with `->`, `<-`, `to`, `vs`, or simply rephrase. (Status chips `✅ ⏳ 🛑 ⚠️` and `▸` *generally* work; arrows specifically don't.)
+- **Avoid box-drawing chars (`━`, `═`, `│`) in node labels** as visual separators — same fragility as `---`. Use `<br/><br/>` for visual whitespace or just `<br/>` alone.
 - **Edge labels: use pipe syntax `A -->|label| B`**, not `A -- "label" --> B`. Pipe syntax is more permissive about special chars (parens, slashes, commas) and survives parser quirks across Mermaid versions.
-- **Dotted arrows with labels: `A -. label .-> B`** (spaces required, both ends marked). NOT `A -.label-->B` — that's a malformed-token bug that 10.x parsers reject silently. Same for thick: `A == label ==> B`.
-- **Avoid `•` (bullet) in node labels** if you're seeing parser failures — switch to `,` or `;` as a separator. `•` usually works but is a known sometimes-fail in older Mermaid versions.
+- **Dotted arrows with labels: `A -. label .-> B`** (spaces required around the label on both sides). NOT `A -.label.-> B` or `A -.label-->B` — both are malformed-token bugs that 10.x parsers reject silently. Same for thick: `A == label ==> B` (spaces required). Watch for this when you have many `-. <verb> .->` edges with short labels — easy to drop the spaces by reflex.
+- **Avoid `•` (bullet) in node labels** if you're seeing parser failures — switch to `,`, `;`, or just rely on `<br/>` for line breaks. `•` usually works but is a known sometimes-fail in older Mermaid versions. **Watch out for blind bullet-replacement**: if you do a bulk `• ` → `-` substitution to fix the bullet issue, you may create new `--` or `---` sequences when `• ` precedes another `-` token (e.g., `• --verify-against-solo` → `---verify-against-solo`).
 - **`<br/>` for line breaks in node labels works**; raw `\n` does not. Use HTML-style breaks.
-- **Subgraph labels with spaces or punctuation must be quoted**: `subgraph foo["My Label (v2)"]`, not `subgraph foo My Label`.
+- **Subgraph labels with spaces or punctuation must be quoted**: `subgraph foo["My Label (v2)"]`, not `subgraph foo My Label`. Note: quoting does NOT save you from the `{` hazard inside the label.
+- **Wrap multi-line / punctuated node labels in double quotes**: `s1["<b>Slice 1</b><br/>line 2<br/>line 3"]`, not `s1[<b>Slice 1</b><br/>...]`. The quotes harden the label against ambiguity when it contains colons, commas, parentheses, or HTML tags.
 - **`class A,B,C classname` is fine**; many node IDs in one assignment is the idiomatic shape.
-- **Generation-time validation**: after writing the HTML, you can sanity-check Mermaid blocks by grep'ing for the known-bad patterns (`{{`, `}}`, `-\.[a-z]+-->`) before opening — cheap, catches the common cases.
+- **Generation-time validation (run BEFORE opening the file)**: pipe `<pre class="mermaid">...</pre>` blocks to a temp file and grep for every known-bad pattern. Cheap, catches all the common cases:
+
+  ```bash
+  awk '/<pre class="mermaid">/,/<\/pre>/' <html> > /tmp/mermaid.txt
+  grep -nE '\{|\}'                       /tmp/mermaid.txt   # curly braces (any, not just doubles)
+  grep -nE '\[[^]]*\|[^]]*\]'            /tmp/mermaid.txt   # pipe inside node labels
+  grep -nE '\-\.[A-Za-z][^.]*\.->'       /tmp/mermaid.txt   # dotted arrow missing spaces
+  grep -nE '\[[^]]*---[^]]*\]'           /tmp/mermaid.txt   # triple-dash in node labels
+  grep -nE '→|←|↔'                       /tmp/mermaid.txt   # unicode arrows
+  grep -nE '━|═|│'                       /tmp/mermaid.txt   # box-drawing chars
+  ```
+
+  Every section must return zero hits before opening. If any returns hits, fix and re-run — don't open a broken HTML and force the user to be the parser.
 
 ## Inputs
 
@@ -85,6 +102,7 @@ Concrete syntax landmines that have broken diagrams in real plans. Avoid up-fron
    - Blast radius: entity-level. Nodes are concrete things — file paths, table names, knob identifiers. Edges are "flows into" / "renders" / "consumes." Use `subgraph` groupings.
    - Flow: step-level with status chips.
    - Inset diagrams for complex multi-substep nodes (only if the plan has them).
+   - **Group nodes by their call-graph role, not by their filesystem location.** A new orchestrator that *wraps* an existing primitive (e.g., calls `_fit_and_eval` directly while bypassing the outer `run_*` wrapper) is a *meta-orchestrator*, not a peer of the per-modality orchestrators it lives alongside in `eval/`. Putting it in the same subgraph as `run_linear_probe` / `run_knn` / `run_survival` makes the reader assume it's "another per-modality runner" — leading to questions like "shouldn't this feed *into* run_linear_probe?". Instead: put the wrapper in its own subgraph (e.g., `Meta-orchestrator (this plan)`) sibling to but distinct from the per-modality `Orchestrators` subgraph, and label the edge from the wrapped primitive with `calls directly (bypasses run_linear_probe)` or similar to make the call-graph relationship explicit. The diagram is for a fresh reader who has never seen the code — file-system adjacency is irrelevant; what they need is "who calls what."
 5. **Write the HTML** to the resolved output path. Use the template structure described above. Inline all CSS and JS; load Mermaid from `cdn.jsdelivr.net/npm/mermaid@10`.
 6. **Verification pass** — see next section. Run this BEFORE opening so any drift fixes land before the user sees the file.
 7. **Open the file** in the user's default browser — REQUIRED, not optional. Run `open <output-path>` on macOS, `xdg-open <output-path>` on Linux, `start <output-path>` on Windows. Detect platform via `uname -s` if uncertain. The user invoked the skill to *review* the HTML; failing to open it forces an extra manual step. The only exception: if the user explicitly said "just generate, don't open" in the invocation, skip the open. Mention the path in the hand-off message regardless, so the user can re-open it manually if their default app didn't catch the file.

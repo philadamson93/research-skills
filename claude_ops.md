@@ -26,6 +26,19 @@ This document defines how Claude Code should operate across all VISTA repos. Ref
 
 ---
 
+## Session Start
+
+Quickly check if the global skills repo (canonical path: `~/code/research-skills`) is substantially behind `origin/main` before starting work:
+
+```bash
+git -C ~/code/research-skills fetch --quiet 2>/dev/null && \
+  git -C ~/code/research-skills log HEAD..origin/main --oneline 2>/dev/null | head
+```
+
+If the local clone is **3+ commits behind**, suggest a `git -C ~/code/research-skills pull --ff-only` before starting — mid-session skill-spec drift (a `/wrapup` or `/review-plan` invocation reading a different version than expected) is harder to reason about than a clean pull at the start. If 0–1 commits behind or the path doesn't exist on this machine, skip silently.
+
+---
+
 ## Planning Workflow
 
 ### Starting a Task

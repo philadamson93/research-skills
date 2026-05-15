@@ -23,6 +23,28 @@ The job of `plan-handoff-readiness` is to surface these implicit assumptions and
 
 The default is **POINT AT.** Stating directly is reserved for cases where indirection genuinely fails the fresh agent.
 
+## Implementation-forward, not retrospective
+
+A finalized plan is **implementation-forward**. It tells the implementer what to build. Decisions made along the way (why option (b) was picked over (c), what alternatives were considered, what was deferred) are **retrospective** — they belong in commit messages, conversation logs, PR descriptions, or a project-level decisions tracker, **not in the plan doc that ships to the implementer.**
+
+When auditing a plan, focus on what the IMPLEMENTER needs to act:
+
+- Does the plan name file paths, line numbers, schemas, success criteria, cross-stage propagation, out-of-scope items?
+- Does it describe what to build, not why each design choice was preferred?
+
+Do NOT audit for:
+
+- **Decision rationale** ("why did they pick (b) over (c)?") — if the spec says "the column is modality-conditional," the implementer has what they need to act. The reasoning belongs in the commit / conversation, not the plan.
+- **Decisions log presence** — a plan doc is not a decisions tracker. If the project keeps a decisions log, point at it; don't expect the plan to embed one.
+- **"Open Questions" section completeness** — if a plan still has open questions, it's not finalized; the right action is "go finalize the questions," not "audit handoff readiness."
+
+**Surface as a gap (REMOVE-IT signal): an "Open Questions" or "Decisions" section retained AFTER all questions are resolved.** The decisions are baked into the spec; the retained section is duplicative scaffolding from the design phase that ages poorly (Q-citations in the spec become dangling references when someone later renumbers or trims the section). Once finalized, fold:
+
+- **Resolved decisions** → into the implementation spec itself (the rule is what the implementer needs; not the rationale).
+- **Backlog / out-of-scope items** → a brief "Out of scope" section so the implementer knows what to skip.
+- **Items still gated on data** → into the relevant Slice's verification section as decision-criteria sub-bullets ("if VM data shows X, file follow-up Y") — these are forward-looking work, not open questions.
+- **Strip Q-citations from the spec** ("per Q14 resolution", "(Q21)") — they only made sense while the Open Questions section existed; once it's gone, they're noise.
+
 ## When to run
 
 - **Right after writing or substantially editing a plan doc.** Before invoking commit-review. Before moving on to the next thread of the conversation.

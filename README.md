@@ -12,6 +12,7 @@ Personal Claude Code skills, shared in case they're useful. These are slash comm
   - `review-tests.md` — independent test-coverage audit of uncommitted code against a plan doc
   - `plan-handoff-readiness.md` — pre-implementation handoff check: does the plan POINT AT or STATE DIRECTLY everything a fresh agent needs to implement it?
   - `read-plan.md` — opens a plan doc in the user's default `.md` app
+  - `explain-plan.md` — visual companion to `read-plan`: generates a self-contained interactive HTML (Mermaid diagrams with pan/zoom, blast-radius map, step accordion, inline feedback widgets) for plans too dense to review in prose
   - `next.md` — "where did we leave off?" session-opener
   - `wrapup.md` — end-of-session cleanup
 - `CLAUDE.md` — my global Claude Code instructions (interaction style, environment notes)

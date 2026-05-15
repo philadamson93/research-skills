@@ -6,6 +6,7 @@ Personal Claude Code skills, shared in case they're useful. These are slash comm
 
 - `commands/` — slash commands loaded by Claude Code from `~/.claude/commands/`
   - `explain-plan.md` — visual companion to `read-plan`: generates a self-contained interactive HTML (Mermaid diagrams with pan/zoom, blast-radius map, step accordion, inline feedback widgets) for plans too dense to review in prose
+  - `debate.md` — structured adversarial debate for major design decisions where reasonable people disagree (cross-repo architecture, build system choices, data contract design); two parallel advocates, codebase-grounded arguments, main-agent moderation, synthesized decision doc
   - `review-plan.md` — independent design audit of a plan doc by Codex CLI or a fresh Claude Code subagent, then *applies* agreed feedback
   - `wrapup.md` — end-of-session cleanup
   - `next.md` — "where did we leave off?" session-opener

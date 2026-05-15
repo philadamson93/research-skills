@@ -6,7 +6,6 @@ Personal Claude Code skills, shared in case they're useful. These are slash comm
 
 - `commands/` — slash commands loaded by Claude Code from `~/.claude/commands/`
   - [`explain-plan.md`](commands/explain-plan.md) — visual companion to `read-plan`: generates a self-contained interactive HTML (Mermaid diagrams with pan/zoom, blast-radius map, step accordion, inline feedback widgets) for plans too dense to review in prose
-  - [`debate.md`](commands/debate.md) — structured adversarial debate for major design decisions where reasonable people disagree (cross-repo architecture, build system choices, data contract design); two parallel advocates, codebase-grounded arguments, main-agent moderation, synthesized decision doc
   - [`review-plan.md`](commands/review-plan.md) — independent design audit of a plan doc by Codex CLI or a fresh Claude Code subagent, then *applies* agreed feedback
   - [`wrapup.md`](commands/wrapup.md) — end-of-session cleanup
   - [`next.md`](commands/next.md) — "where did we leave off?" session-opener
@@ -16,6 +15,7 @@ Personal Claude Code skills, shared in case they're useful. These are slash comm
   - [`review-tests.md`](commands/review-tests.md) — independent test-coverage audit of uncommitted code against a plan doc
   - [`plan-handoff-readiness.md`](commands/plan-handoff-readiness.md) — pre-implementation handoff check: does the plan POINT AT or STATE DIRECTLY everything a fresh agent needs to implement it?
   - [`read-plan.md`](commands/read-plan.md) — opens a plan doc in the user's default `.md` app
+  - [`debate.md`](commands/debate.md) — structured adversarial debate for major design decisions where reasonable people disagree (cross-repo architecture, build system choices, data contract design); two parallel advocates, codebase-grounded arguments, main-agent moderation, synthesized decision doc
 - [`CLAUDE.md`](CLAUDE.md) — global Claude Code instructions (interaction style, environment notes)
 - [`claude_ops.md`](claude_ops.md) — operating standards shared across research repos: planning workflow, code quality, git practices, pre-commit review pointers, skill composition discipline. Designed to be **symlinked into each repo as `docs/claude_ops.md`** so all repos reference the same source-of-truth (see per-repo setup below).
 

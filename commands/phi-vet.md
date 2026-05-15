@@ -1,5 +1,5 @@
 ---
-description: Hard pre-commit gate scanning files for PHI (Protected Health Information) leakage in medical-data research repos — patient identifiers, DICOM UIDs, accession numbers, clinical dates, sample row data, free-text report excerpts, embedded images. ALSO surfaces every doc file in the commit and requires the user to explicitly acknowledge they have read each before sign-off. TRIGGER before committing in any repo where work touches BigQuery / OMOP / NeuralFrame / DICOM / EHR data (cues: project CLAUDE.md mentions PHI/PHI-handling; recent commits reference task tables, image_occurrence, person_id, NeuralFrame, OMOP releases; presence of BQ credential usage; an explicit memory note about PHI safeguards). ALSO TRIGGER when the user says "PHI vet", "PHI scan", "check for patient data", "scrub for PHI", or "vet this commit". When a companion PreToolUse hook (`hooks/phi-vet-gate.sh`) is installed, that hook will BLOCK `git commit` in medical-data repos until this skill has written a sign-off marker for the current staged tree — this skill is the only path through the gate. The commit-review skill ESCALATES to this skill when working in a medical-data repo. SKIP only if the user explicitly says "skip the PHI check" — never skip silently; if skipped, still write the marker (with the rationale appended) so the user's override is auditable.
+description: Hard pre-commit gate scanning files for PHI (Protected Health Information) leakage in medical-data research repos — patient identifiers, DICOM UIDs, accession numbers, clinical dates, sample row data, free-text report excerpts, embedded images. ALSO surfaces every doc file in the commit and requires **the human user (not Claude)** to explicitly read and acknowledge each one before sign-off — Claude having read the file does NOT count. TRIGGER before committing in any repo where work touches BigQuery / OMOP / NeuralFrame / DICOM / EHR data (cues: project CLAUDE.md mentions PHI/PHI-handling; recent commits reference task tables, image_occurrence, person_id, NeuralFrame, OMOP releases; presence of BQ credential usage; an explicit memory note about PHI safeguards). ALSO TRIGGER when the user says "PHI vet", "PHI scan", "check for patient data", "scrub for PHI", or "vet this commit". When a companion PreToolUse hook (`hooks/phi-vet-gate.sh`) is installed, that hook will BLOCK `git commit` in medical-data repos until this skill has written a sign-off marker for the current staged tree — this skill is the only path through the gate. The commit-review skill ESCALATES to this skill when working in a medical-data repo. SKIP only if the user explicitly says "skip the PHI check" — never skip silently; if skipped, still write the marker (with the rationale appended) so the user's override is auditable.
 ---
 
 You are running the **`/phi-vet`** command. Hard pre-commit gate that catches PHI (patient/encounter/study identifiers, sample row data, free-text excerpts, image files) in files about to be committed from a medical-data research repo.
@@ -108,9 +108,11 @@ If all files are **SAFE**:
 
 This step is what turns a passing PHI scan into a *committable* state. Two parts:
 
-### 5a. Doc-read sign-off
+### 5a. Doc-read sign-off — **this is the HUMAN's read, not Claude's**
 
-PHI scan catches data leakage; it does not catch editorialization, private working-group content, or prose the user wouldn't want committed unread. So before declaring SAFE-to-commit, enumerate every doc file in the staged tree and require the user to explicitly acknowledge they've read each one.
+PHI scan catches data leakage; it does not catch editorialization, private working-group content, or prose the user wouldn't want committed unread. So before declaring SAFE-to-commit, enumerate every doc file in the staged tree and require **the human user** to confirm they have personally opened and read each one.
+
+**Critical rule**: Claude having read the file during the PHI scan does NOT satisfy this step. Claude already reads every staged file in Step 2 (the threat-catalog pass); that's a PHI scan, not the user's appropriateness review. The user's eyes on the prose are the load-bearing check here — for editorialization, tone, private-context leakage, and "did Claude write something I wouldn't have said myself." Never answer the AskUserQuestion on the user's behalf; never infer ack from earlier conversation; never proceed because "the file looks fine" — only proceed when the user has clicked "Yes, I read it" (or supplied the explicit skip rationale).
 
 Doc files = anything in: `*.md`, `*.markdown`, `*.rst`, `*.txt`, `*.html`. Get the list:
 
@@ -120,14 +122,14 @@ git diff --cached --name-only -- '*.md' '*.markdown' '*.rst' '*.txt' '*.html'
 
 If the list is empty, skip to 5b.
 
-Otherwise, surface ALL doc paths via `AskUserQuestion` — per the global "Multi-choice → AskUserQuestion" preference. Batch up to 4 questions per call (the tool's max), one question per doc. Phrasing per question:
+Otherwise, surface ALL doc paths via `AskUserQuestion` — per the global "Multi-choice → AskUserQuestion" preference. Batch up to 4 questions per call (the tool's max), one question per doc. Phrasing per question must make the human-vs-Claude distinction explicit:
 
-> *"Have you personally read `path/to/doc.md` and confirm it's appropriate to commit?"*
+> *"Have YOU personally opened and read `path/to/doc.md`? (Claude having read it during the scan does not count — this is the human appropriateness review.)"*
 > Options: **Yes, I read it** / **No, open it for me first** / **Skip — I trust the change** (escape hatch with rationale logged)
 
-If the user picks **No, open it for me first**, hand off to `/read-plan` for that path, then re-ask the question. If they pick **Skip — I trust the change**, log the file + rationale in the conversation, treat as ack.
+If the user picks **No, open it for me first**, hand off to `/read-plan` for that path so the file launches in their default `.md` app, then re-ask the question once they're back. If they pick **Skip — I trust the change**, log the file + rationale in the conversation, treat as ack.
 
-Multiple docs → multiple AskUserQuestion rounds. Don't compress into one "have you read all of these?" question — the per-file surface is the value.
+Multiple docs → multiple AskUserQuestion rounds. Don't compress into one "have you read all of these?" question — the per-file surface is the value, and a single composite ack lets a tired user wave through without thinking.
 
 ### 5b. Write the sign-off marker
 

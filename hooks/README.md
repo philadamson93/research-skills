@@ -6,7 +6,7 @@ Claude Code **hooks** that compose with the slash-command skills in `../commands
 
 | Hook | Lifecycle | Purpose |
 |---|---|---|
-| [`phi-vet-gate.sh`](phi-vet-gate.sh) | `PreToolUse` (Bash) | Hard-gates `git commit` in medical-data research repos until [`/phi-vet`](../commands/phi-vet.md) has signed off on the current staged tree. Forces both a PHI scan **and** explicit per-doc read-acknowledgement before any commit lands. |
+| [`phi-vet-gate.sh`](phi-vet-gate.sh) | `PreToolUse` (Bash) | Hard-gates `git commit` in medical-data research repos until [`/phi-vet`](../commands/phi-vet.md) has signed off on the current staged tree. Forces both a PHI scan **and** explicit per-doc read-acknowledgement **from the human user** (Claude having read the file during the scan does NOT count — the user's own eyes on every staged doc are the load-bearing check) before any commit lands. |
 
 ---
 
@@ -58,7 +58,7 @@ Open a fresh Claude Code session in any medical-data repo (`vista-eval`, `vista-
 
 > PHI gate: this commit lands in a medical-data research repo (`vista-eval`), and the staged tree `5336…` has not been signed off by `/phi-vet`. Required: invoke `/phi-vet` to (a) scan the staged content … (b) surface every doc file in the commit and require the user to explicitly acknowledge they have read it, (c) on full approval, write a sign-off marker at `.git/phi-vet/5336….signed-off`. Once the marker exists, re-attempting `git commit` will pass this gate.
 
-Claude should then invoke `/phi-vet`, run the PHI scan, walk you through per-doc read-acknowledgement, write the marker, and re-attempt the commit.
+Claude should then invoke `/phi-vet`, run the PHI scan, walk **you** through per-doc read-acknowledgement (one AskUserQuestion per staged doc — your "Yes, I read it" is what the marker depends on, not Claude's scan), write the marker, and re-attempt the commit.
 
 In a non-medical repo (e.g., this `research-skills` repo itself), the hook stays silent and commits proceed as normal.
 

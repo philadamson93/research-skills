@@ -121,6 +121,15 @@ How will we know this works?
 - Avoid unnecessary abstractions
 - Don't add features that aren't explicitly requested
 
+### YAGNI vs Modularity — Raise Genuinely Uncertain Cases
+
+YAGNI (Principle #5) and modularity / re-use pull in opposite directions: YAGNI says don't build seams for hypothetical futures; modularity says factor seams so the next caller doesn't duplicate. Use best judgement on the obvious cases (one-off script → inline it; third caller landing in the same module → extract). **When the call is genuinely uncertain — reasonable engineers would disagree — raise it as an `AskUserQuestion` rather than committing silently.** Two right moments to ask:
+
+- **During exploration, before writing the plan doc** — if the shape of the abstraction hinges on a design call you can't make alone, ask before drafting, so the plan opens on the chosen branch instead of relitigating it.
+- **While writing the plan doc** — surface the fork in `## Open Questions` and / or via `AskUserQuestion` so the user decides before the plan locks in a direction.
+
+Don't paper over the tension with a hedge ("I'll extract it if needed later"); name it and resolve it.
+
 ---
 
 ## Git Practices

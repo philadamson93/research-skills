@@ -12,7 +12,7 @@ Scan all uncommitted content (staged, unstaged, and untracked files) with the qu
 - **Third-party commentary beyond published-work analysis** — speculation about specific researchers, institutions, motivations, career decisions. Critique of a published paper is fine; speculation about the author's reasoning is not.
 - **Private working-group deliberations** — internal decisions, working-relationship dynamics, partner-referencing budget or cost discussions.
 - **Asides marked conversationally as "shouldn't log" / "neither here nor there"** that may have leaked into structured docs.
-- **PHI / credentials / API keys** — low-probability in plan/journal docs, sweep anyway. **In medical-data repos** (cues: project CLAUDE.md mentions PHI handling; the repo touches BigQuery / OMOP / NeuralFrame / DICOM / EHR; an existing memory note flags this repo as PHI-risk), ESCALATE to `/phi-vet` for the depth-pass instead of relying on this inline sweep — `phi-vet` carries the full identifier catalog (person_id formats, DICOM UIDs, accession numbers, sample-row re-identification rules) and is the canonical pre-commit gate for this class of repo. Do not silently fall back to inline sweep when escalation is warranted.
+- **PHI / credentials / API keys** — low-probability in plan/journal docs, sweep anyway. **In medical-data repos, MUST escalate to `/phi-vet` for the depth-pass — do NOT rely on this inline sweep.** Trigger cues for "medical-data repo": project `CLAUDE.md` or `docs/claude_ops.md` mentions PHI handling; the repo touches BigQuery / OMOP / NeuralFrame / DICOM / EHR / WSI / pathology bucket / vista_bench / clinical-trial cohorts; an existing memory note flags this repo as PHI-risk; the diff touches any file matching `**/labels/**`, `**/cohort*/**`, `**/sql/**`, `**/data/**`, or per-example/per-patient parquets. `/phi-vet` carries the full identifier catalog (person_id formats, DICOM UIDs, accession numbers, slide hashes, sample-row re-identification rules, slide-surrogate redaction policy) and is the canonical pre-commit gate for this class of repo. Falling back to inline sweep when escalation is warranted is a **silent bypass of the PHI gate** — do not do it. If `/phi-vet` is unavailable in this environment, surface that explicitly to the user and pause rather than proceed.
 
 Scientific content is fine to commit without flagging:
 - Critique of published papers (standard related-work analysis).
@@ -31,10 +31,18 @@ If nothing was flagged, proceed to commit.
 
 ## Step 3 — Commit
 
-Honor whatever commit-style conventions the project specifies — typically in the project's `CLAUDE.md`, a memory file, or `docs/claude_ops.md`. Common conventions to expect and respect:
+Honor whatever commit-style conventions the project specifies. **Read the project docs FIRST**, before drafting and before glancing at `git log`:
+
+1. `docs/claude_ops.md` (vista repos and similar)
+2. `CLAUDE.md` at repo root
+3. Any commit-style entry in the project's auto-memory directory
+
+If those docs specify a length or style ("concise," "one sentence," "short," "detailed-thematic"), **follow the doc — not the git log**. `git log` shows what individual commits ended up as, which may include drift from the spec. The project docs are authoritative.
+
+Common conventions to expect and respect:
 
 - **No AI attribution trailers.** Never include `Co-Authored-By: Claude` or similar.
-- **Single line, substantive, thematic.** Many projects favor a single-line-but-detailed commit summary over either terse one-liners or multi-paragraph bodies. Match the historical style visible in `git log`.
+- **Default to concise.** A descriptive single sentence (≤ ~150 chars) is the right starting point. Only expand to a longer thematic message if (a) the project doc explicitly favors detailed messages, OR (b) the change genuinely spans multiple themes that need enumeration AND project conventions allow it. Do NOT extrapolate from a few long commits in `git log` — those may have been outliers or pre-spec.
 - **One theme per commit.** Split unrelated themes into separate commits. Cascading themes that all support one larger conceptual unit can ride together.
 - Use the HEREDOC pattern for the commit message to avoid quoting issues.
 - Stage files by name, not `git add -A` or `git add .` (avoids accidentally including credentials or untracked junk).

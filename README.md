@@ -5,16 +5,16 @@ Personal Claude Code skills, shared in case they're useful. These are slash comm
 ## Contents
 
 - `commands/` — slash commands loaded by Claude Code from `~/.claude/commands/`
+  - `explain-plan.md` — visual companion to `read-plan`: generates a self-contained interactive HTML (Mermaid diagrams with pan/zoom, blast-radius map, step accordion, inline feedback widgets) for plans too dense to review in prose
+  - `review-plan.md` — independent design audit of a plan doc by Codex CLI or a fresh Claude Code subagent, then *applies* agreed feedback
+  - `wrapup.md` — end-of-session cleanup
+  - `next.md` — "where did we leave off?" session-opener
   - `commit-review.md` — commit workflow with an appropriateness review (catches accidentally-leaked private content) before commit + push
   - `phi-vet.md` — hard pre-commit gate for medical-data repos that scans files for PHI leakage (patient/encounter/study identifiers, sample row data, free-text excerpts, image files); `commit-review` escalates to this when working in an OMOP/NeuralFrame/EHR/DICOM context
-  - `review-plan.md` — independent design audit of a plan doc by Codex CLI or a fresh Claude Code subagent, then *applies* agreed feedback
   - `review-implementation.md` — independent implementation audit of uncommitted code against a plan doc
   - `review-tests.md` — independent test-coverage audit of uncommitted code against a plan doc
   - `plan-handoff-readiness.md` — pre-implementation handoff check: does the plan POINT AT or STATE DIRECTLY everything a fresh agent needs to implement it?
   - `read-plan.md` — opens a plan doc in the user's default `.md` app
-  - `explain-plan.md` — visual companion to `read-plan`: generates a self-contained interactive HTML (Mermaid diagrams with pan/zoom, blast-radius map, step accordion, inline feedback widgets) for plans too dense to review in prose
-  - `next.md` — "where did we leave off?" session-opener
-  - `wrapup.md` — end-of-session cleanup
 - `CLAUDE.md` — my global Claude Code instructions (interaction style, environment notes)
 
 ## How to use

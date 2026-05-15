@@ -1,5 +1,9 @@
 End-of-session cleanup. Do the seven steps below in order.
 
+## When to invoke
+
+Recommended cadence: invoke around **~200k tokens of context** (or earlier at a clean cutoff), land with the commit gate in Step 7, then start a fresh session with `/next`. Long sessions past that point get noticeably slower (cache misses on every turn, drift in long-tail context) and the marginal value of staying in-session keeps falling. The `MEMORY.md` + `next.md` updates this skill maintains are what make the cross-session handoff cheap — invest in them here so the next session starts fast.
+
 ## Scope
 
 **Recently-touched docs only.** Pass over `docs/` files you edited or created this session, or files modified since the last commit on the current branch (use `git diff --name-only` and `git status` as fallbacks when session memory isn't enough). Do **not** do a full-tree doc consolidation pass here — that's a deliberately separate, heavier-context task.

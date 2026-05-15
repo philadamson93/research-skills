@@ -101,6 +101,10 @@ How will we know this works?
 - **Mark plan docs as completed** by adding `**Status: Completed** (date)` at the top.
 - **Update the plans README** (`docs/plans/README.md`) feature table with the new status.
 
+### VM-status docs are for smoke tests only — not for eval results
+
+`docs/vm-status/<date>-<sha>.md` reports are for **smoke-test / verification handoffs** between sessions: aggregator runs needing structural readback, full test sweeps with expected reds to characterize, end-to-end pipeline validation. Once a workstream has moved past smoke tests into producing eval results (linear-probe runs, KNN runs, cross-modality comparisons), don't propose vm-status docs — the user reads results directly from the auto-generated HTML at `<results-root>/<version>/<modality>/<dataset>/reports/<model>_<dataset>.html` plus the on-disk per-task / per-example parquets, and writes any narrative themselves. Backlog / next.md entries that *reference* such results with a one-line pointer are still fine.
+
 ---
 
 ## Code Quality Standards

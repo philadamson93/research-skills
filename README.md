@@ -16,6 +16,8 @@ Personal Claude Code skills, shared in case they're useful. These are slash comm
   - [`plan-handoff-readiness.md`](commands/plan-handoff-readiness.md) — pre-implementation handoff check: does the plan POINT AT or STATE DIRECTLY everything a fresh agent needs to implement it?
   - [`read-plan.md`](commands/read-plan.md) — opens a plan doc in the user's default `.md` app
   - [`debate.md`](commands/debate.md) — structured adversarial debate for major design decisions where reasonable people disagree (cross-repo architecture, build system choices, data contract design); two parallel advocates, codebase-grounded arguments, main-agent moderation, synthesized decision doc
+- `hooks/` — Claude Code lifecycle hooks (separate from skills: hooks are shell scripts the harness fires automatically at events like `PreToolUse` / `SessionStart`, not invoked-by-intent skills)
+  - [`phi-vet-gate.sh`](hooks/phi-vet-gate.sh) — `PreToolUse` hook that hard-gates `git commit` in medical-data repos until [`phi-vet`](commands/phi-vet.md) has signed off on the current staged tree (forces both PHI scan and explicit per-doc read-acknowledgement). See [`hooks/README.md`](hooks/README.md) for install.
 - [`CLAUDE.md`](CLAUDE.md) — global Claude Code instructions (interaction style, environment notes)
 - [`claude_ops.md`](claude_ops.md) — operating standards shared across research repos: planning workflow, code quality, git practices, pre-commit review pointers, skill composition discipline. Designed to be **symlinked into each repo as `docs/claude_ops.md`** so all repos reference the same source-of-truth (see per-repo setup below).
 
@@ -40,6 +42,8 @@ ln -s ~/code/research-skills/CLAUDE.md ~/.claude/CLAUDE.md
 ```
 
 After this, `git -C ~/code/research-skills pull` (or push, after `commit-review`) updates the live commands. Symlinks survive Claude Code restarts; no rebuild needed.
+
+**Hooks are not auto-installed by the symlink above** — they require an entry in `~/.claude/settings.json` per [hook](hooks/README.md). Each hook has its own install section since hooks vary in payload contract and matcher pattern.
 
 **Session-start sync habit:** at the start of any work session, do `git -C ~/code/research-skills pull --ff-only` to pick up cross-machine updates. `claude_ops.md` documents this as a Session Start step (it suggests a pull when the local clone is 3+ commits behind `origin/main`).
 

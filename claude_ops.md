@@ -24,6 +24,28 @@ This document defines how Claude Code should operate across all VISTA repos. Ref
 - **Do not run `ruff`, `black`, `isort`, `mypy`, `pytest`, or similar tools.** They are not installed or configured correctly on this machine. Verification is structural code review only.
 - **Data paths are VM-specific.** Paths like `/mnt/su-vista/...` reference the VM filesystem, not this machine.
 
+This is the *simple single-machine default* — assumed by all VISTA repos. Repos where execution depends on which machine you're on should declare so explicitly and override this rule via the Machine-Aware Operating Mode section below.
+
+---
+
+## Machine-Aware Operating Mode
+
+For repos where the executor / planner split is hostname-dependent (a project VM holds the runtime + credentials, the local Mac is planner-only), this section overrides **Environment Constraints** above.
+
+1. **At session start, run `hostname`** to determine which mode applies.
+2. **The repo declares its machine posture** — typically in `CLAUDE.md` or a dedicated registry like `docs/machines.md`. The registry names known hosts and assigns each one Executor or Planner role, plus PHI posture if relevant.
+3. **Executor mode** (a project VM with data, credentials, and a runtime):
+   - Run queries, scripts, and exploration as directed by plan docs.
+   - Minor iterative corrections when data reveals something unexpected.
+   - Commit results frequently.
+   - Don't broad-plan or major-rewrite without user confirmation — if scope changes significantly, document the finding and defer to a new plan.
+4. **Planner mode** (typically the local Mac):
+   - Planning, template authoring, spec writing, doc review.
+   - Do not run code or query data — credentials and data paths usually aren't here.
+5. **Unknown hostnames**: ask the user which mode applies rather than hard-refusing or assuming. After confirming, offer to register the hostname in the repo's machine registry so the next session doesn't re-prompt.
+
+Repo-specific bindings (concrete hostnames, package-manager rules, sibling-repo paths, PHI gate choice) live in the repo's `CLAUDE.md` or machine registry — not here. This section defines the *pattern*; each repo declares its *parameters*.
+
 ---
 
 ## Session Start

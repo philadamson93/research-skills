@@ -1,5 +1,5 @@
 ---
-description: Hard pre-commit gate scanning files for PHI (Protected Health Information) leakage in medical-data research repos — patient identifiers, DICOM UIDs, accession numbers, clinical dates, sample row data, free-text report excerpts, embedded images. TRIGGER before committing in any repo where work touches BigQuery / OMOP / NeuralFrame / DICOM / EHR data (cues: project CLAUDE.md mentions PHI/PHI-handling; recent commits reference task tables, image_occurrence, person_id, NeuralFrame, OMOP releases; presence of BQ credential usage; an explicit memory note about PHI safeguards). ALSO TRIGGER when the user says "PHI vet", "PHI scan", "check for patient data", "scrub for PHI", or "vet this commit". The commit-review skill ESCALATES to this skill when working in a medical-data repo. SKIP only if the user explicitly says "skip the PHI check" — never skip silently.
+description: Hard pre-commit gate scanning files for PHI (Protected Health Information) leakage in medical-data research repos — patient identifiers, DICOM UIDs, accession numbers, clinical dates, sample row data, free-text report excerpts, embedded images. ALSO surfaces every doc file in the commit and requires the user to explicitly acknowledge they have read each before sign-off. TRIGGER before committing in any repo where work touches BigQuery / OMOP / NeuralFrame / DICOM / EHR data (cues: project CLAUDE.md mentions PHI/PHI-handling; recent commits reference task tables, image_occurrence, person_id, NeuralFrame, OMOP releases; presence of BQ credential usage; an explicit memory note about PHI safeguards). ALSO TRIGGER when the user says "PHI vet", "PHI scan", "check for patient data", "scrub for PHI", or "vet this commit". When a companion PreToolUse hook (`hooks/phi-vet-gate.sh`) is installed, that hook will BLOCK `git commit` in medical-data repos until this skill has written a sign-off marker for the current staged tree — this skill is the only path through the gate. The commit-review skill ESCALATES to this skill when working in a medical-data repo. SKIP only if the user explicitly says "skip the PHI check" — never skip silently; if skipped, still write the marker (with the rationale appended) so the user's override is auditable.
 ---
 
 You are running the **`/phi-vet`** command. Hard pre-commit gate that catches PHI (patient/encounter/study identifiers, sample row data, free-text excerpts, image files) in files about to be committed from a medical-data research repo.
@@ -99,8 +99,65 @@ If any file is **BORDERLINE**:
 - Surface a yes/no via `AskUserQuestion` ("Treat as SAFE" / "Escalate to FLAGGED").
 
 If all files are **SAFE**:
-- Print: `All files passed PHI vet (N files reviewed). Safe to commit.`
-- Hand off to the calling skill (commit-review) or to the user.
+- Print: `All files passed PHI scan (N files reviewed).`
+- Proceed to Step 5 (doc-read sign-off + marker) before declaring the commit safe.
+
+---
+
+## Step 5 — Doc-read sign-off + sign-off marker
+
+This step is what turns a passing PHI scan into a *committable* state. Two parts:
+
+### 5a. Doc-read sign-off
+
+PHI scan catches data leakage; it does not catch editorialization, private working-group content, or prose the user wouldn't want committed unread. So before declaring SAFE-to-commit, enumerate every doc file in the staged tree and require the user to explicitly acknowledge they've read each one.
+
+Doc files = anything in: `*.md`, `*.markdown`, `*.rst`, `*.txt`, `*.html`. Get the list:
+
+```bash
+git diff --cached --name-only -- '*.md' '*.markdown' '*.rst' '*.txt' '*.html'
+```
+
+If the list is empty, skip to 5b.
+
+Otherwise, surface ALL doc paths via `AskUserQuestion` — per the global "Multi-choice → AskUserQuestion" preference. Batch up to 4 questions per call (the tool's max), one question per doc. Phrasing per question:
+
+> *"Have you personally read `path/to/doc.md` and confirm it's appropriate to commit?"*
+> Options: **Yes, I read it** / **No, open it for me first** / **Skip — I trust the change** (escape hatch with rationale logged)
+
+If the user picks **No, open it for me first**, hand off to `/read-plan` for that path, then re-ask the question. If they pick **Skip — I trust the change**, log the file + rationale in the conversation, treat as ack.
+
+Multiple docs → multiple AskUserQuestion rounds. Don't compress into one "have you read all of these?" question — the per-file surface is the value.
+
+### 5b. Write the sign-off marker
+
+Once Step 4 is SAFE and Step 5a is complete (every doc acknowledged or explicitly skipped-with-rationale), write the marker that the `phi-vet-gate.sh` hook checks for:
+
+```bash
+git_root="$(git rev-parse --show-toplevel)"
+tree_sha="$(git -C "$git_root" write-tree)"
+mkdir -p "$git_root/.git/phi-vet"
+{
+  echo "Signed off: $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+  echo "Tree:       $tree_sha"
+  echo "Reviewer:   $(git -C "$git_root" config user.name || whoami)"
+  echo "Skill:      /phi-vet"
+  echo "PHI scan:   PASS (N files)"
+  echo "Doc-read:   K docs acknowledged ($M skipped-with-rationale)"
+  # If user invoked the skip path ("skip the PHI check") for the whole vet,
+  # append the rationale line here instead of the above PASS lines.
+} > "$git_root/.git/phi-vet/${tree_sha}.signed-off"
+```
+
+The marker is keyed on the staged tree's SHA. If the user adds, removes, or modifies a staged file after this marker is written, `git write-tree` produces a different SHA and the hook will require re-vetting. This is intentional.
+
+Then print:
+
+```
+✓ Signed off PHI vet for staged tree <short-sha>. Commit gate cleared.
+```
+
+Hand off to the calling skill (commit-review) or to the user.
 
 ---
 

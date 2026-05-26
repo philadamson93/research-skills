@@ -36,11 +36,13 @@ The HTML embeds:
 8. **Gotchas accordion** — same shape as steps; closed by default to reduce visual load on first open.
 9. **Open Questions panel** — one card per OQ with a `<select>` (Pending / Resolved / Deferred), a `<textarea>` for notes, and the full question prose. These pre-populate the export with `OQ<N>: <status> — <notes>` lines.
 10. **Feedback sidebar / footer** — a global `<textarea>` plus a single button `Copy all feedback as Claude prompt`. JS gathers all per-section textareas, OQ statuses, and the global box; formats them as a markdown prompt; copies to clipboard. **Persist all textarea values to `localStorage` keyed by plan-stem + section-id** — first user complaint after using the HTML is invariably "I refreshed and lost everything." Restore on page load; clear when the plan SHA changes (the HTML has been regenerated, old feedback is stale). Show a small pending-count badge on the button (e.g., "Copy feedback (3 pending)") so the user can see they have unsubmitted notes before navigating away.
+11. **Node drill-down panel (OPTIONAL — opt-in per generation; default OFF)** — Mermaid nodes that represent *changing* entities (kind `added` / `modified` / `deferred`) become drillable via double-click; `untouched` / `external` nodes are not drillable (the cursor stays default, so the pointer affordance itself encodes "this box is where the change lives"). Authors can opt in an unchanged-but-load-bearing node with `forceDrillable: true`. Dblclick opens a side panel with kind chip + plan-anchor jump chips (cheap, embedded) plus a **"Generate detail" button**. The button POSTs the drill prompt to a local relay (`research-skills/relay/explain-plan-relay.py`, default `http://127.0.0.1:7237`) that wraps `claude -p`; the markdown response is rendered inline in the panel and cached to `localStorage[\`drill::${planSha}::${nodeId}\`]`. **If the relay isn't running, the button falls back gracefully to clipboard** (copies the prompt, toast tells the reader how to start the relay). **Detail is generated on-the-fly per node the reader inspects — NOT precomputed at HTML-generation time.** See `## Node drill-down (double-click)` below for the contract, prompt template, and relay wiring. **Generation cost (why this is opt-in):** drill-down adds noticeable time and token spend at HTML-generation. Claude has to hand-author a `nodeManifest` entry (label + kind + plan-anchors) for every drillable diagram node — typically 20–40 entries cross-referenced against the plan's `data-section` IDs, plus three additional verification classes (ORPHAN_NODE, ORPHAN_MANIFEST, BROKEN_ANCHOR). Expect roughly an extra 1–3 minutes and a few hundred lines of generated JS. **When generating, ALWAYS surface this trade-off before turning drill-down on** — via `AskUserQuestion` with the cost stated plainly ("Drill-down adds ~1–3 min of generation time and per-node Claude round-trips when the reader inspects a node — include it?"). Default the recommendation to OFF unless the user explicitly requested drill-down (e.g., `/explain-plan <path> --drill`, "include drill-down", "make the nodes clickable"), or the plan is genuinely large (≥ 3 diagrams AND ≥ 25 distinct drillable nodes), in which case lean ON. When turning drill-down ON, **mention the relay in the hand-off message**: "Drill-down is wired to the relay at `RELAY_URL` — run `python research-skills/relay/explain-plan-relay.py` in a spare terminal before double-clicking nodes, or the panel will fall back to clipboard."
 
 ### Optional sections (case-by-case)
 
 - **Before/after diagrams** — include ONLY when the change reshapes data flow (e.g., a refactor that moves a query layer between repos, an API migration where the call graph changes, an architectural extraction). SKIP for mechanical token substitutions (e.g., "regex literal → Jinja variable in 3 templates") — two near-identical diagrams differing only in node labels have low signal density. The behavioral diff in those cases lives in the verification step's diff queries (Step 6 EXCEPT-DISTINCT, etc.), not in a static visual. When in doubt, ask the user via AskUserQuestion.
 - **Step-detail sub-flowcharts** — include when any single step has ≥4 sequenced substeps (like Step 6's 6a–6f); don't bother otherwise.
+- **Review history table** — include when the plan has been through one or more independent reviewer passes (detectable from a "Provenance" / "Review history" section in the markdown, or from sibling `docs/plans/reviews/<plan-stem>-*.md` artifacts). Render a table near the top (right after TL;DR) with columns `Pass | Reviewer | Verdict | Key findings surfaced | Applied to plan`, one row per pass, linking each reviewer artifact. Surface user-driven architectural pivots (e.g., a decision that supersedes a prior RD) as their own row with a distinct "Pivot" verdict chip. This is the highest-signal section for a reader trying to understand *how the plan reached its current shape* — a plan revised across 3+ passes is otherwise opaque about which decisions are settled vs fresh. SKIP for plans with no reviewer history (a freshly-scoped plan has nothing to tabulate). Keep each cell terse; the reviewer artifacts hold the detail.
 
 ### Visual design constraints
 
@@ -83,6 +85,204 @@ Concrete syntax landmines that have broken diagrams in real plans. Avoid up-fron
   ```
 
   Every section must return zero hits before opening. If any returns hits, fix and re-run — don't open a broken HTML and force the user to be the parser.
+
+## Node drill-down (double-click)
+
+> **Opt-in feature.** Default is OFF — see section 11 in *What to generate* above for the cost rationale and the AskUserQuestion gate. The contract below applies only when drill-down has been turned on for this generation.
+
+A static diagram answers "what's in scope"; a drillable diagram answers "what *changes* in this box, and where do I look for it." Without drill-down the reader still has to scroll 400 lines of markdown to recover the connection between a node and the plan's prose.
+
+**Affordance**: double-click a *changing* node (kind `added` / `modified` / `deferred`) in the Repo Map, Blast Radius, or Order-of-operations diagrams. A side panel opens with the node's details. `untouched` / `external` nodes are not drillable by default — the `cursor: pointer` change is itself the signal that this box is part of the change. Single-click is reserved for pan/drag — don't bind it.
+
+**Why gate on kind**: it doesn't measurably reduce HTML-generation cost (manifest entries are one line each, 40 vs 15 is noise). The point is *signal* — the pointer cursor becomes a kind-encoded affordance, and the reader doesn't waste a Claude round-trip clicking an untouched node to learn it's unchanged.
+
+### Generate detail on-the-fly, not at HTML-generation time
+
+**Do not precompute per-node detail for every diagram node.** A typical plan HTML has 15–40 drillable nodes; a reader inspects 2–5. Precomputing all 40 burns generation tokens (and re-burns them on every plan revision) for content that will never be read. Worse, the detail goes stale the instant the plan is edited.
+
+Instead: drill-down is a **request-time round-trip back to Claude**, same pattern as the existing "Copy feedback as Claude prompt" button. Dblclick → panel opens → panel exports a structured prompt to the clipboard → user pastes into Claude → Claude reads the live plan + code and answers. The HTML stays a static artifact; the *current* state of the plan and the repo is what gets analyzed, not a snapshot frozen at HTML-generation time.
+
+### What to embed at generation time (minimal)
+
+A lightweight `nodeManifest` keyed by Mermaid node ID, with only the cheap fields the JS needs to build the drill prompt and the in-panel plan-jump chips:
+
+```js
+const nodeManifest = {
+  "orch": {
+    label: "cross_modality.py",
+    kind: "added",                    // "added" | "modified" | "untouched" | "deferred" | "external"
+    planAnchors: ["step-2", "knobs-card"]   // scroll targets in this HTML (data-section IDs)
+  },
+  "fit": { label: "_fit_and_eval", kind: "modified", planAnchors: ["step-2"] },
+  "out_pe": { label: "intersection_per_example.parquet", kind: "added", planAnchors: ["step-2"] },
+  "slice4": { label: "Slice 4: HTML / radar", kind: "deferred", planAnchors: ["slice-4"] },
+  "vct": {
+    label: "vista-ct cohort_all/ct/",
+    kind: "external",
+    planAnchors: ["gotcha-ct-master"],
+    forceDrillable: true              // opt-in: unchanged but load-bearing (gates slice 3)
+  },
+  // also include manifest entries for untouched/external nodes that are NOT drillable,
+  // so the verification pass can confirm they were intentionally non-drillable rather
+  // than oversights. Just omit forceDrillable.
+  "load": { label: "data_pipeline.load_eval_data", kind: "untouched", planAnchors: [] },
+};
+```
+
+This is small (one line per node), cheap to author, and stable across the lifetime of the HTML. Everything *substantive* (summary, changes, exploded sub-diagram) is generated by Claude on demand.
+
+**Drillability rule**: a node is drillable iff `manifest[key]` exists AND (`kind ∈ {added, modified, deferred}` OR `forceDrillable === true`). Everything else is rendered with the default cursor and ignores dblclick.
+
+Also embed at generation time:
+- `const planPath = "docs/plans/cross-modality-comparison.md";` — the source-of-truth path Claude should re-read on drill.
+- `const planSha = "5d12e0431273...";` — the SHA Claude was given. Lets Claude warn the user if the live plan has drifted from the HTML.
+
+### Wiring (JS sketch)
+
+```js
+// After mermaid.run(...) and after svg-pan-zoom is attached:
+const DRILLABLE_KINDS = new Set(['added', 'modified', 'deferred']);
+
+function isDrillable(entry) {
+  return entry && (DRILLABLE_KINDS.has(entry.kind) || entry.forceDrillable === true);
+}
+
+function attachDrillHandlers() {
+  document.querySelectorAll('pre.mermaid svg g.node').forEach(node => {
+    const m = node.id.match(/^flowchart-(.+?)-\d+$/);   // Mermaid 10 ID shape
+    const key = m ? m[1] : node.id;
+    const entry = nodeManifest[key];
+    if (!isDrillable(entry)) return;   // untouched/external nodes stay default-cursor, no dblclick
+    node.style.cursor = 'pointer';
+    node.classList.add('drillable');
+    node.addEventListener('dblclick', (e) => {
+      e.preventDefault(); e.stopPropagation();
+      openDrillPanel(key, entry);
+    });
+  });
+}
+
+function buildDrillPrompt(key, manifest) {
+  return `Drill into node "${key}" (${manifest.label}, kind=${manifest.kind}) from plan ${planPath} (HTML generated against SHA ${planSha.slice(0,12)}).
+
+Re-read the plan and any referenced source files. Produce a markdown-formatted answer with these sections:
+
+1. **Summary** — one paragraph, the node's role in this plan.
+2. **Concrete changes** — 3–7 bullets, one line each, named functions / branches / fields / config keys. What will a reader see different if they open the file(s)?
+3. **Files touched** — paths only.
+4. **Plan steps that reference it** — step numbers + one-line why.
+5. **Exploded sub-diagram** (only if the node has non-trivial internal structure) — a fenced \`\`\`mermaid block with a \`flowchart LR\` source. Follow the pitfall rules in the explain-plan skill (no { } | -- → in labels, quoted multi-line labels, etc).
+
+If the live plan SHA differs from ${planSha.slice(0,12)}, flag the drift in a leading paragraph before the sections above.
+
+Return only the markdown answer in your final message — no preamble, no "I'll now..." narration. Do not edit any files; do not write to the HTML.`;
+}
+```
+
+### Relay integration (preferred path) + clipboard fallback
+
+The drill panel's "Generate detail" button has two modes, in priority order:
+
+1. **Relay (preferred).** A small localhost HTTP relay (`research-skills/relay/explain-plan-relay.py`) wraps `claude -p` and is reachable at `RELAY_URL` (default `http://127.0.0.1:7237`). The HTML POSTs the drill prompt to the relay, which shells out to `claude -p`, captures stdout, and returns it as JSON. The panel renders the markdown response inline via [marked](https://cdn.jsdelivr.net/npm/marked/marked.min.js) and caches the answer in `localStorage[\`drill::${planSha}::${nodeId}\`]`. Subsequent re-opens of the same node hit the cache — no relay round-trip, no token spend. Cache invalidates automatically when `planSha` changes (HTML regenerated from a new plan version).
+2. **Clipboard fallback.** If the relay is unreachable (timeout or connection refused), the button copies the prompt to the clipboard with a toast: *"Relay not running — prompt copied to clipboard. Paste into Claude to drill, or `python research-skills/relay/explain-plan-relay.py` to enable inline drill."*
+
+**Embed these constants at generation time** alongside the existing `planPath` / `planSha`:
+
+```js
+const RELAY_URL = "http://127.0.0.1:7237";              // localhost relay (see research-skills/relay/)
+const REPO_ROOT = "/Users/.../Stanford/VISTA/code/<repo>";   // absolute path; `claude -p` runs here
+```
+
+Compute `REPO_ROOT` from the plan's location via `git -C <plan-dir> rev-parse --show-toplevel` at generation time; embed the absolute path so the relay can `cwd` into the repo and `claude -p` sees the codebase.
+
+### Wiring (full flow)
+
+```js
+// Render markdown responses via marked (CDN). Add to <head>:
+//   <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+
+async function probeRelay() {
+  try {
+    const r = await fetch(RELAY_URL, {method: 'GET', signal: AbortSignal.timeout(800)});
+    return r.ok;
+  } catch { return false; }
+}
+
+async function generateDetail(key, manifest, panel) {
+  const cacheKey = `drill::${planSha}::${key}`;
+
+  const cached = localStorage.getItem(cacheKey);
+  if (cached) {
+    renderMarkdownInto(panel, JSON.parse(cached).answer);
+    return;
+  }
+
+  const prompt = buildDrillPrompt(key, manifest);
+  showSpinner(panel, 'Asking Claude…');
+
+  try {
+    const r = await fetch(RELAY_URL, {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({prompt, cwd: REPO_ROOT, timeout: 300}),
+      signal: AbortSignal.timeout(330_000)   // slightly > relay timeout
+    });
+    if (!r.ok) throw new Error(`relay ${r.status}`);
+    const {answer, elapsed_s} = await r.json();
+    localStorage.setItem(cacheKey, JSON.stringify({answer, elapsed_s, ts: Date.now()}));
+    renderMarkdownInto(panel, answer);
+    appendFooter(panel, `via relay · ${elapsed_s}s`);
+  } catch (e) {
+    // Relay unreachable / errored — graceful fallback to clipboard
+    await navigator.clipboard.writeText(prompt);
+    renderFallbackInto(panel,
+      `**Relay not reachable** (${e.message}).\n\n` +
+      `Prompt copied to clipboard — paste into Claude to drill.\n\n` +
+      `To enable inline drill: \`python research-skills/relay/explain-plan-relay.py\``
+    );
+  }
+}
+
+function renderMarkdownInto(panel, md) {
+  panel.querySelector('.drill-body').innerHTML = marked.parse(md);
+  // Re-run Mermaid on any new ```mermaid``` blocks the answer contained.
+  panel.querySelectorAll('pre code.language-mermaid').forEach(b => {
+    const pre = document.createElement('pre');
+    pre.className = 'mermaid';
+    pre.textContent = b.textContent;
+    b.parentElement.replaceWith(pre);
+  });
+  mermaid.run({ querySelector: '.drill-body pre.mermaid' });
+}
+```
+
+`openDrillPanel(key, manifest)` populates a right-side `<aside id="drill-panel">` with:
+1. Header — node label + kind chip + a small "relay: ✓ / ✗" indicator (driven by `probeRelay()` at page load and on panel-open).
+2. **Plan-jump chips** — one per `manifest.planAnchors` entry, scrolls to and expands the matching `<details data-section="...">`. Cheap, instant, no Claude round-trip — these always work regardless of relay state.
+3. **"Generate detail" button** — calls `generateDetail(key, manifest, panel)`. Disabled while a request is in flight; shows spinner. Re-clicks while a cache hit exists re-render from cache. A "Re-ask (skip cache)" link sits below the button for the case where the plan moved and the user wants a fresh answer.
+4. Close button, ESC, backdrop click all dismiss. The diagram stays interactive behind the panel.
+
+### Affordance discovery
+
+- Each diagram's hint label gains `• double-click changing nodes for details` alongside `scroll to zoom • drag to pan` — the word *changing* is load-bearing, it tells the reader which nodes will respond.
+- Drillable nodes get `cursor: pointer` and a faint outline on hover.
+- Non-drillable nodes (`untouched` / `external` without `forceDrillable`) keep the default cursor — the cursor change is the affordance signal, and itself encodes "this box is part of the change."
+
+### Authoring discipline
+
+Build `nodeManifest` *alongside* the diagram, not after. Include an entry for **every** node in the diagram (including untouched/external ones) — the verification pass uses entry-presence to distinguish "intentionally non-drillable" from "author forgot to add it."
+
+When deciding `kind`: be honest. `modified` means this entity's behavior or signature actually changes in this PR. A file that's *touched but only by import-reordering or rename-tracking* is `untouched` from the reader's perspective — drilling into it would return "nothing interesting." Likewise, a sibling-repo node that *gates* this work (you depend on its output layout) is `external` + `forceDrillable: true` if there's a plan-anchor worth pointing at; plain `external` otherwise.
+
+The manifest is intentionally thin. Resist the temptation to inline `summary` / `changes` / `exploded` fields into it "just for the common case" — that re-introduces the staleness problem and conflates the static HTML with the live plan state.
+
+### Verification update
+
+Add to the verification pass:
+- **`ORPHAN_NODE`**: a Mermaid node in any diagram has no `nodeManifest` entry. List every instance. Either add the entry (with the appropriate `kind`) or drop the node — orphans leave the reader guessing about drillability.
+- **`ORPHAN_MANIFEST`**: a `nodeManifest` entry has no corresponding Mermaid node ID across any diagram. Stale — delete or add the diagram node.
+- **`BROKEN_ANCHOR`**: a `planAnchors` value doesn't match any `data-section` ID in the HTML. The chip would scroll to nothing.
+- **`MISLABELED_KIND`**: a node labeled `untouched` / `external` is reachable from a step the plan says is `SHIPPED` or `PENDING` and likely modifies it (and vice-versa: a node labeled `modified` that the plan never mentions in any change-bearing step). Catches "author forgot to update the kind after the plan changed scope." Borderline calls are fine — only flag clear mismatches.
 
 ## Inputs
 

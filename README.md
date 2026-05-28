@@ -20,47 +20,41 @@ Personal Claude Code skills, shared in case they're useful. These are slash comm
 - `hooks/` — Claude Code lifecycle hooks (separate from skills: hooks are shell scripts the harness fires automatically at events like `PreToolUse` / `SessionStart`, not invoked-by-intent skills)
   - [`phi-vet-gate.sh`](hooks/phi-vet-gate.sh) — `PreToolUse` hook that hard-gates `git commit` in medical-data repos until [`phi-vet`](commands/phi-vet.md) has signed off on the current staged tree (forces both PHI scan and explicit per-doc read-acknowledgement). See [`hooks/README.md`](hooks/README.md) for install.
 - [`CLAUDE.md`](CLAUDE.md) — global Claude Code instructions (interaction style, environment notes)
-- [`claude_ops.md`](claude_ops.md) — operating standards shared across research repos: planning workflow, code quality, git practices, pre-commit review pointers, skill composition discipline. Designed to be **symlinked into each repo as `docs/claude_ops.md`** so all repos reference the same source-of-truth (see per-repo setup below).
+- [`claude_ops.md`](claude_ops.md) — operating standards shared across research repos: planning workflow, code quality, git practices, pre-commit review pointers, skill composition discipline. Designed to be **symlinked into each repo as `docs/claude_ops.md`** so all repos reference the same source-of-truth (see [Setup → Once per repo](#once-per-repo) below).
 
-## How to use
+## Setup
 
-This repo is a snapshot of `~/.claude/` plus the canonical `claude_ops.md`. To use:
+These skills assume Claude Code as the harness. Some reference companion tools (`codex` CLI, `gh`); install as needed.
 
-1. Clone: `git clone git@github.com:philadamson93/research-skills.git ~/code/research-skills`
-2. Wire up the global commands + CLAUDE.md (one-shot setup, below).
-3. For each research repo that should consume the operating standards, add a per-repo `docs/claude_ops.md` symlink (per-repo setup, below).
+Setup is two parts: **once per machine** to make the slash commands available, then **once per repo** to give that repo the operating standards. The mechanics behind each step are in [How it works](#how-it-works) below.
 
-The skills assume Claude Code as the harness. Some reference companion tools (`codex` CLI, `gh`); install as needed.
+### Once per machine
 
-### One-shot setup on a fresh VM (or local Mac)
-
-Wire this repo up as the source-of-truth for `~/.claude/commands/` and `~/.claude/CLAUDE.md` so future updates flow both ways:
+Make the slash commands available globally:
 
 ```bash
 git clone git@github.com:philadamson93/research-skills.git ~/code/research-skills
 ln -s ~/code/research-skills/commands ~/.claude/commands
+```
+
+Optionally also adopt the global interaction-style defaults (this overwrites your `~/.claude/CLAUDE.md`):
+
+```bash
 ln -s ~/code/research-skills/CLAUDE.md ~/.claude/CLAUDE.md
 ```
 
-After this, `git -C ~/code/research-skills pull` (or push, after `commit-review`) updates the live commands. Symlinks survive Claude Code restarts; no rebuild needed.
+Updating is just `git -C ~/code/research-skills pull` — symlinks survive Claude Code restarts, no rebuild. Hooks are **not** installed by these symlinks; they need a `~/.claude/settings.json` entry per [hook](hooks/README.md).
 
-**Hooks are not auto-installed by the symlink above** — they require an entry in `~/.claude/settings.json` per [hook](hooks/README.md). Each hook has its own install section since hooks vary in payload contract and matcher pattern.
+### Once per repo
 
-**Session-start sync habit:** at the start of any work session, do `git -C ~/code/research-skills pull --ff-only` to pick up cross-machine updates. `claude_ops.md` documents this as a Session Start step (it suggests a pull when the local clone is 3+ commits behind `origin/main`).
-
-### Per-repo setup: `claude_ops.md` symlink + `@`-import
-
-For each research repo that should consume the canonical operating standards (so all repos reference the same `claude_ops.md` and a single edit propagates everywhere):
+Give a repo the operating standards. Two steps — symlink the canonical file in, then import it from the repo's own `CLAUDE.md` so it loads into every session run from that repo:
 
 ```bash
 cd <repo>
-ln -sf ../../research-skills/claude_ops.md docs/claude_ops.md
-git add docs/claude_ops.md && git commit -m "docs: symlink claude_ops.md to research-skills canonical source"
+ln -sf ../../research-skills/claude_ops.md docs/claude_ops.md   # adjust depth to reach your research-skills clone
 ```
 
-The relative `../../research-skills/...` target assumes both repos are siblings under `~/code/` (or `~/Documents/.../code/`). Adjust the relative path if `docs/` lives at a different depth or the repo is checked out somewhere else. The symlink is checked into the repo so collaborators / fresh checkouts pick it up automatically — they only need `research-skills` cloned alongside.
-
-**The symlink only makes the file *present* — it does not load it into context.** Claude Code auto-loads `CLAUDE.md` (walking up from the cwd) plus `~/.claude/CLAUDE.md`, but a file in `docs/` is never auto-loaded. To actually pull the operating standards into every session, the repo's own `CLAUDE.md` must **import** it with Claude Code's `@`-syntax (an `@path` line inlines that file's contents). Add this to the repo's `CLAUDE.md`:
+Then add to the repo's `CLAUDE.md` (create one at the repo root if it has none):
 
 ```markdown
 ## Operating standards
@@ -68,12 +62,21 @@ The relative `../../research-skills/...` target assumes both repos are siblings 
 @docs/claude_ops.md
 ```
 
-`@`-import follows the symlink, so the imported content stays the single canonical source. Two equivalent wirings:
+Commit both so collaborators and fresh checkouts pick them up (they only need `research-skills` cloned alongside):
 
-- **Symlink + `@docs/claude_ops.md`** (above) — gives the repo a stable in-repo path (`docs/claude_ops.md`) that plan docs can also reference textually (`Reference: docs/claude_ops.md`). Preferred for repos that author plan docs.
-- **Direct `@research-skills/claude_ops.md`** — skips the per-repo symlink and imports straight from the sibling clone, the way this workspace's umbrella `CLAUDE.md` does. Simpler when the repo doesn't need an in-repo `docs/` copy.
+```bash
+git add docs/claude_ops.md CLAUDE.md && git commit -m "docs: wire in claude_ops.md operating standards"
+```
 
-Repos **outside** the VISTA umbrella tree (where the workspace-root `CLAUDE.md` is not in the cwd's parent chain) get the operating standards *only* via their own `@`-import — the symlink alone is not enough.
+## How it works
+
+- **The symlink makes the file present; the `@`-import makes it load.** Claude Code auto-loads `CLAUDE.md` files (walking from the cwd up to root) plus `~/.claude/CLAUDE.md` — but never an arbitrary file under `docs/`. So the symlink alone governs nothing; the `@docs/claude_ops.md` line is what pulls the standards into the session (`@path` inlines that file's contents, and the read follows the symlink to the canonical source). The symlink earns its keep two ways: it gives `@docs/claude_ops.md` a stable target regardless of where `research-skills` is cloned, and it makes the `Reference: docs/claude_ops.md` breadcrumb at the top of plan docs resolve to a real file.
+
+- **The relative symlink target** `../../research-skills/...` assumes `<repo>` and `research-skills` are siblings (both under `~/code/` or similar), since the link sits at `<repo>/docs/`. Adjust the depth if `docs/` lives elsewhere or the repo is checked out somewhere unusual.
+
+- **Shortcut if you launch Claude from a parent folder.** If you run Claude from a workspace folder that sits *above* several repos, one `@research-skills/claude_ops.md` import in *that folder's* `CLAUDE.md` is inherited by every repo beneath it (CLAUDE.md loads the entire tree from cwd to root), so no per-repo wiring is needed. Convenient at scale, but it assumes the parent-folder launch pattern — the per-repo steps above are the portable default for working inside a single repo.
+
+- **Session-start sync:** `git -C ~/code/research-skills pull --ff-only` at the start of a session picks up cross-machine updates. `claude_ops.md` documents this as a Session Start step (it suggests a pull when the local clone is 3+ commits behind `origin/main`).
 
 ## Notes
 

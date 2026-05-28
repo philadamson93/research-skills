@@ -34,13 +34,7 @@ Make the slash commands available globally:
 
 ```bash
 git clone git@github.com:philadamson93/research-skills.git ~/code/research-skills
-ln -s ~/code/research-skills/commands ~/.claude/commands
-```
-
-Optionally also adopt the global interaction-style defaults (this overwrites your `~/.claude/CLAUDE.md`):
-
-```bash
-ln -s ~/code/research-skills/CLAUDE.md ~/.claude/CLAUDE.md
+ln -s /path/to/research-skills/commands ~/.claude/commands
 ```
 
 Updating is just `git -C ~/code/research-skills pull` — symlinks survive Claude Code restarts, no rebuild. Hooks are **not** installed by these symlinks; they need a `~/.claude/settings.json` entry per [hook](hooks/README.md).
@@ -51,7 +45,7 @@ Give a repo the operating standards. Two steps — symlink the canonical file in
 
 ```bash
 cd <repo>
-ln -sf ../../research-skills/claude_ops.md docs/claude_ops.md   # adjust depth to reach your research-skills clone
+ln -sf /path/to/research-skills/claude_ops.md docs/claude_ops.md   # adjust to reach your research-skills clone
 ```
 
 Then add to the repo's `CLAUDE.md` (create one at the repo root if it has none):

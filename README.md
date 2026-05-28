@@ -48,7 +48,7 @@ After this, `git -C ~/code/research-skills pull` (or push, after `commit-review`
 
 **Session-start sync habit:** at the start of any work session, do `git -C ~/code/research-skills pull --ff-only` to pick up cross-machine updates. `claude_ops.md` documents this as a Session Start step (it suggests a pull when the local clone is 3+ commits behind `origin/main`).
 
-### Per-repo setup: `claude_ops.md` symlink
+### Per-repo setup: `claude_ops.md` symlink + `@`-import
 
 For each research repo that should consume the canonical operating standards (so all repos reference the same `claude_ops.md` and a single edit propagates everywhere):
 
@@ -59,6 +59,21 @@ git add docs/claude_ops.md && git commit -m "docs: symlink claude_ops.md to rese
 ```
 
 The relative `../../research-skills/...` target assumes both repos are siblings under `~/code/` (or `~/Documents/.../code/`). Adjust the relative path if `docs/` lives at a different depth or the repo is checked out somewhere else. The symlink is checked into the repo so collaborators / fresh checkouts pick it up automatically — they only need `research-skills` cloned alongside.
+
+**The symlink only makes the file *present* — it does not load it into context.** Claude Code auto-loads `CLAUDE.md` (walking up from the cwd) plus `~/.claude/CLAUDE.md`, but a file in `docs/` is never auto-loaded. To actually pull the operating standards into every session, the repo's own `CLAUDE.md` must **import** it with Claude Code's `@`-syntax (an `@path` line inlines that file's contents). Add this to the repo's `CLAUDE.md`:
+
+```markdown
+## Operating standards
+
+@docs/claude_ops.md
+```
+
+`@`-import follows the symlink, so the imported content stays the single canonical source. Two equivalent wirings:
+
+- **Symlink + `@docs/claude_ops.md`** (above) — gives the repo a stable in-repo path (`docs/claude_ops.md`) that plan docs can also reference textually (`Reference: docs/claude_ops.md`). Preferred for repos that author plan docs.
+- **Direct `@research-skills/claude_ops.md`** — skips the per-repo symlink and imports straight from the sibling clone, the way this workspace's umbrella `CLAUDE.md` does. Simpler when the repo doesn't need an in-repo `docs/` copy.
+
+Repos **outside** the VISTA umbrella tree (where the workspace-root `CLAUDE.md` is not in the cwd's parent chain) get the operating standards *only* via their own `@`-import — the symlink alone is not enough.
 
 ## Notes
 

@@ -85,7 +85,12 @@ fi
 tree_sha="$(git -C "$git_root" write-tree 2>/dev/null || true)"
 [ -n "$tree_sha" ] || exit 0  # empty index is harmless; let git itself complain
 
-marker_dir="$git_root/.git/phi-vet"
+# Resolve the common git dir so the marker path works in both the main
+# checkout (.git/ is a directory) and worktrees (.git/ is a regular file
+# pointing to .git/worktrees/<name>/; only the common dir is a real dir
+# shared across all worktrees).
+common_git_dir="$(git -C "$git_root" rev-parse --path-format=absolute --git-common-dir)"
+marker_dir="$common_git_dir/phi-vet"
 marker="$marker_dir/${tree_sha}.signed-off"
 
 if [ -f "$marker" ]; then
@@ -100,7 +105,7 @@ doc_count="$(git -C "$git_root" diff --cached --name-only -- '*.md' '*.markdown'
 
 reason="PHI gate: this commit lands in a medical-data research repo (\`$repo_base\`), and the staged tree \`$tree_sha\` has not been signed off by \`/phi-vet\`. Staged: $staged_count file(s), of which $doc_count are docs requiring the human user to read and acknowledge.
 
-Required: invoke \`/phi-vet\` to (a) scan the staged content for PHI red flags per its threat catalog, (b) surface every doc file in the commit and require the HUMAN USER (not Claude) to explicitly confirm they have personally opened and read it — Claude having read the file during the scan does NOT satisfy this step; the user's appropriateness check is separate from the PHI scan, (c) on full approval, write a sign-off marker at \`.git/phi-vet/${tree_sha}.signed-off\`. Once the marker exists, re-attempting \`git commit\` will pass this gate.
+Required: invoke \`/phi-vet\` to (a) scan the staged content for PHI red flags per its threat catalog, (b) surface every doc file in the commit and require the HUMAN USER (not Claude) to explicitly confirm they have personally opened and read it — Claude having read the file during the scan does NOT satisfy this step; the user's appropriateness check is separate from the PHI scan, (c) on full approval, write a sign-off marker at \`<git-common-dir>/phi-vet/${tree_sha}.signed-off\` (the common git dir, resolved via \`git rev-parse --path-format=absolute --git-common-dir\` — same path from main checkout and any worktree). Once the marker exists, re-attempting \`git commit\` will pass this gate.
 
 Skip path: if the user explicitly says 'skip the PHI check' or 'bypass phi-vet' in this turn, write the marker with the rationale appended and proceed — never bypass silently. Never answer the per-doc acknowledgement on the user's behalf, even under context pressure."
 

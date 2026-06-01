@@ -137,8 +137,14 @@ Once Step 4 is SAFE and Step 5a is complete (every doc acknowledged or explicitl
 
 ```bash
 git_root="$(git rev-parse --show-toplevel)"
+# Use --git-common-dir so the marker path works in both the main checkout
+# (.git/ is a real directory) and worktrees (where .git is a regular file
+# pointing into .git/worktrees/<name>/; only the common dir is a real
+# directory shared across all worktrees). --path-format=absolute keeps the
+# expression robust regardless of cwd.
+common_git_dir="$(git -C "$git_root" rev-parse --path-format=absolute --git-common-dir)"
 tree_sha="$(git -C "$git_root" write-tree)"
-mkdir -p "$git_root/.git/phi-vet"
+mkdir -p "$common_git_dir/phi-vet"
 {
   echo "Signed off: $(date -u +%Y-%m-%dT%H:%M:%SZ)"
   echo "Tree:       $tree_sha"
@@ -148,7 +154,7 @@ mkdir -p "$git_root/.git/phi-vet"
   echo "Doc-read:   K docs acknowledged ($M skipped-with-rationale)"
   # If user invoked the skip path ("skip the PHI check") for the whole vet,
   # append the rationale line here instead of the above PASS lines.
-} > "$git_root/.git/phi-vet/${tree_sha}.signed-off"
+} > "$common_git_dir/phi-vet/${tree_sha}.signed-off"
 ```
 
 The marker is keyed on the staged tree's SHA. If the user adds, removes, or modifies a staged file after this marker is written, `git write-tree` produces a different SHA and the hook will require re-vetting. This is intentional.

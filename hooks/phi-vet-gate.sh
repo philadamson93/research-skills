@@ -21,6 +21,17 @@
 
 set -euo pipefail
 
+# ---- 0. machine gate (fail-closed PHI-FREE allowlist) ----------------------
+# This gate is active EVERYWHERE EXCEPT machines explicitly on the PHI-FREE
+# allowlist (see lib/is-phi-free-machine.sh). On a PHI-free machine (e.g. a
+# planner-only laptop with no PHI), the hook is inert and commits proceed.
+# Fail-closed: if the helper is missing/unreadable, we DON'T exit here, so the
+# gate stays active (assume PHI). Run cheaply before touching stdin.
+hook_dir="$(dirname "$0")"
+if [ -x "$hook_dir/lib/is-phi-free-machine.sh" ] && "$hook_dir/lib/is-phi-free-machine.sh"; then
+  exit 0
+fi
+
 # ---- 1. parse stdin --------------------------------------------------------
 
 payload="$(cat)"

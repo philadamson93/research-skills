@@ -8,6 +8,34 @@ This skill exists because PHI leakage from BigQuery output, materialized DataFra
 
 ---
 
+## Step 0 — Machine gate (fail-closed PHI-FREE allowlist)
+
+phi-vet only does real work on machines that may hold PHI. PHI lives on the data-bearing machine (the GCP / VM executor); planner-only machines (e.g. a local laptop with no BigQuery credentials or data mounts) have nothing to scan. Before anything else, run the shared machine check that the `phi-vet-gate.sh` hook uses — single source of truth, so the skill and the hook never disagree:
+
+```bash
+# Locate the shared check inside whichever research-skills clone this skill came
+# from. ~/.claude/commands/phi-vet.md is a symlink into that clone, so resolve it;
+# fall back to common clone locations. Works on macOS (no readlink -f) and Linux.
+cmd_link="$HOME/.claude/commands/phi-vet.md"
+# pwd -P resolves the commands/ dir symlink (it's the dir, not the file, that's
+# symlinked into the clone) to its physical path; repo is its parent.
+repo_dir="$(dirname "$(cd "$(dirname "$cmd_link")" 2>/dev/null && pwd -P)")"
+CHK=""
+for c in "$repo_dir/hooks/lib/is-phi-free-machine.sh" \
+         "$HOME/code/research-skills/hooks/lib/is-phi-free-machine.sh"; do
+  [ -x "$c" ] && CHK="$c" && break
+done
+if [ -n "$CHK" ]; then "$CHK" --explain; echo "exit=$?"; else echo "helper not found — ASSUME_PHI (fail-closed)"; fi
+```
+
+- **exit 1 — `ASSUME_PHI`** → this machine may hold PHI. Proceed with the full vet (Step 1 onward).
+- **exit 0 — `PHI_FREE`** → this machine is on the PHI-FREE allowlist. STOP. There is no PHI here to scan and no hard commit gate to clear. Tell the user plainly: *"phi-vet is inert on this PHI-free machine (`<matched-name>`) — PHI scanning runs on the PHI-bearing machine. Appropriateness review of docs on this machine is covered by `/commit-review`."* Do NOT run the scan and do NOT write a sign-off marker.
+- **Can't locate the helper** → fail-closed: assume PHI and proceed with the full vet. (Better to over-scan on a planner machine than skip on a PHI machine.)
+
+This is the same fail-closed contract as the hook: active everywhere except machines listed in the machine-local, git-ignored `hooks/lib/phi-free-machines.local` (the committed script reads it; real machine names stay out of the public repo). To exempt a machine, copy `phi-free-machines.example` to `.local` on it and add its stable name — there is intentionally no env-var backdoor.
+
+---
+
 ## Step 1 — Identify files to review
 
 If the user passed a path or glob as an argument, use that.
@@ -125,9 +153,19 @@ If the list is empty, skip to 5b.
 Otherwise, surface ALL doc paths via `AskUserQuestion` — per the global "Multi-choice → AskUserQuestion" preference. Batch up to 4 questions per call (the tool's max), one question per doc. Phrasing per question must make the human-vs-Claude distinction explicit:
 
 > *"Have YOU personally opened and read `path/to/doc.md`? (Claude having read it during the scan does not count — this is the human appropriateness review.)"*
-> Options: **Yes, I read it** / **No, open it for me first** / **Skip — I trust the change** (escape hatch with rationale logged)
+> Options: **Yes, I read it** / **No, print it for me first** / **Skip — I trust the change** (escape hatch with rationale logged)
 
-If the user picks **No, open it for me first**, hand off to `/read-plan` for that path so the file launches in their default `.md` app, then re-ask the question once they're back. If they pick **Skip — I trust the change**, log the file + rationale in the conversation, treat as ack.
+If the user picks **No, print it for me first**, print the staged content inline to the terminal so they can read it in place:
+
+```bash
+# Default: show exactly what's being committed for this doc.
+git diff --cached -- path/to/doc.md
+# For a newly-added or heavily-rewritten doc where the diff is all-additions and
+# lacks context, show the full staged blob instead:
+git show :path/to/doc.md
+```
+
+Then re-ask the question once they've read it. **Do NOT use `open` / `/read-plan` here** — phi-vet runs on the PHI-bearing machine (the GCP / VM executor), which is typically a headless terminal with no GUI, so launching a desktop `.md` app won't work. Inline printing is the terminal-native equivalent of the read step. If they pick **Skip — I trust the change**, log the file + rationale in the conversation, treat as ack.
 
 Multiple docs → multiple AskUserQuestion rounds. Don't compress into one "have you read all of these?" question — the per-file surface is the value, and a single composite ack lets a tired user wave through without thinking.
 

@@ -1,0 +1,20 @@
+# Template for the machine-local PHI-FREE allowlist.
+#
+# Copy this file to `phi-free-machines.local` (which is git-ignored) and list,
+# one per line, the STABLE identifier of each machine that NEVER holds PHI — a
+# planner-only laptop with no BigQuery credentials or data mounts, for example.
+# A machine listed in your .local file makes phi-vet inert on it; every machine
+# NOT listed is treated as PHI-bearing (fail-closed). Do not add a data-bearing
+# / GCP / VM executor here.
+#
+# Use the STABLE name, NOT a network/DHCP-derived hostname that churns between
+# networks. On macOS that's the `scutil --get ComputerName` / `LocalHostName`
+# value (note: on managed Macs this often embeds the hardware serial — which is
+# exactly why the real list is kept local and git-ignored, not committed here).
+#
+# Discover this host's candidate names with:
+#     ./is-phi-free-machine.sh --names
+#
+# Then list them (inline `#` comments and blank lines are ignored):
+#
+# MY-LAPTOP-NAME        # my planner laptop (no PHI)

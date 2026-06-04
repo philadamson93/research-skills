@@ -155,17 +155,15 @@ Otherwise, surface ALL doc paths via `AskUserQuestion` — per the global "Multi
 > *"Have YOU personally opened and read `path/to/doc.md`? (Claude having read it during the scan does not count — this is the human appropriateness review.)"*
 > Options: **Yes, I read it** / **No, print it for me first** / **Skip — I trust the change** (escape hatch with rationale logged)
 
-If the user picks **No, print it for me first**, print the staged content inline to the terminal so they can read it in place:
+If the user picks **No, print it for me first**, surface the staged content somewhere the user can actually see it. The right channel depends on the session:
 
-```bash
-# Default: show exactly what's being committed for this doc.
-git diff --cached -- path/to/doc.md
-# For a newly-added or heavily-rewritten doc where the diff is all-additions and
-# lacks context, show the full staged blob instead:
-git show :path/to/doc.md
-```
+- **Default — inline in your reply text.** Read the staged blob (`git show :path/to/doc.md` for a newly-added/rewritten doc, or `git diff --cached -- path/to/doc.md` for an edit on an existing doc — use a Bash tool call so the content lands in your context), then paste the content into your next user-facing reply inside a fenced code block. Your reply text is the only channel guaranteed to reach the user across every session shape (interactive REPL, background jobs the user is watching through a separate UI, remote/bridged sessions where bash stdout is logged but not shown). For a typical vm-status / plan / next.md update this is the right default.
+- **Fallback — print to terminal**, only when you're confident the user is sitting at an interactive terminal that surfaces your bash stdout (e.g. a foreground interactive `claude` session on the same machine as the user, no background-job indirection). Then `git diff --cached -- path/to/doc.md` or `git show :path/to/doc.md` directly is fine.
+- **Do NOT use `open` / `/read-plan`** — phi-vet typically runs on the PHI-bearing machine (the GCP / VM executor), which is usually headless with no GUI, so launching a desktop `.md` app won't work.
 
-Then re-ask the question once they've read it. **Do NOT use `open` / `/read-plan` here** — phi-vet runs on the PHI-bearing machine (the GCP / VM executor), which is typically a headless terminal with no GUI, so launching a desktop `.md` app won't work. Inline printing is the terminal-native equivalent of the read step. If they pick **Skip — I trust the change**, log the file + rationale in the conversation, treat as ack.
+Signs you're in a session where bash stdout won't reach the user (→ inline-in-reply): the system prompt mentions "background session" / "background job"; the user previously said they can't see terminal output; your reply text is the only thing the user has been quoting back at you. When in doubt, inline-in-reply — it's the strictly safer channel.
+
+Then re-ask the question once they've read it. If they pick **Skip — I trust the change**, log the file + rationale in the conversation, treat as ack.
 
 Multiple docs → multiple AskUserQuestion rounds. Don't compress into one "have you read all of these?" question — the per-file surface is the value, and a single composite ack lets a tired user wave through without thinking.
 

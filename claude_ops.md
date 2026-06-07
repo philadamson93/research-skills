@@ -50,14 +50,14 @@ Repo-specific bindings (concrete hostnames, package-manager rules, sibling-repo 
 
 ## Session Start
 
-Quickly check if the global skills repo (canonical path: `~/code/research-skills`) is substantially behind `origin/main` before starting work:
+**Always** check whether the global skills repo (canonical path: `~/code/research-skills`) is behind `origin/main` before starting work — fetch first so the check sees the true remote state, not a stale local view:
 
 ```bash
 git -C ~/code/research-skills fetch --quiet 2>/dev/null && \
   git -C ~/code/research-skills log HEAD..origin/main --oneline 2>/dev/null | head
 ```
 
-If the local clone is **3+ commits behind**, suggest a `git -C ~/code/research-skills pull --ff-only` before starting — mid-session skill-spec drift (a `/wrapup` or `/review-plan` invocation reading a different version than expected) is harder to reason about than a clean pull at the start. If 0–1 commits behind or the path doesn't exist on this machine, skip silently.
+If the local clone is behind by **any** commits, tell the user how far behind it is, show the unpulled commit subjects, and ask whether to `git -C ~/code/research-skills pull --ff-only` before starting — don't pull unprompted, but don't skip silently either. Mid-session skill-spec drift (a `/wrapup` or `/review-plan` invocation reading a different version than expected) is harder to reason about than a clean pull at the start, and even a single unpulled commit can change a skill's behavior. Only stay silent when the clone is already up to date (0 commits behind) or the path doesn't exist on this machine.
 
 ---
 

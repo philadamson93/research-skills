@@ -36,9 +36,8 @@ For repos where the executor / planner split is hostname-dependent (a project VM
 2. **The repo declares its machine posture** — typically in `CLAUDE.md` or a dedicated registry like `docs/machines.md`. The registry names known hosts and assigns each one Executor or Planner role, plus PHI posture if relevant.
 3. **Executor mode** (a project VM with data, credentials, and a runtime):
    - Run queries, scripts, and exploration as directed by plan docs.
-   - Minor iterative corrections when data reveals something unexpected.
    - Commit results frequently.
-   - Don't broad-plan or major-rewrite without user confirmation — if scope changes significantly, document the finding and defer to a new plan.
+   - **Classify findings, don't improvise.** A finding that's purely mechanical and leaves the design + success criteria unchanged is an *in-lane correction* (fix it, log it). A finding that contradicts a plan assumption, changes scope, or invalidates the approach is a *plan-level deviation* — STOP, document it, and hand back to the planner; **when uncertain, escalate**. Don't broad-plan or major-rewrite without confirmation. `/vm-handoff` formalizes this routing (its *Deviation workflow*: VM→Mac via a DEVIATION block in the handoff doc, re-plan, supersede with a new doc).
 4. **Planner mode** (typically the local Mac):
    - Planning, template authoring, spec writing, doc review.
    - Do not run code or query data — credentials and data paths usually aren't here.
@@ -113,8 +112,20 @@ How will we implement this?
 ## Open Questions
 - Any ambiguities to resolve?
 
-## Verification
-How will we know this works?
+## Verification & VM handoff
+How will we know this works? Because execution happens on the VM, state the success
+criteria *here* so they are reviewed **with the plan** (via `/review-plan`), not invented
+later at handoff time:
+- **What runs on the VM** — commands / scripts / tests, in order.
+- **Expected** (per step) — how the executor knows it worked: exit codes, files that must
+  exist & be non-empty, metric ranges, skip-logs.
+- **Stop** (per step) — the halt-and-report conditions: precondition / failure / decision-gate.
+- **Anticipated forks** — where you can predict the executor will hit a fork (a metric near a threshold, an optional path), pre-encode it as a **decision gate** ("if X → A, else B") so the executor resolves it inline instead of round-tripping back for a re-plan. Unanticipated findings that contradict the plan are *deviations* — `/vm-handoff`'s Deviation workflow routes those back here for revision.
+
+`/vm-handoff` later renders this section into a runnable `docs/vm-status/<date>-<sha>.md`
+handoff doc and tracks the VM's results back into it. It should be **deriving** the
+criteria from this section, not authoring fresh ones — if this section is thin, the plan
+isn't handoff-ready (see `/plan-handoff-readiness`).
 ```
 
 ### After Completing a Plan
@@ -125,7 +136,7 @@ How will we know this works?
 
 ### VM-status docs are for smoke tests only — not for eval results
 
-`docs/vm-status/<date>-<sha>.md` reports are for **smoke-test / verification handoffs** between sessions: aggregator runs needing structural readback, full test sweeps with expected reds to characterize, end-to-end pipeline validation. Once a workstream has moved past smoke tests into producing eval results (linear-probe runs, KNN runs, cross-modality comparisons), don't propose vm-status docs — the user reads results directly from the auto-generated HTML at `<results-root>/<version>/<modality>/<dataset>/reports/<model>_<dataset>.html` plus the on-disk per-task / per-example parquets, and writes any narrative themselves. Backlog / next.md entries that *reference* such results with a one-line pointer are still fine.
+`docs/vm-status/<date>-<sha>.md` reports are for **smoke-test / verification handoffs** between sessions: aggregator runs needing structural readback, full test sweeps with expected reds to characterize, end-to-end pipeline validation. Use **`/vm-handoff`** to author and close these — it auto-detects planner vs executor by `hostname` (per Machine-Aware Operating Mode above), **renders** the runnable doc from the plan's *Verification & VM handoff* section (the Expected/Stop criteria already reviewed with the plan via `/review-plan` — it derives them, it doesn't invent them), and on the VM appends the run results back into the *same* doc so the round-trip is self-contained. Once a workstream has moved past smoke tests into producing eval results (linear-probe runs, KNN runs, cross-modality comparisons), don't propose vm-status docs — the user reads results directly from the auto-generated HTML at `<results-root>/<version>/<modality>/<dataset>/reports/<model>_<dataset>.html` plus the on-disk per-task / per-example parquets, and writes any narrative themselves. Backlog / next.md entries that *reference* such results with a one-line pointer are still fine.
 
 ---
 
@@ -233,7 +244,8 @@ For non-trivial changes, use the research-skills review workflows instead of inl
 - **`/review-tests <plan-path>`** — test-coverage audit of uncommitted code against the plan. Run after `/review-implementation` when the change introduces new branches / contracts / edge cases worth regression-protection.
 - **`/commit-review`** — commit workflow with appropriateness review (catches accidentally-leaked private content) before commit + push. Use this rather than running `git commit` inline.
 - **`/phi-vet`** — hard PHI gate for medical-data repos. `/commit-review` escalates to it automatically for repos that touch BigQuery / OMOP / NeuralFrame / DICOM / EHR / WSI / pathology bucket / vista_bench. Do not silently fall back to inline sweeps.
-- **`/plan-handoff-readiness`** — pre-implementation handoff check: does the plan POINT AT or STATE DIRECTLY everything a fresh agent needs?
+- **`/plan-handoff-readiness`** — pre-implementation handoff check: does the plan POINT AT or STATE DIRECTLY everything a fresh agent needs (including, for VM-executed work, the *Verification & VM handoff* Expected/Stop criteria)?
+- **`/vm-handoff`** — planner-Mac → executor-VM round-trip. On the Mac, renders the plan's *Verification & VM handoff* criteria into a runnable `docs/vm-status/<date>-<sha>.md`, gates the criteria for your sign-off (tiered by complexity), then offers `/commit-review` to land. On the VM, appends the run results into the same doc and offers `/phi-vet` → `/commit-review`. Auto-detects mode by `hostname`.
 
 Skip the review skills for trivial changes (single-file fixes, doc tweaks, formatting). Each skill carries its own guidance on what it checks, when to skip, and how findings get applied.
 
@@ -251,6 +263,8 @@ Skip the review skills for trivial changes (single-file fixes, doc tweaks, forma
 ## Verification Approaches
 
 Always define how you'll verify changes work. Since code cannot run on this machine, verification means describing expected behavior for the user to confirm on the VM.
+
+Capture that expected behavior as **Expected / Stop** success criteria in the plan's *Verification & VM handoff* section (see Plan Document Structure above), so it is reviewed with the plan. `/vm-handoff` operationalizes those criteria into a runnable `docs/vm-status/<date>-<sha>.md` handoff doc and records the VM's results back into the same doc — see that skill for the planner→executor round-trip.
 
 Remember: Give Claude a way to verify its work. This is the single most important factor in output quality.
 

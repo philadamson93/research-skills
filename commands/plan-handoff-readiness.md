@@ -152,6 +152,8 @@ Plan refers to "the input-validation pre-step" or "the orchestrator's parsing mo
 
 Plan describes the feature without saying how the implementer knows it works. **Fix:** STATE DIRECTLY a canonical run, expected output, and regression-check baseline. POINT AT the test fixture if one exists.
 
+For VISTA plans whose work executes on the VM (the executor is a kind of fresh agent too), the success criterion takes a specific shape: a **Verification & VM handoff** section stating *what runs on the VM* plus per-step **Expected** (how the executor knows it worked) and **Stop** (halt-and-report conditions) — per `claude_ops.md`'s Plan Document Structure. A plan missing this section isn't VM-handoff-ready: `/vm-handoff` would have to invent the criteria instead of deriving them. **Fix:** STATE DIRECTLY the Expected/Stop criteria in the plan so they're reviewed with it (via `/review-plan`), not improvised at handoff time.
+
 ### Cross-stage plumbing missed
 
 Plan correctly identifies that one stage changes (e.g., "the request handler now accepts a new field") but omits upstream / downstream stages that need lockstep updates:

@@ -65,6 +65,9 @@ Concrete syntax landmines that have broken diagrams in real plans. Avoid up-fron
 - **Never put double or triple dashes (`--`, `---`) inside node labels** — Mermaid uses `-->`, `---`, `===` as edge tokens, and a label containing `--verify-against-solo` or `---` (from a separator line) tokenizes ambiguously. Common failure mode: bullet replacement (`• --foo` → `- --foo`) silently creates `---foo` which the parser splits as edge-then-node. Strip leading `--` from labels (drop the CLI-flag dashes when used as a *label*; keep them in the surrounding prose), and avoid `---`/`━━━`/`═══` as visual separators inside labels.
 - **Avoid Unicode arrows (`→`, `←`, `↔`) in node labels** — 10.x parsers sometimes choke. Replace with `->`, `<-`, `to`, `vs`, or simply rephrase. (Status chips `✅ ⏳ 🛑 ⚠️` and `▸` *generally* work; arrows specifically don't.)
 - **Avoid box-drawing chars (`━`, `═`, `│`) in node labels** as visual separators — same fragility as `---`. Use `<br/><br/>` for visual whitespace or just `<br/>` alone.
+- **NEVER use a reserved keyword as a node ID** — this is the highest-frequency "Syntax error in text" that the grep suite below does NOT catch (it inspects label *contents*, not IDs). Banned IDs: `end`, `call`, `class`, `click`, `style`, `link`, `href`, `graph`, `subgraph`, `direction`, `flowchart`, `default`, `linkStyle`. The two that bite most: **`call`** (it's the click-interaction keyword `click X call fn()`) and **`end`** (subgraph terminator). Real incident (2026-06): a blast-radius node `call["convert_dicom_to_nifti..."]` failed to render across three fix attempts because the author kept inspecting label punctuation; the ID itself was the bug. Use a descriptive non-keyword instead (`cvt`, `convNode`, `warnLog`). When auto-deriving IDs from file/function names, prefix or suffix them (`n_call`, `call_`) so a name collision with a keyword is impossible.
+- **Never put a bare `<`, `>`, `<=`, or `>=` in a label** — Mermaid feeds labels through an HTML parser, so a bare `<` opens a phantom tag and the diagram dies. `"mismatch <= tol"` breaks; the only `<`/`>` it tolerates are the literal `<br/>` / `<b>` tags you intend. Rewrite comparisons in words (`"at or below tol"`, `"fewer than 2"`) or HTML entities (`&lt;`, `&le;`, `&gt;`). Note `-->` / `-.->` edge arrows are fine — the hazard is `<`/`>` *inside `[...]` labels*.
+- **Subgraph titles are parsed MORE strictly than node labels** — parentheses, slashes, and `+` that are perfectly safe inside a quoted *node* label (`x["a (b) / c"]` renders) will break a quoted *subgraph title* (`subgraph s["a (b) / c"]` fails) on 10.x. Keep subgraph titles to letters, digits, spaces, and commas: `subgraph s["Out of scope, Phase 2"]`, not `["Out of scope (Phase 2 / elsewhere)"]`. (This is *in addition* to the `{`-brace hazard, which breaks both.)
 - **Edge labels: use pipe syntax `A -->|label| B`**, not `A -- "label" --> B`. Pipe syntax is more permissive about special chars (parens, slashes, commas) and survives parser quirks across Mermaid versions.
 - **Dotted arrows with labels: `A -. label .-> B`** (spaces required around the label on both sides). NOT `A -.label.-> B` or `A -.label-->B` — both are malformed-token bugs that 10.x parsers reject silently. Same for thick: `A == label ==> B` (spaces required). Watch for this when you have many `-. <verb> .->` edges with short labels — easy to drop the spaces by reflex.
 - **Avoid `•` (bullet) in node labels** if you're seeing parser failures — switch to `,`, `;`, or just rely on `<br/>` for line breaks. `•` usually works but is a known sometimes-fail in older Mermaid versions. **Watch out for blind bullet-replacement**: if you do a bulk `• ` → `-` substitution to fix the bullet issue, you may create new `--` or `---` sequences when `• ` precedes another `-` token (e.g., `• --verify-against-solo` → `---verify-against-solo`).
@@ -72,19 +75,32 @@ Concrete syntax landmines that have broken diagrams in real plans. Avoid up-fron
 - **Subgraph labels with spaces or punctuation must be quoted**: `subgraph foo["My Label (v2)"]`, not `subgraph foo My Label`. Note: quoting does NOT save you from the `{` hazard inside the label.
 - **Wrap multi-line / punctuated node labels in double quotes**: `s1["<b>Slice 1</b><br/>line 2<br/>line 3"]`, not `s1[<b>Slice 1</b><br/>...]`. The quotes harden the label against ambiguity when it contains colons, commas, parentheses, or HTML tags.
 - **`class A,B,C classname` is fine**; many node IDs in one assignment is the idiomatic shape.
-- **Generation-time validation (run BEFORE opening the file)**: pipe `<pre class="mermaid">...</pre>` blocks to a temp file and grep for every known-bad pattern. Cheap, catches all the common cases:
+- **Generation-time validation (run BEFORE opening the file)**: extract `<pre class="mermaid">...</pre>` blocks and grep for every known-bad pattern. Cheap, catches the common cases — but see the hard limit below:
 
   ```bash
-  awk '/<pre class="mermaid">/,/<\/pre>/' <html> > /tmp/mermaid.txt
-  grep -nE '\{|\}'                       /tmp/mermaid.txt   # curly braces (any, not just doubles)
-  grep -nE '\[[^]]*\|[^]]*\]'            /tmp/mermaid.txt   # pipe inside node labels
-  grep -nE '\-\.[A-Za-z][^.]*\.->'       /tmp/mermaid.txt   # dotted arrow missing spaces
-  grep -nE '\[[^]]*---[^]]*\]'           /tmp/mermaid.txt   # triple-dash in node labels
-  grep -nE '→|←|↔'                       /tmp/mermaid.txt   # unicode arrows
-  grep -nE '━|═|│'                       /tmp/mermaid.txt   # box-drawing chars
+  # Extract label/body content only (drop the <pre> wrapper lines) so the <pre tag isn't a false <-hit.
+  awk '/<pre class="mermaid"/{f=1;next} /<\/pre>/{f=0} f' <html> > /tmp/mm.txt
+  grep -nE '\{|\}'                              /tmp/mm.txt                 # curly braces (any)
+  grep -nE '\[[^]]*\|[^]]*\]'                   /tmp/mm.txt                 # pipe inside node labels
+  grep -nE '\[[^]]*\(\)[^]]*\]'                 /tmp/mm.txt                 # empty () inside labels (reads as round-node)
+  grep -nE '<[^b]'        /tmp/mm.txt | grep -v '<br'                       # bare < not part of <br/> (HTML-tag opener)
+  grep -nE '<=|>='                             /tmp/mm.txt                 # comparison ops in labels
+  grep -nE 'subgraph[^[]*\[[^]]*[()/+{}|][^]]*\]' /tmp/mm.txt              # parens/slash/+ in SUBGRAPH titles (stricter than nodes)
+  grep -niE '(^|[[:space:]])(end|call|click|class|graph|subgraph|style|link|href|default|direction|flowchart)[[:space:]]*\[' /tmp/mm.txt  # reserved-keyword node IDs
+  grep -nE '\-\.[A-Za-z][^.]*\.->'             /tmp/mm.txt                 # dotted arrow missing spaces
+  grep -nE '\[[^]]*---[^]]*\]'                 /tmp/mm.txt                 # triple-dash in node labels
+  grep -nE '→|←|↔'                             /tmp/mm.txt                 # unicode arrows
+  grep -nE '━|═|│'                             /tmp/mm.txt                 # box-drawing chars
+  # Balance check: subgraph count must equal end count.
+  echo "sg=$(grep -c subgraph /tmp/mm.txt) end=$(grep -cE '^[[:space:]]*end[[:space:]]*$' /tmp/mm.txt)"
   ```
 
-  Every section must return zero hits before opening. If any returns hits, fix and re-run — don't open a broken HTML and force the user to be the parser.
+  Every check must return zero hits (and sg==end) before opening.
+
+- **The grep suite is necessary but NOT sufficient — it cannot prove a diagram parses.** It catches *known* character/keyword landmines, not novel ones or structural errors. For ground truth, run the actual parser:
+  - **Interactive / one-off (zero setup, best ROI):** paste the failing diagram into the **Mermaid Live Editor — <https://mermaid.live>**. It renders against a pinned Mermaid version and prints the exact parse error with the offending token highlighted. When a user reports "Syntax error in text, mermaid version X.Y.Z" and the greps are clean, go here *first* instead of guessing — guessing burned three round-trips in the 2026-06 incident.
+  - **Automated, if a Node runtime exists:** `mermaid.parse(src)` validates WITHOUT rendering (no headless browser needed) and throws with the token; or `mmdc` (`@mermaid-js/mermaid-cli`). A CI lint can iterate every `<pre class="mermaid">` block through `mermaid.parse`. Node-free boxes can `pip install nodejs-bin` to get one, or use a Go validator (`tetrafolium/mermaid-check`). The npm `@a24z/mermaid-parser` lints `.mmd` / markdown blocks from the CLI.
+  - **Don't make the user be the parser.** If the greps pass but you can't run a real parser locally, say so and ask the user to paste into mermaid.live — that's faster and more honest than shipping a guess and waiting for "still broken."
 
 ## Node drill-down (double-click)
 

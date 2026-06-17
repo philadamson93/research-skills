@@ -1,8 +1,8 @@
-End-of-session cleanup. Do the seven steps below in order.
+End-of-session cleanup. Do the eight steps below in order.
 
 ## When to invoke
 
-Recommended cadence: invoke around **~200k tokens of context** (or earlier at a clean cutoff), land with the commit gate in Step 7, then start a fresh session with `/next`. Long sessions past that point get noticeably slower (cache misses on every turn, drift in long-tail context) and the marginal value of staying in-session keeps falling. The `MEMORY.md` + `next.md` updates this skill maintains are what make the cross-session handoff cheap — invest in them here so the next session starts fast.
+Recommended cadence: invoke around **~200k tokens of context** (or earlier at a clean cutoff), land with the commit gate in Step 8, then start a fresh session with `/next`. Long sessions past that point get noticeably slower (cache misses on every turn, drift in long-tail context) and the marginal value of staying in-session keeps falling. The `MEMORY.md` + `next.md` updates this skill maintains are what make the cross-session handoff cheap — invest in them here so the next session starts fast.
 
 ## Scope
 
@@ -40,7 +40,7 @@ If the project has a plan-tracking index (`docs/plans/README.md` or equivalent),
 - **No plan-tracking index exists, but `docs/plans/` (or equivalent) does**: bootstrap a `README.md` with `Plan | Status | Reviewed | Description` columns and populate `Reviewed: No` for all existing plan docs.
 - **No `docs/plans/` directory at all**: skip this step.
 
-Surface unreviewed plans (`No` or `Stale`) in the Step 6 summary so the next session can pick them up.
+Surface unreviewed plans (`No` or `Stale`) in the Step 8 summary so the next session can pick them up.
 
 ## Step 3 — Tracking-doc hygiene (`next.md` or equivalent)
 
@@ -65,7 +65,33 @@ If no backlog file exists but the immediate-tracking doc has a "Deferred / Backl
 
 Update `MEMORY.md` to reflect the current project state, open items, and any new preferences or facts learned this session. Evict stale entries. Save new memories per the auto-memory rules in the system prompt — do not duplicate facts already covered by `CLAUDE.md` or derivable from the code.
 
-## Step 6 — Global skills sync (separate repo)
+## Step 6 — Cross-repo resume index (vista-pm)
+
+Keep one cross-repo "in-flight work" index current so the next session can resume the *right* recent work without re-deriving it from git. This is the hub-level rollup of the per-repo `next.md` hygiene in Step 3 — it answers "which of my several worktrees do I pick back up?"
+
+**Planner-Mac only — never on the VM.** This index is a local-only, git-ignored, planner-Mac artifact: the `vista-pm/personal/` tree is never pushed, so there is nothing to pull at session start and it does not exist on the executor VM. Run this step ONLY on the planner Mac; skip it entirely on the executor VM (`phil-sllm-01`) or any host where `vista-pm/personal/` is absent. Per claude_ops Machine-Aware Operating Mode you already know the machine from the session-start `hostname` — `vista-pm/personal/` existing is the operative check.
+
+**Where**: `vista-pm/personal/in-flight.md` (same place the personal to-dos live). Find `vista-pm` as a sibling of the current repo (its parent dir / the `code/` workspace root). Also **skip** for sessions that didn't advance a branch/worktree (pure-doc tweaks, vista-pm-only work, trivial fixes).
+
+**Incremental — do NOT run a cross-repo git sweep.** A wrapup runs inside one repo's session and only cheaply knows *that* repo's work. Upsert only the branch/worktree(s) you touched this session; leave every other repo's entries alone. (Re-deriving the whole index from a full `git worktree list` + push-state sweep across all repos is a separate, occasional reconcile — not this step.)
+
+**Per touched branch/worktree, upsert one entry** under a `## <repo>` heading:
+
+```
+## <repo>
+- <branch-or-worktree> · <state> · <MM-DD>
+  <one line: what it is>
+  next: <one line> → <pointer to the repo's docs/next.md or the plan doc>
+```
+
+- **`<state>`** — read cheaply from this session's own git knowledge (no sweep): `pushed` (committed and on `origin/<branch>`), `⚠ UNPUSHED` (committed locally, not on origin — lost if the clone/worktree is gone), or `⚠ UNCOMMITTED` (dirty / draft not yet committed). Quick check: `git -C <wt> status -sb` plus whether an `origin/<branch>` ref exists.
+- **Order** newest-first within a repo; keep repos most-recently-touched first.
+- **Prune on landing**: if the branch merged to main or was abandoned this session, remove its entry (note the removal in the Step 8 summary).
+- **Pointer style** (same contract as `next.md`): ≤3 lines per entry; substance lives in the plan doc / `next.md` it points at.
+
+**Editing mechanics**: the file is git-ignored — edit it in place. In a guarded background session where direct edits to a sibling checkout are blocked, write the updated file to scratch and `cp` it in (Bash isn't guarded). Never commit this file.
+
+## Step 7 — Global skills sync (separate repo)
 
 The user's global skills live in their own git repo, which is **a different repo from the project being worked on** — it has its own commit gate and its own push target. There are often TWO related paths to consider:
 
@@ -74,7 +100,7 @@ The user's global skills live in their own git repo, which is **a different repo
 
 **Detection:**
 1. Always check the runtime cache: `git -C ~/.claude/commands status --short` (and `git -C ~/.claude/skills status --short` if that path exists).
-2. Check the canonical repo if one exists. Look for `~/.claude/canonical-skills-repo` (a single-line file containing the absolute path to the canonical repo). If that pointer file doesn't exist, fall back to scanning common locations (`find ~/Documents -maxdepth 4 -type d \( -name 'research-skills' -o -name 'claude-skills' \) 2>/dev/null | head -5`) and surface a candidate via `AskUserQuestion` if exactly one match is found. If zero or many, skip and surface in Step 7 summary as "no canonical skills repo detected."
+2. Check the canonical repo if one exists. Look for `~/.claude/canonical-skills-repo` (a single-line file containing the absolute path to the canonical repo). If that pointer file doesn't exist, fall back to scanning common locations (`find ~/Documents -maxdepth 4 -type d \( -name 'research-skills' -o -name 'claude-skills' \) 2>/dev/null | head -5`) and surface a candidate via `AskUserQuestion` if exactly one match is found. If zero or many, skip and surface in Step 8 summary as "no canonical skills repo detected."
 3. If the output is empty in all candidate paths, **skip this step silently** — nothing to sync.
 
 **Sync direction matters.** Edits often happen in the runtime cache (because that's what Claude Code is reading from), but the canonical repo is the source of truth that gets pushed to GitHub. Before committing, copy your session edits from the runtime cache → canonical:
@@ -93,18 +119,18 @@ Raise an `AskUserQuestion` with three options:
 
 1. **"Commit and push global skills" (Recommended)** — commit your session changes and push to the configured remote in one action.
 2. **"Commit only (no push)"** — create the commit locally; defer the push.
-3. **"Skip"** — leave global-skills changes uncommitted; flag in the Step 7 summary as needing attention.
+3. **"Skip"** — leave global-skills changes uncommitted; flag in the Step 8 summary as needing attention.
 
 Based on the answer:
 
 - *Commit and push* / *Commit only*: stage only the files you touched (`git -C <repo> add <file1> <file2>`; do **not** use `git -C <repo> add -A`), then commit with a short single-line thematic message describing what changed (e.g., `plan-handoff-readiness: add implementation-forward principle`). No AI attribution lines, matching the project commit-message convention. Push only if the option chosen requires it.
-- *Skip*: do nothing; surface in Step 7 summary.
+- *Skip*: do nothing; surface in Step 8 summary.
 
 The `-C <path>` form keeps the project's cwd intact; do not `cd` into the skills repo.
 
-**Why a separate gate from Step 7:** two independent repos, two independent push targets. The user might want to push the project but defer the skills sync, or vice versa. One gate per repo.
+**Why a separate gate from Step 8:** two independent repos, two independent push targets. The user might want to push the project but defer the skills sync, or vice versa. One gate per repo.
 
-## Step 7 — Summary + commit gate
+## Step 8 — Summary + commit gate
 
 **Summarize as bullet points** (not a paragraph). Use these headings; omit any that are empty:
 

@@ -368,7 +368,7 @@ To ingest:
 2. For each section, find the corresponding part of the plan markdown.
 3. Classify each comment:
    - **Bug report on the HTML itself** (e.g., "syntax error in mermaid", "this color is wrong", "section is missing") — fix the HTML directly; do NOT touch the plan.
-   - **Clarification request** (e.g., "what is X?") — answer in chat; do NOT silently edit the plan unless the answer reveals the plan is genuinely unclear.
+   - **Clarification request** (e.g., "what is X?") — answer the user. For a one-off question a chat reply is fine; for a **non-trivial round** (several questions at once, a term-glossary ask, or an OQ-by-OQ pass), prefer writing the answers **inline into the HTML** as response callouts (see *Responding inline in the HTML* below) so each lives next to the section it explains. Do NOT silently edit the plan unless the answer reveals the plan is genuinely unclear.
    - **Trivial fix** (typo, broken link) — apply to plan directly.
    - **Substantive scope/content change** (e.g., "drop this task family from scope", "rename X to Y") — surface via `AskUserQuestion` before applying, since these often have cross-section ripple effects (status text, blast-radius edges, diff target tables, file enumerations). DO NOT chain-apply across the plan without the user confirming.
 4. Regenerate the HTML (the SHA will change; embed the new one).
@@ -377,6 +377,23 @@ To ingest:
 **Partial feedback is normal.** Users typically review and submit feedback in chunks (e.g., "I've reviewed sections 1–2, here's feedback, haven't gotten to the rest"). Treat each paste as additive. Don't pressure the user to finish before applying — they can continue reviewing while you apply the chunk. The localStorage persistence in the HTML widget means their unsubmitted feedback on later sections is safe across reloads.
 
 The skill does NOT auto-apply substantive feedback — it requires user confirmation for non-trivial edits per `feedback_*` memories. For trivial fixes (typo corrections, link patches), apply directly.
+
+### Responding inline in the HTML (non-trivial iterations)
+
+When a feedback round is **non-trivial** — the user asks several questions at once, requests a term glossary, or gives an OQ-by-OQ pass — default to writing your responses **inline into the HTML companion** as visually distinct callouts placed next to the section each answers, rather than only in chat. The HTML is where the user is already reading; co-locating the answer with its section beats a wall of chat prose they have to cross-reference back to the plan.
+
+**Ask preference when it's ambiguous.** The first such round in a session, or for a mixed batch, offer the choice via `AskUserQuestion` — *inline-in-HTML* vs *in chat* (vs *both*). Once the user has expressed a preference, honor it for the rest of the session without re-asking. A direct instruction ("write it into the HTML") overrides the default and skips the ask.
+
+**The `.resp` callout pattern:**
+- Add a `.resp` CSS class **distinct from the user's feedback widgets** — e.g. a left-accent border + subtle tint + a small uppercase label (`Claude`, or `Re: "<their question>"`). Keep it visually separate from the `textarea.section-feedback` widgets so the user's own input fields stay clean.
+- **Place each response next to what it answers:** inside the relevant step/gotcha `<details>` block; for the JS-rendered OQ panel, add a parallel `OQRESP` map keyed by OQ number (template-literal HTML values) and render it after each OQ's prose, e.g. `(OQRESP[n] ? '<div class="resp">…' + OQRESP[n] + '</div>' : '')`. For cross-cutting term questions, a single *"Answers to your review questions"* card placed right after the Knobs/contracts section reads better than scattering definitions.
+- **Never prefill the user's feedback textareas.** Those are localStorage-bound input fields; responses go in separate `.resp` callouts.
+
+**SHA / drift discipline:**
+- If you only added response callouts and the **source `.md` is unchanged**, do **NOT** bump `plan-sha256` — the responses are annotation, not plan content. Leaving the SHA untouched avoids a false drift flag *and* preserves the user's existing localStorage feedback (the widget wipes saved input when `__sha` changes).
+- If the round also produces genuine plan edits, follow the normal regenerate path (new SHA, re-run verification) — and re-author the response callouts into the regenerated HTML.
+
+**Then re-open** the HTML (`open <path>`) so the user sees the annotations in place, per the open-is-required rule above.
 
 ## Idempotency and re-runs
 

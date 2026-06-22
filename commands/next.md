@@ -1,13 +1,23 @@
 ---
 name: next
-description: Use when the user opens a session asking "what's next?", "where did we leave off?", "what should I work on?", "any next steps?", or similar — and there's no obvious in-flight task already named. Also invoked explicitly via `/next`. Surveys tracking docs (NEXT.md / docs/next.md / TODO.md / BACKLOG.md / docs/plans/README.md / MEMORY.md / recent commits / current branch / all local+remote branches for unmerged work), classifies as "clear next" vs "need direction" vs "genuinely empty", surfaces 2-4 candidate tasks with a recommendation via AskUserQuestion when there's a fork, then deep-dives the chosen task (plan doc + memory + recent code) before handing off a concrete first action. SKIP when the user has already named a specific task to work on, or mid-session when context for the current task is already loaded.
+description: Use when the user opens a session asking "what's next?", "where did we leave off?", "what should I work on?", "any next steps?", or similar — and there's no obvious in-flight task already named. Also invoked explicitly via `/next`. FIRST fetches + fast-forwards from remote so it never surveys stale local refs (otherwise pushes from another machine — e.g. a VM test-gate readback — get missed and you recommend already-done work), THEN surveys tracking docs (NEXT.md / docs/next.md / TODO.md / BACKLOG.md / docs/plans/README.md / MEMORY.md / recent commits / current branch / all local+remote branches for unmerged work), classifies as "clear next" vs "need direction" vs "genuinely empty", surfaces 2-4 candidate tasks with a recommendation via AskUserQuestion when there's a fork, then deep-dives the chosen task (plan doc + memory + recent code) before handing off a concrete first action. SKIP when the user has already named a specific task to work on, or mid-session when context for the current task is already loaded.
 ---
 
 # next
 
 Session-opener triage. The user is back at the keyboard and wants to know what to do — your job is to survey, surface options, let them steer, then deep-dive the chosen task.
 
-Four phases. Don't skip ahead.
+Five phases (0–4). Don't skip ahead — **Phase 0 is not optional**; surveying stale refs is the single most common way this skill recommends already-finished work.
+
+## Phase 0 — Refresh from remote (do this FIRST, before reading anything)
+
+Tracking docs, plan status, and branch state are frequently updated from *another machine* — most often a VM that ran a test gate or live run and pushed the readback. If you survey stale local refs you'll miss those updates and may recommend work that's already done. So before the survey:
+
+1. **Fetch** every remote: `git fetch --all --prune`. This refreshes remote-tracking refs so the Phase 1 branch survey (`git branch -a`) and all behind/ahead counts are accurate — not just the current branch. If there's no remote, or the fetch fails (offline, auth prompt), note it in one line and continue with local state.
+2. **Fast-forward the branch(es) you'll survey.** For the current branch — and any active feature branch you intend to deep-dive — if it's behind its upstream, `git pull --ff-only`. If it can't fast-forward (diverged) or the worktree is dirty in a blocking way, **do not force it**: surface "branch X is N behind origin, can't ff (diverged/dirty)" as a finding and let the user decide. Never `git pull` (merge) or `--rebase` unprompted, and never push.
+3. **Say what the refresh changed.** If the pull brought in commits, state it in one line — e.g. "pulled 4 commits — a VM test-gate readback marking the gate PASSED." That incoming delta is usually the freshest and most decision-relevant signal in the whole survey, so it leads the Phase 4 write-up.
+
+Caveat: if the active branch is checked out in a **git worktree** (common for in-flight work), fast-forward it *in that worktree*, not the main checkout. Use `git -C <worktree> pull --ff-only`.
 
 ## Phase 1 — Survey the candidates (breadth, not depth)
 
@@ -67,6 +77,7 @@ End with a hand-off line: "Ready to start with <action>, or want to dig into som
 
 ## What NOT to do
 
+- **Don't survey stale refs.** Phase 0 (fetch + ff) runs first, always — skipping it is how this skill recommends work a VM already finished and pushed.
 - **Don't deep-dive multiple candidates in Phase 1.** That wastes context before the user has steered.
 - **Don't recommend a task that's already shipped.** Verify status against `git log` and plan-doc state — trackers lag behind reality.
 - **Don't skip AskUserQuestion when there are 2+ candidates.** Inline "should I do X or Y?" is the wrong shape here.

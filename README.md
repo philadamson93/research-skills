@@ -41,6 +41,8 @@ ln -s /path/to/research-skills/commands ~/.claude/commands
 
 Updating is just `git -C ~/code/research-skills pull` — symlinks survive Claude Code restarts, no rebuild. Hooks are **not** installed by these symlinks; they need a `~/.claude/settings.json` entry per [hook](hooks/README.md).
 
+> **Editing implication (for agents):** because `~/.claude/commands` is a *symlink* into this repo, editing `~/.claude/commands/<name>.md` edits this repo's `commands/<name>.md` **in place** — the change is live immediately *and* shows up as an uncommitted modification in `research-skills` (`git -C ~/code/research-skills status`). So a skill tweak is never "just a runtime change": commit + push it here (feature branch per `claude_ops.md`) or it's lost on the next `git pull`, and it won't reach other machines (e.g. the VM, whose `/next` reads its own clone) until pushed and pulled there.
+
 ### Once per repo
 
 Give a repo the operating standards. Two steps — symlink the canonical file in, then import it from the repo's own `CLAUDE.md` so it loads into every session run from that repo:

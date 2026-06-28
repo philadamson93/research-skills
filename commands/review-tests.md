@@ -1,6 +1,6 @@
 ---
 name: review-tests
-description: Independent test-coverage audit of uncommitted code by Codex CLI or a fresh Claude Code subagent, against a plan doc, then *apply* agreed test stubs by default. Use after `/review-implementation`, BEFORE `/commit-review`, when the implementation introduces new branches / contracts / edge cases that warrant regression-protection tests. Invoked explicitly via `/review-tests <path-to-plan> [<output-path>] [--reviewer codex|claude]`. Also offered proactively at the end of `/review-implementation`. **Reviewer is never silently defaulted** — if not specified in args, the skill asks. Scoped strictly to uncommitted code; aborts when the working tree is clean. Runs the chosen reviewer over the diff + plan + existing test layout + prior implementation feedback, classifies each gap as agree/disagree/uncertain, then by default *applies* test stubs at the suggested locations and runs them. Only surfaces findings for adjudication where Claude genuinely disagrees with the reviewer. Hands off to `/commit-review` on completion. SKIP for typo fixes, doc-only changes, or anything where the existing test suite already gates the change end-to-end.
+description: Independent test-coverage audit of uncommitted code by Codex CLI or a fresh Claude Code subagent, against a plan doc, then *apply* agreed test stubs by default. Use after `/review-implementation`, BEFORE `/commit-review`, when the implementation introduces new branches / contracts / edge cases that warrant regression-protection tests. Invoked explicitly via `/review-tests <path-to-plan> [<output-path>] [--reviewer codex|claude]`. Also offered proactively at the end of `/review-implementation`. **Reviewer is never silently defaulted** — if not specified in args, the skill asks. Scoped strictly to uncommitted code; aborts when the working tree is clean. Runs the chosen reviewer over the diff + plan + existing test layout + prior implementation feedback, classifies each gap as agree/disagree/uncertain, then by default *applies* test stubs at the suggested locations and runs them. Only surfaces findings for adjudication where Claude genuinely disagrees with the reviewer. Hands off to `/vm-handoff` first for VM-bound work (so the handoff doc bundles into the same `/commit-review`), else straight to `/commit-review` on completion. SKIP for typo fixes, doc-only changes, or anything where the existing test suite already gates the change end-to-end.
 ---
 
 # review-tests
@@ -229,7 +229,13 @@ Summarize in one bullet: "Applied: <n> test stubs (passing). Adjudicated: <n>. D
 
 ## Phase 7 — Hand off
 
-If all agreed stubs are passing and no unresolved items remain:
+If all agreed stubs are passing and no unresolved items remain, decide whether this work crosses to the VM before it commits. **If the implementation is VM-bound** — it has never executed and a plan with a *Verification & VM handoff* section governs it (per `claude_ops.md` Machine-Aware Operating Mode) — hand off to **`/vm-handoff` first, not `/commit-review`**:
+
+> Test review complete. <n> tests added, <m> passing. This work runs on the VM next — `/vm-handoff` renders the handoff doc and then bundles it with this implementation into a *single* `/commit-review` (one PHI-vet + push). Run `/vm-handoff`?
+
+`/vm-handoff` authors `docs/vm-status/<date>-<sha>.md` against the still-uncommitted tree and offers the `/commit-review` itself — so the handoff doc rides in the **same** PHI-vet and push as the code, not a second cycle after the code already landed. It self-skips when the run is results-producing or trivial (Phase A1); if it skips, fall through to the commit hand-off below.
+
+Otherwise — not VM-bound, or `/vm-handoff` declined/skipped:
 
 > Test review complete. <n> tests added, <m> passing. Ready to `/commit-review`?
 
@@ -237,7 +243,7 @@ If unresolved items remain (test stubs failing for unclear reasons, disagreement
 
 > Test review found <n> unresolved items. Address them before `/commit-review`.
 
-Do not auto-invoke `/commit-review`. The user decides when to commit.
+Do not auto-invoke `/commit-review` or `/vm-handoff`. The user decides when to commit.
 
 ## Permission prompts
 

@@ -33,10 +33,11 @@ PLANNER MAC
   /review-plan X            ── audits the design AND the success criteria
   /plan-handoff-readiness X ── is the criteria section present & implementable?
   …implement (author configs/scripts — can't run them on the Mac)…
-  /review-implementation X · /review-tests X   ── structural audits vs the plan
+  /review-implementation X · /review-tests X   ── structural audits; route here only if VM-repo + plan needs a handoff
   /vm-handoff  ───────────▶ RENDER the plan's criteria into docs/vm-status/<date>-<sha>.md
+       │                    (implementation is still UNCOMMITTED at this point)
        └ tiered success-criteria gate (your sign-off) ──┐
-       └ offers → /commit-review → /phi-vet → push  ────┘
+       └ offers → /commit-review (bundles doc + impl) → /phi-vet → push  ────┘
 EXECUTOR VM
   pull, run the steps
   /vm-handoff (readback)   ── results appended into the SAME doc
@@ -202,11 +203,17 @@ Revise → edit and re-surface. Approve → Phase A4.
   else `NEXT.md` — same precedence as `/next`; create `docs/next.md` if none exists):
   `- VM smoke pending: [docs/vm-status/<date>-<sha>.md](...) — <one-line what>`. Pointer in
   the tracking doc; substance in the handoff doc (pointer-style discipline, like `/wrapup`).
-- Then **offer the next step** via `AskUserQuestion`: run `/commit-review` now to land the
-  doc + artifacts, or stop here. Don't auto-fire it — offer it (per `claude_ops.md` Skill
-  Composition). (`/commit-review` escalates to `/phi-vet` in medical-data repos — though on
-  the planner Mac `/phi-vet` is inert per its machine gate, so the real PHI scan is the VM
-  readback leg, Phase R2.)
+- Then **offer the next step** via `AskUserQuestion`: run `/commit-review` now, or stop
+  here. This is the **single** commit-review for the whole change: because the handoff doc
+  was authored while the implementation is *still uncommitted* (`/review-implementation` ·
+  `/review-tests` route work that needs a VM handoff to `/vm-handoff` **before** the
+  commit-review phase, when the repo uses a Mac/VM split),
+  `/commit-review` lands the doc **and** the code it documents (the configs/scripts/tests) in
+  **one** PHI-vet + push — not a second cycle after the code already landed. That bundling is
+  the reason `/vm-handoff` runs before `/commit-review`, not after. Don't auto-fire it —
+  offer it (per `claude_ops.md` Skill Composition). (`/commit-review` escalates to `/phi-vet`
+  in medical-data repos — though on the planner Mac `/phi-vet` is inert per its machine gate,
+  so the real PHI scan is the VM readback leg, Phase R2.)
 
 ---
 

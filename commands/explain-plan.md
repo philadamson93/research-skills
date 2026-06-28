@@ -395,6 +395,18 @@ When a feedback round is **non-trivial** — the user asks several questions at 
 
 **Then re-open** the HTML (`open <path>`) so the user sees the annotations in place, per the open-is-required rule above.
 
+## Completion — recording review approval (peer to `/read-plan`)
+
+`/explain-plan` is a peer of `/read-plan`: an approved, in-sync HTML review is an equally valid path to `Reviewed: Yes` in the plans index (`/review-plan` already offers the two as interchangeable visual-vs-prose review paths). When the user signals the visual review is **done / approved** — an explicit "done", "approved", "reviewed", "looks good, ship it", or unambiguous synonym, **not** a mid-loop "ok" / "looks good" acknowledgment — record the approval, gated on the HTML being SHA-in-sync with the plan:
+
+1. **Confirm SHA-sync — this is the gate.** Recompute the plan's current hash (`shasum -a 256 <plan-path>`, or `sha256sum` on linux) and compare it to the HTML's embedded `<meta name="plan-sha256">`. They **must** match. A freshly generated or regenerated HTML qualifies (this skill embeds the current SHA on every write); a *stale* HTML — one the user reviewed before a later plan edit — must **not** flip the row, since that would record approval of a version the user never saw. If they differ, the HTML is stale: regenerate it (per *Idempotency and re-runs*), have the user re-confirm against the fresh HTML, then re-check.
+   - Response-callout-only annotations deliberately leave the SHA untouched (see *SHA / drift discipline*), so an HTML carrying only `.resp` callouts is still in-sync and may promote.
+2. **Confirm the plan is settled** — no unaddressed feedback, no open questions left dangling. If something is open, surface it once before closing out: "Before I mark this Reviewed — OQ2 is still Pending. Resolve or defer?"
+3. **Mark the plan as Reviewed.** If the project has a plan-tracking index (`docs/plans/README.md` or equivalent with a `Reviewed` column), update this plan's row to `Reviewed: Yes` — the same step as `/read-plan` Phase 5, just reached via the visual path. Confirm inline: "Marked `<plan>` as Reviewed: Yes in `docs/plans/README.md` (HTML in-sync at `<sha-first-12>`)." If no such index exists, skip silently (don't bootstrap one mid-review — that's `/wrapup`'s job).
+4. Then offer the natural next steps in one line: commit the plan + HTML via `/commit-review`, run `/plan-handoff-readiness` for fresh-agent-handoff readiness, or start implementation.
+
+Like `/read-plan`, this is gated on an **explicit** approval signal — never infer it from a mid-loop "ok" or the user moving on, and never promote on a drifted HTML.
+
 ## Idempotency and re-runs
 
 - Re-running on the same plan: regenerate HTML in place. Diff the old vs new HTML; if structure changed substantively, surface that as a "structure delta" note before handing off.

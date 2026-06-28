@@ -28,7 +28,7 @@ Update any plan/status tables (e.g., `docs/plans/README.md`) if work shipped or 
 
 If the project has a plan-tracking index (`docs/plans/README.md` or equivalent), maintain a **Reviewed** column with three values:
 
-- `Yes` — the user has reviewed the current content (typically via `/read-plan` Phase 5 completion).
+- `Yes` — the user has reviewed the current content (via `/read-plan` Phase 5 completion, or an approved in-sync `/explain-plan` HTML — its peer visual path).
 - `No` — never reviewed.
 - `Stale` — was `Yes`, but the plan has been substantively edited since.
 
@@ -36,7 +36,7 @@ If the project has a plan-tracking index (`docs/plans/README.md` or equivalent),
 
 - **New plan doc created this session** → ensure README row exists with `Reviewed: No`.
 - **Existing plan doc substantively edited this session** ("substantive" = content/section changes; *not* typo fixes, formatting, dead-link cleanup, or whitespace): if the row is currently `Yes`, demote to `Stale`. If `No` or `Stale`, leave as-is.
-- **Never silently promote `No` / `Stale` → `Yes`.** Only `/read-plan` (on user-confirmed completion) flips a row to `Yes`. If the user states inline that they've reviewed a plan, point them at `/read-plan` to record it — don't shortcut the promotion here.
+- **Never silently promote `No` / `Stale` → `Yes`.** Only `/read-plan`, or an approved SHA-in-sync `/explain-plan` HTML (its peer visual path), flips a row to `Yes` — both on user-confirmed completion. If the user states inline that they've reviewed a plan, point them at `/read-plan` (or `/explain-plan` if they reviewed the HTML) to record it — don't shortcut the promotion here.
 - **No plan-tracking index exists, but `docs/plans/` (or equivalent) does**: bootstrap a `README.md` with `Plan | Status | Reviewed | Description` columns and populate `Reviewed: No` for all existing plan docs.
 - **No `docs/plans/` directory at all**: skip this step.
 

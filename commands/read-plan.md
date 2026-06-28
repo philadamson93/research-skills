@@ -100,7 +100,7 @@ When the user does say "done":
 
 - Confirm the plan is in its final state (no unaddressed comments, no open questions left dangling).
 - If anything is still unresolved, surface it once before treating the plan as complete: "Before I close this out — comment in section X about Y is still open. Resolve or defer?"
-- **Mark the plan as Reviewed.** If the project has a plan-tracking index (`docs/plans/README.md` or equivalent with a `Reviewed` column), update this plan's row to `Reviewed: Yes`. Confirm inline: "Marked `<plan>` as Reviewed: Yes in `docs/plans/README.md`." This is the *only* path by which a plan moves to `Yes` — `/wrapup` will never auto-promote on its own. If no such index exists, skip silently (don't bootstrap one mid-review-loop; that's `/wrapup`'s job).
+- **Mark the plan as Reviewed.** If the project has a plan-tracking index (`docs/plans/README.md` or equivalent with a `Reviewed` column), update this plan's row to `Reviewed: Yes`. Confirm inline: "Marked `<plan>` as Reviewed: Yes in `docs/plans/README.md`." A plan reaches `Yes` only through human review — this path, or an approved, SHA-in-sync `/explain-plan` HTML (the peer visual path, which records approval the same way); `/wrapup` will never auto-promote on its own. If no such index exists, skip silently (don't bootstrap one mid-review-loop; that's `/wrapup`'s job).
 - Then offer the natural next steps in one line: commit the plan via `/commit-review`, run `/plan-handoff-readiness` for fresh-agent-handoff readiness, or start implementation.
 
 ## Permission prompts

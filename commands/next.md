@@ -1,23 +1,23 @@
 ---
 name: next
-description: Use when the user opens a session asking "what's next?", "where did we leave off?", "what should I work on?", "any next steps?", or similar — and there's no obvious in-flight task already named. Also invoked explicitly via `/next`. FIRST fetches + fast-forwards from remote so it never surveys stale local refs (otherwise pushes from another machine — e.g. a VM test-gate readback — get missed and you recommend already-done work), THEN surveys tracking docs (NEXT.md / docs/next.md / TODO.md / BACKLOG.md / docs/plans/README.md / MEMORY.md / recent commits / current branch / all local+remote branches for unmerged work), classifies as "clear next" vs "need direction" vs "genuinely empty", surfaces 2-4 candidate tasks with a recommendation via AskUserQuestion when there's a fork, then deep-dives the chosen task (plan doc + memory + recent code) before handing off a concrete first action. SKIP when the user has already named a specific task to work on, or mid-session when context for the current task is already loaded.
+description: Use when the user opens a session asking "what's next?", "where did we leave off?", "what should I work on?", "any next steps?", or similar — and there's no obvious in-flight task already named. Also invoked explicitly via `/next`. FIRST enumerates git worktrees, fetches, and fast-forwards every checkout from remote so it never surveys stale local refs or misses parallel work (VM↔Mac switching pushes a readback from the other machine; sibling worktrees hold in-flight work the main checkout can't see), THEN surveys tracking docs (NEXT.md / docs/next.md / TODO.md / BACKLOG.md / docs/plans/README.md / MEMORY.md / recent commits / current branch / all local+remote branches + all worktrees for unmerged or uncommitted work), classifies as "clear next" vs "need direction" vs "genuinely empty", surfaces 2-4 candidate tasks with a recommendation via AskUserQuestion when there's a fork, then deep-dives the chosen task (plan doc + memory + recent code) before handing off a concrete first action. SKIP when the user has already named a specific task to work on, or mid-session when context for the current task is already loaded.
 ---
 
 # next
 
 Session-opener triage. The user is back at the keyboard and wants to know what to do — your job is to survey, surface options, let them steer, then deep-dive the chosen task.
 
-Five phases (0–4). Don't skip ahead — **Phase 0 is not optional**; surveying stale refs is the single most common way this skill recommends already-finished work.
+Five phases (0–4). Don't skip ahead — **Phase 0 is not optional**; surveying stale refs (or missing a sibling worktree's in-flight work) is the single most common way this skill recommends already-finished or already-in-progress work.
 
-## Phase 0 — Refresh from remote (do this FIRST, before reading anything)
+## Phase 0 — Enumerate worktrees + refresh from remote (do this FIRST, before reading anything)
 
-Tracking docs, plan status, and branch state are frequently updated from *another machine* — most often a VM that ran a test gate or live run and pushed the readback. If you survey stale local refs you'll miss those updates and may recommend work that's already done. So before the survey:
+Two things go stale between sessions and both make the survey recommend the wrong work: **remote refs** (a VM ran a test gate or live run and pushed a readback — the Mac's local refs don't know yet) and **sibling worktrees** (parallel work on another branch in the *same* repo, often with uncommitted changes the main checkout cannot see). Refresh both before reading anything. This is **not optional** — run the commands, don't just intend to.
 
-1. **Fetch** every remote: `git fetch --all --prune`. This refreshes remote-tracking refs so the Phase 1 branch survey (`git branch -a`) and all behind/ahead counts are accurate — not just the current branch. If there's no remote, or the fetch fails (offline, auth prompt), note it in one line and continue with local state.
-2. **Fast-forward the branch(es) you'll survey.** For the current branch — and any active feature branch you intend to deep-dive — if it's behind its upstream, `git pull --ff-only`. If it can't fast-forward (diverged) or the worktree is dirty in a blocking way, **do not force it**: surface "branch X is N behind origin, can't ff (diverged/dirty)" as a finding and let the user decide. Never `git pull` (merge) or `--rebase` unprompted, and never push.
-3. **Say what the refresh changed.** If the pull brought in commits, state it in one line — e.g. "pulled 4 commits — a VM test-gate readback marking the gate PASSED." That incoming delta is usually the freshest and most decision-relevant signal in the whole survey, so it leads the Phase 4 write-up.
-
-Caveat: if the active branch is checked out in a **git worktree** (common for in-flight work), fast-forward it *in that worktree*, not the main checkout. Use `git -C <worktree> pull --ff-only`.
+1. **Enumerate worktrees — FIRST.** `git worktree list`. A single repo commonly has several checkouts, each on a different branch — that's how parallel in-flight work is isolated (this very skill may be running inside one). You need the full set *before* refreshing so you fast-forward the right checkout for each branch and don't overlook a worktree holding the freshest work.
+2. **Fetch every remote.** `git fetch --all --prune` — refreshes remote-tracking refs so the Phase 1 branch survey (`git branch -a`) and all behind/ahead counts are accurate, not just the current branch. No remote, or fetch fails (offline, auth prompt) → note it in one line and continue with local state.
+3. **Fast-forward every active checkout, each in its own worktree.** For the main checkout **and** each worktree from step 1 whose branch is behind its upstream: `git -C <path> pull --ff-only`. A branch checked out in a worktree must be ff'd *in that worktree*, never the main checkout. If a checkout can't fast-forward (diverged) or is dirty in a blocking way, **do not force it** — surface "branch X is N behind origin, can't ff (diverged/dirty)" as a finding and let the user decide. Never `git pull` (merge) or `--rebase` unprompted, and never push.
+4. **Flag uncommitted work in every worktree.** `git -C <path> status --short` for each. A worktree with uncommitted changes is in-flight work and a prime Phase 1 candidate — it won't show up in `git log` or branch listings, so this is the only place it surfaces.
+5. **Say what the refresh changed.** If a pull brought in commits, state it in one line per checkout — e.g. "pulled 4 commits on `feat/foo` — a VM test-gate readback marking the gate PASSED." Note any worktree carrying uncommitted changes too. That incoming delta (remote pull or dirty worktree) is usually the freshest, most decision-relevant signal in the whole survey, so it leads the Phase 4 write-up.
 
 ## Phase 1 — Survey the candidates (breadth, not depth)
 
@@ -29,6 +29,7 @@ Read these in parallel — whichever exist:
 4. **Recent commits**: `git log --oneline -20` and `git status` — what was last touched, what's uncommitted, what branch is checked out.
 5. **Current branch name** — often encodes the in-flight feature (`feat/foo-bar` → "foo bar" is probably the active task).
 6. **All existing branches** (local *and* remote): `git branch -a --sort=-committerdate` — surface any non-merged feature branches so in-flight work doesn't get lost. For any branch that looks active (recent commits, not merged into main), note it as a candidate. Cross-check against `git log main..<branch>` to confirm there's unmerged work.
+7. **All worktrees** (from Phase 0's `git worktree list`): treat each as a candidate source. A branch checked out in a sibling worktree is active in-flight work even if its newest commit isn't recent — especially one with uncommitted changes (Phase 0 step 4). Don't let the main checkout's branch crowd these out; parallel work across worktrees is exactly what gets dropped otherwise.
 
 Skim, don't read in full. The goal here is to *identify* candidates, not understand them deeply. Run the file reads in parallel.
 
@@ -77,7 +78,7 @@ End with a hand-off line: "Ready to start with <action>, or want to dig into som
 
 ## What NOT to do
 
-- **Don't survey stale refs.** Phase 0 (fetch + ff) runs first, always — skipping it is how this skill recommends work a VM already finished and pushed.
+- **Don't survey stale refs or ignore sibling worktrees.** Phase 0 (worktree enum + fetch + ff every checkout) runs first, always — and means *running* the commands, not just intending to. Skipping the pull is how this skill recommends work a VM already finished and pushed; skipping `git worktree list` is how it misses parallel work in another checkout of the same repo.
 - **Don't deep-dive multiple candidates in Phase 1.** That wastes context before the user has steered.
 - **Don't recommend a task that's already shipped.** Verify status against `git log` and plan-doc state — trackers lag behind reality.
 - **Don't skip AskUserQuestion when there are 2+ candidates.** Inline "should I do X or Y?" is the wrong shape here.

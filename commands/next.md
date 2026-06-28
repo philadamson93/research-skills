@@ -58,12 +58,12 @@ Don't deep-dive any candidate yet. The whole point of this phase is to let the u
 
 ## Phase 4 — Deep-dive the chosen task
 
-Once a task is chosen (whether via Phase 2 "clear next" or Phase 3 selection), gather full context:
+Once a task is chosen (whether via Phase 2 "clear next" or Phase 3 selection), **first pin where it lives** — the current checkout, a sibling worktree path (from Phase 0's `git worktree list`), or a remote-only branch — and run every read below against *that* source, not the invocation checkout. A task that won via Phase 1 step 7 lives in another worktree; reading `HEAD` here would inspect the wrong branch. Then gather full context:
 
 - **Plan doc** — read in full if it exists (`docs/plans/<task>.md` or wherever the project keeps them).
 - **Memory entries** — grep `MEMORY.md` for the task name and read any matching `*.md` files in the memory directory.
 - **Journal / decision entries** — if the project has `docs/journal/`, `docs/decisions/`, or similar, check for recent entries naming the task.
-- **Code state** — for in-flight tasks: `git log <branch>` and `git diff main...HEAD` to see what's already done. Read the files most recently touched.
+- **Code state** — for in-flight tasks, run the reads in the task's *own* checkout: `git -C <chosen-worktree> log --oneline <branch>` and `git -C <chosen-worktree> diff main...<branch>` for committed work, plus `git -C <chosen-worktree> diff` (and `--staged`) for any *uncommitted* work in that worktree — Phase 0 step 4 flagged it; this is where you actually read it. Use the invocation checkout's `HEAD` (`git diff main...HEAD`) only when the chosen task *is* the current checkout. Read the files most recently touched.
 - **Open questions / blockers** — anything the plan or memory flagged as unresolved.
 
 Run the reads in parallel where possible.

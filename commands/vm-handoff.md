@@ -33,7 +33,7 @@ PLANNER MAC
   /review-plan X            ── audits the design AND the success criteria
   /plan-handoff-readiness X ── is the criteria section present & implementable?
   …implement (author configs/scripts — can't run them on the Mac)…
-  /review-implementation X · /review-tests X   ── structural audits vs the plan, then route VM-bound work here
+  /review-implementation X · /review-tests X   ── structural audits; route here only if VM-repo + plan needs a handoff
   /vm-handoff  ───────────▶ RENDER the plan's criteria into docs/vm-status/<date>-<sha>.md
        │                    (implementation is still UNCOMMITTED at this point)
        └ tiered success-criteria gate (your sign-off) ──┐
@@ -206,7 +206,8 @@ Revise → edit and re-surface. Approve → Phase A4.
 - Then **offer the next step** via `AskUserQuestion`: run `/commit-review` now, or stop
   here. This is the **single** commit-review for the whole change: because the handoff doc
   was authored while the implementation is *still uncommitted* (`/review-implementation` ·
-  `/review-tests` route VM-bound work to `/vm-handoff` **before** the commit-review phase),
+  `/review-tests` route work that needs a VM handoff to `/vm-handoff` **before** the
+  commit-review phase, when the repo uses a Mac/VM split),
   `/commit-review` lands the doc **and** the code it documents (the configs/scripts/tests) in
   **one** PHI-vet + push — not a second cycle after the code already landed. That bundling is
   the reason `/vm-handoff` runs before `/commit-review`, not after. Don't auto-fire it —

@@ -1,6 +1,6 @@
 ---
 name: review-implementation
-description: Independent implementation audit of uncommitted code by Codex CLI against a plan doc, then *apply* agreed fixes to the code by default. Use after a non-trivial implementation completes, BEFORE invoking /commit-review. Invoked explicitly via `/review-implementation <path-to-plan> [<output-path>]`. Also offered proactively after substantial implementation work — gated by AskUserQuestion since not every change warrants a Codex audit. Runs `codex exec` over the uncommitted diff + the plan, classifies each finding as agree/disagree/uncertain, then by default *applies* agreed code edits directly. Only surfaces findings for adjudication where Claude genuinely disagrees with Codex. Hands off to /vm-handoff first for VM-bound work (so the handoff doc bundles into the same /commit-review), else straight to /commit-review on completion. SKIP for typo fixes, single-file refactors, doc-only changes, or anything where the plan-vs-code mapping is trivial.
+description: Independent implementation audit of uncommitted code by Codex CLI against a plan doc, then *apply* agreed fixes to the code by default. Use after a non-trivial implementation completes, BEFORE invoking /commit-review. Invoked explicitly via `/review-implementation <path-to-plan> [<output-path>]`. Also offered proactively after substantial implementation work — gated by AskUserQuestion since not every change warrants a Codex audit. Runs `codex exec` over the uncommitted diff + the plan, classifies each finding as agree/disagree/uncertain, then by default *applies* agreed code edits directly. Only surfaces findings for adjudication where Claude genuinely disagrees with Codex. Hands off to /commit-review on completion — or, only when the repo uses a planner-Mac/executor-VM split AND the plan requires a VM handoff, to /vm-handoff first so the handoff doc bundles into the same /commit-review. SKIP for typo fixes, single-file refactors, doc-only changes, or anything where the plan-vs-code mapping is trivial.
 ---
 
 # review-implementation
@@ -184,13 +184,15 @@ When offering, surface via `AskUserQuestion`:
 - *Fresh Claude Code subagent (same model, no conversation context)*
 - *Skip — coverage is adequate as-is*
 
-If the user picks a reviewer, invoke `/review-tests <same-plan-path> --reviewer <choice>` in the same turn — `/review-tests` owns its own flow from there (including the VM-handoff routing below). If the user picks Skip, or no offer was warranted, decide whether this work crosses to the VM before it commits. **If the implementation is VM-bound** — never executed, governed by a plan with a *Verification & VM handoff* section (per `claude_ops.md` Machine-Aware Operating Mode) — hand off to **`/vm-handoff` first, not `/commit-review`**:
-
-> Implementation review complete. This work runs on the VM next — `/vm-handoff` renders the handoff doc and then bundles it with this implementation into a *single* `/commit-review` (one PHI-vet + push). Run `/vm-handoff`?
-
-`/vm-handoff` authors `docs/vm-status/<date>-<sha>.md` against the still-uncommitted tree, so the handoff doc rides in the **same** PHI-vet and push as the code rather than a second cycle afterward; it self-skips for results-producing or trivial runs (Phase A1), in which case fall through to commit:
+If the user picks a reviewer, invoke `/review-tests <same-plan-path> --reviewer <choice>` in the same turn — `/review-tests` owns its own flow from there (including the VM-handoff routing). If the user picks Skip, or no offer was warranted, the default hand-off is straight to commit:
 
 > Implementation review complete. Ready to `/commit-review`?
+
+**Exception — route through `/vm-handoff` first, but only when *both* conditions hold:** (1) the repo uses a planner-Mac / executor-VM split — it declares a machine posture per `claude_ops.md` Machine-Aware Operating Mode; repos that run entirely locally have no VM leg, so commit directly; and (2) this work actually requires a VM handoff — it has never executed and a plan with a *Verification & VM handoff* section governs it (a purely-local change in a VM repo does not). When both hold:
+
+> Implementation review complete. This work runs on the VM next — `/vm-handoff` renders the handoff doc and bundles it with this implementation into a *single* `/commit-review` (one PHI-vet + push). Run `/vm-handoff`?
+
+`/vm-handoff` authors `docs/vm-status/<date>-<sha>.md` against the still-uncommitted tree, so the handoff doc rides in the **same** PHI-vet and push as the code rather than a second cycle afterward; it self-skips for results-producing or trivial runs (Phase A1), in which case fall back to the commit hand-off above.
 
 If material deviations or unresolved questions remain from the implementation review itself, surface them and pause:
 

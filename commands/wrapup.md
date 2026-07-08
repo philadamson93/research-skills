@@ -14,7 +14,7 @@ Recommended cadence: invoke around **~200k tokens of context** (or earlier at a 
 
 Use judgment and act. Raise an `AskUserQuestion` only when a call is **both high-importance and genuinely ambiguous** — e.g., an irreversible structural move with real downside risk, or a fork in convention where reasonable choices conflict. Routine cleanup, inline rewording, normal pruning, and obvious bootstrapping decisions are yours to make. *Asking by default is the wrong posture for this skill.*
 
-## Step 1 — Doc-reorg pass on recently-touched docs
+## Step 1 — Reorg pass on recently-touched files (docs and code dirs)
 
 For each `docs/` file you touched this session:
 
@@ -23,6 +23,8 @@ For each `docs/` file you touched this session:
 - **Small-to-moderate reorgs are encouraged when they clearly help findability**: split a bloated doc into focused files, move a section to a doc where it belongs better, merge two docs that should be one, restructure a list, reorder major sections. Update inbound links when you move content. The asking discipline above governs the rare high-stakes ambiguous cases (e.g., renaming a doc that's heavily linked from external repos or external systems).
 - **Out of scope here**: full-tree consolidation, gathering scattered content from many untouched docs, large architectural reorganizations of `docs/` as a whole. Defer to a separate, deeper-context skill (or note the opportunity in `next.md` / `backlog.md` for a future pass).
 - Goal: optimize for *future-agent findability*. You're reorganizing for your own sake on the next session, not for a human reader.
+
+**Also glance at any code directory you touched this session** (same recently-touched, no-full-tree scope): if it has drifted into a flat dump of unrelated files, propose a small, in-scope split and update inbound imports/references. Placement should have been settled at plan time (`claude_ops.md` → File & Directory Placement) — this is the retrospective safety net, not a substitute for it, so keep the move small and note it in the commit message.
 
 Update any plan/status tables (e.g., `docs/plans/README.md`) if work shipped or got promoted to a plan doc this session. *Review-status sync is handled separately in Step 2.*
 

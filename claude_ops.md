@@ -108,6 +108,7 @@ How will we implement this?
 
 ## Files to Modify
 - path/to/file.py - description of changes
+  (for new files, name the target directory; flag any new dir — see Code Quality Standards → File & Directory Placement)
 
 ## Open Questions
 - Any ambiguities to resolve?
@@ -153,6 +154,14 @@ isn't handoff-ready (see `/plan-handoff-readiness`).
 - Write the simplest code that solves the problem
 - Avoid unnecessary abstractions
 - Don't add features that aren't explicitly requested
+
+### File & Directory Placement
+
+Where a file *lives* is a design decision, not an afterthought. Decide it deliberately at plan time and make it visible in the plan's `## Files to Modify` — don't default to dropping everything at the repo root.
+
+- Place new files in a coherent, discoverable hierarchy; extend the directory structure that already exists rather than accreting a flat dir of unrelated files.
+- Adding a second or third file around a new concern is the signal to give it its own directory. Name that directory in the plan and say why in one line.
+- This is a plan-time habit, not a retrospective one. `/wrapup` Step 1 is the safety net that catches a dir that drifted into a flat dump — but getting placement right up front is cheaper than moving files later and fixing every inbound reference.
 
 ### YAGNI vs Modularity — Raise Genuinely Uncertain Cases
 

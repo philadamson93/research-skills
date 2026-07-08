@@ -7,6 +7,8 @@ description: Use when the user opens a session asking "what's next?", "where did
 
 Session-opener triage. The user is back at the keyboard and wants to know what to do — your job is to survey, surface options, let them steer, then deep-dive the chosen task.
 
+**Lead your first response with a one-line context header naming the repo and current branch** — e.g. `research-skills · main` (add the worktree path when you're in a non-primary checkout: `research-skills · feat/foo · .claude/worktrees/foo`). Phil launches sessions across ~50 repos and multiple worktrees of the same repo, so stating *where you are* up front prevents surveying — or recommending work on — the wrong checkout. Derive it from Phase 0's `git worktree list` + `git branch --show-current`.
+
 Five phases (0–4). Don't skip ahead — **Phase 0 is not optional**; surveying stale refs (or missing a sibling worktree's in-flight work) is the single most common way this skill recommends already-finished or already-in-progress work.
 
 ## Phase 0 — Enumerate worktrees + refresh from remote (do this FIRST, before reading anything)

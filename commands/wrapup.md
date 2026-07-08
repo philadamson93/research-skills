@@ -1,5 +1,7 @@
 End-of-session cleanup. Do the eight steps below in order.
 
+**Open with a one-line context header naming the repo and current branch** — e.g. `research-skills · main` (add the worktree path when you're in a non-primary checkout: `research-skills · feat/foo · .claude/worktrees/foo`). Phil launches sessions across ~50 repos and multiple worktrees of the same repo, so stating *where you are* up front makes it unambiguous which checkout the cleanup and commit gate act on. Derive it from `git worktree list` + `git branch --show-current`, and repeat it in the Step 8 summary so the landed state is self-documenting.
+
 ## When to invoke
 
 Recommended cadence: invoke around **~200k tokens of context** (or earlier at a clean cutoff), land with the commit gate in Step 8, then start a fresh session with `/next`. Long sessions past that point get noticeably slower (cache misses on every turn, drift in long-tail context) and the marginal value of staying in-session keeps falling. The `MEMORY.md` + `next.md` updates this skill maintains are what make the cross-session handoff cheap — invest in them here so the next session starts fast.
@@ -132,7 +134,7 @@ The `-C <path>` form keeps the project's cwd intact; do not `cd` into the skills
 
 ## Step 8 — Summary + commit gate
 
-**Summarize as bullet points** (not a paragraph). Use these headings; omit any that are empty:
+**Summarize as bullet points** (not a paragraph). Lead with the `<repo> · <branch>` context header (per the top-of-skill note), then use these headings; omit any that are empty:
 
 - **Shipped this session**: what concretely landed (1–3 bullets).
 - **Doc changes worth flagging**: any moderate-or-higher reorgs from Step 1 — file splits, cross-doc moves, doc merges, major section reorders, new files bootstrapped. Skip if all doc work was inline tightening.

@@ -347,8 +347,13 @@ turns a forgotten Stop into a conscious decision):
 
 - **Decide planner vs executor roles** — that's `claude_ops.md` Machine-Aware mode.
 - **Author or audit the design** — the success criteria live in the plan's *Verification &
-  VM handoff* section and are reviewed by `/review-plan`; this skill renders them. If the
-  plan lacks the section, fix the plan (`/plan-handoff-readiness`), don't invent here.
+  VM handoff* section and are reviewed by `/review-plan` (whose verification-design pass audits
+  them against the canonical spec, `references/verification-and-handoff-design.md`); this skill
+  renders them. If the plan lacks the section, fix the plan (`/plan-handoff-readiness`), don't
+  invent here. When the plan has a **Handoff phasing** sub-block, render the *next* phase's
+  steps from it — the spec owns plan-time strategy selection; this skill keeps the operational
+  mechanics (rendering, the tiered sign-off gate, Expected/Stop enforcement, the class-1/2/3
+  deviation taxonomy, supersede).
 - **Carry eval results** — results-producing runs go to HTML/parquets per `claude_ops.md`;
   the handoff doc is smoke / verification only. It *may* point at the launch command for the
   real run once smoke is clean (real docs do — the optional final step in the skeleton), but

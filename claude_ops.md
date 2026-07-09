@@ -75,6 +75,15 @@ If the local clone is behind by **any** commits, tell the user how far behind it
 6. Ask: "Are there any points of ambiguity about this plan?" to surface underspecified requirements
 7. Iterate on the plan until solid, then exit plan mode
 
+**For VM-handoff-bound plans** (a Mac/VM-split repo where the work executes on the VM): co-design
+the plan's *Verification & VM handoff* section (see Plan Document Structure below) using the
+**Verification & VM-Handoff Design canonical spec** — `references/verification-and-handoff-design.md`
+in the research-skills repo (resolve its root by following this repo's `docs/claude_ops.md`
+symlink). It carries the archetype menu (*what to verify*), the expected-vs-unexpected envelope,
+and the batching discipline (*how many handoffs*). Tiered by the spec's complexity classifier:
+draft inline for a *simple* handoff; spawn a dedicated verification-design subagent for a *complex*
+one (keeps the planning context lean). `/review-plan` later audits this section against the same spec.
+
 ### Saving the Plan (after exiting plan mode)
 
 **Important: Plan mode limitation.** Claude Code's plan mode can only write to its internal plan file (`~/.claude/plans/`). It **cannot** write to `docs/plans/` in the repo. This creates a two-step process:
@@ -122,6 +131,7 @@ later at handoff time:
   exist & be non-empty, metric ranges, skip-logs.
 - **Stop** (per step) — the halt-and-report conditions: precondition / failure / decision-gate.
 - **Anticipated forks** — where you can predict the executor will hit a fork (a metric near a threshold, an optional path), pre-encode it as a **decision gate** ("if X → A, else B") so the executor resolves it inline instead of round-tripping back for a re-plan. Unanticipated findings that contradict the plan are *deviations* — `/vm-handoff`'s Deviation workflow routes those back here for revision.
+- **Handoff phasing** — for a *complex* handoff (cross-repo SHA ripple, more than one phase, decision gates, bank/un-bank of prior results, destructive writes, or multi-target bundling), decompose the VM work into phases so the number of expensive round-trips is *designed*, not accidental. Per phase: `Phase N — <name>` · purpose · banked-from-prior (steps / SHA not re-run) · gates (class-2 forks resolved inline) · destructive? · stop/deviation routing · next-doc trigger. A *simple* single-phase handoff states its one phase inline. The batching rules (order cheap→expensive→destructive, bundle-by-SHA, bank-and-un-bank, decision-gates-over-round-trips) and the archetype menu / expected-vs-unexpected envelope live in the **Verification & VM-Handoff Design canonical spec** — `references/verification-and-handoff-design.md` in the research-skills repo (resolve its root by following this repo's `docs/claude_ops.md` symlink — or, if you are already inside research-skills, it is the repo root). `/vm-handoff` renders each phase into a runnable vm-status doc.
 
 `/vm-handoff` later renders this section into a runnable `docs/vm-status/<date>-<sha>.md`
 handoff doc and tracks the VM's results back into it. It should be **deriving** the

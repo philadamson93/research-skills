@@ -63,7 +63,7 @@ That's it. Do **not**:
 
 - Summarize the plan.
 - Pre-list "things to watch for" or "open questions."
-- Volunteer to run `/plan-handoff-readiness`.
+- Volunteer to run `/review-plan` or other next-step skills.
 - Continue working on adjacent tasks.
 
 The user explicitly asked to take the wheel. Wait for them.
@@ -101,7 +101,7 @@ When the user does say "done":
 - Confirm the plan is in its final state (no unaddressed comments, no open questions left dangling).
 - If anything is still unresolved, surface it once before treating the plan as complete: "Before I close this out — comment in section X about Y is still open. Resolve or defer?"
 - **Mark the plan as Reviewed.** If the project has a plan-tracking index (`docs/plans/README.md` or equivalent with a `Reviewed` column), update this plan's row to `Reviewed: Yes`. Confirm inline: "Marked `<plan>` as Reviewed: Yes in `docs/plans/README.md`." A plan reaches `Yes` only through human review — this path, or an approved, SHA-in-sync `/explain-plan` HTML (the peer visual path, which records approval the same way); `/wrapup` will never auto-promote on its own. If no such index exists, skip silently (don't bootstrap one mid-review-loop; that's `/wrapup`'s job).
-- Then offer the natural next steps in one line: commit the plan via `/commit-review`, run `/plan-handoff-readiness` for fresh-agent-handoff readiness, or start implementation.
+- Then offer the natural next steps in one line: commit the plan via `/commit-review`, run `/review-plan` (its handoff-readiness lens checks fresh-agent implementability), or start implementation.
 
 ## Permission prompts
 
@@ -110,6 +110,6 @@ If `Bash(open:*)` isn't allowlisted, every invocation will prompt. After the fir
 ## What NOT to do
 
 - **Don't auto-fire on a bare "yes"/"ok"/"sure"** unless Claude *just* named a plan doc in the immediately-preceding turn — otherwise the trigger is too broad.
-- **Don't fire when the user asks Claude to review the plan** ("can you check this plan?", "audit it", "any gaps?"). That's `/plan-handoff-readiness` territory.
+- **Don't fire when the user asks Claude to review the plan** ("can you check this plan?", "audit it", "any gaps?"). That's `/review-plan` territory.
 - **Don't open non-plan files.** For arbitrary `open` calls, the user can invoke Bash directly.
 - **Don't summarize, even briefly.** The whole point is the user reading the source, not Claude's gloss of it.

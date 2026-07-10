@@ -403,7 +403,7 @@ When a feedback round is **non-trivial** — the user asks several questions at 
    - Response-callout-only annotations deliberately leave the SHA untouched (see *SHA / drift discipline*), so an HTML carrying only `.resp` callouts is still in-sync and may promote.
 2. **Confirm the plan is settled** — no unaddressed feedback, no open questions left dangling. If something is open, surface it once before closing out: "Before I mark this Reviewed — OQ2 is still Pending. Resolve or defer?"
 3. **Mark the plan as Reviewed.** If the project has a plan-tracking index (`docs/plans/README.md` or equivalent with a `Reviewed` column), update this plan's row to `Reviewed: Yes` — the same step as `/read-plan` Phase 5, just reached via the visual path. Confirm inline: "Marked `<plan>` as Reviewed: Yes in `docs/plans/README.md` (HTML in-sync at `<sha-first-12>`)." If no such index exists, skip silently (don't bootstrap one mid-review — that's `/wrapup`'s job).
-4. Then offer the natural next steps in one line: commit the plan + HTML via `/commit-review`, run `/plan-handoff-readiness` for fresh-agent-handoff readiness, or start implementation.
+4. Then offer the natural next steps in one line: commit the plan + HTML via `/commit-review`, run `/review-plan` (its handoff-readiness lens checks fresh-agent implementability), or start implementation.
 
 Like `/read-plan`, this is gated on an **explicit** approval signal — never infer it from a mid-loop "ok" or the user moving on, and never promote on a drifted HTML.
 

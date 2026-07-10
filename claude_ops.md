@@ -134,7 +134,11 @@ later at handoff time:
   (model training, embedding generation, GPU-only tests), grounded in the executor-fleet taxonomy
   in the canonical spec (§4). When the run machine has **no Claude Code** (high-throughput CPU /
   GPU), name the **readback** machine too — the Claude-Code CPU executor — since the run and the
-  Claude-driven readback split across boxes. Concrete class→host binding stays repo-local.
+  Claude-driven readback split across boxes. **A non-Claude-Code run also needs a *standalone
+  runner script*** (env setup — `uv sync` + any env exports — plus the run in one command) as a
+  deliverable in *Files to Modify*, and plain operator run-instructions (branch to check out,
+  preconditions, the one command, where results land): that box runs a script it can invoke, not a
+  Claude-driven vm-status doc (canonical spec §4). Concrete class→host binding stays repo-local.
 - **Expected** (per step) — how the executor knows it worked: exit codes, files that must
   exist & be non-empty, metric ranges, skip-logs.
 - **Stop** (per step) — the halt-and-report conditions: precondition / failure / decision-gate.
@@ -144,7 +148,7 @@ later at handoff time:
 `/vm-handoff` later renders this section into a runnable `docs/vm-status/<date>-<sha>.md`
 handoff doc and tracks the VM's results back into it. It should be **deriving** the
 criteria from this section, not authoring fresh ones — if this section is thin, the plan
-isn't handoff-ready (see `/plan-handoff-readiness`).
+isn't handoff-ready (see `/review-plan`'s handoff-readiness lens).
 ```
 
 ### After Completing a Plan
@@ -266,12 +270,11 @@ Document recurring patterns in the appropriate `docs/` file to help future sessi
 
 For non-trivial changes, use the research-skills review workflows instead of inline subagent prompts:
 
-- **`/review-plan <plan-path>`** — independent design audit of a plan doc (Codex CLI or fresh Claude subagent), then applies agreed feedback. Run after substantial plan-doc work, before implementation.
+- **`/review-plan <plan-path>`** — independent design audit of a plan doc (Codex CLI or fresh Claude subagent), then applies agreed feedback. Its always-on lenses include **handoff-readiness** — does the plan POINT AT / STATE DIRECTLY everything a fresh implementing agent needs (file paths, schema contracts, cross-stage surfaces, success criteria, out-of-scope, and for VM work the *Verification & VM handoff* Expected/Stop criteria). Run after substantial plan-doc work, before implementation.
 - **`/review-implementation <plan-path>`** — implementation audit of uncommitted code against the plan. Run after non-trivial implementation completes, before `/commit-review`. Only when the repo uses a planner/executor (Mac/VM) split **and** the plan requires a VM handoff does it route to `/vm-handoff` first (so the handoff doc lands in the same commit-review); otherwise it goes straight to `/commit-review`.
 - **`/review-tests <plan-path>`** — test-coverage audit of uncommitted code against the plan. Run after `/review-implementation` when the change introduces new branches / contracts / edge cases worth regression-protection. Same conditional `/vm-handoff`-before-`/commit-review` routing as `/review-implementation`.
 - **`/commit-review`** — commit workflow with appropriateness review (catches accidentally-leaked private content) before commit + push. Use this rather than running `git commit` inline.
 - **`/phi-vet`** — hard PHI gate for medical-data repos. `/commit-review` escalates to it automatically for repos that touch BigQuery / OMOP / NeuralFrame / DICOM / EHR / WSI / pathology bucket / vista_bench. Do not silently fall back to inline sweeps.
-- **`/plan-handoff-readiness`** — pre-implementation handoff check: does the plan POINT AT or STATE DIRECTLY everything a fresh agent needs (including, for VM-executed work, the *Verification & VM handoff* Expected/Stop criteria)?
 - **`/vm-handoff`** — planner-Mac → executor-VM round-trip. On the Mac, renders the plan's *Verification & VM handoff* criteria into a runnable `docs/vm-status/<date>-<sha>.md`, gates the criteria for your sign-off (tiered by complexity), then offers `/commit-review` to land. Runs **before** the commit-review phase, not after: authored against the still-uncommitted implementation, so its `/commit-review` bundles the handoff doc **and** the code it documents into one PHI-vet + push instead of a second cycle. On the VM, appends the run results into the same doc and offers `/phi-vet` → `/commit-review`. Auto-detects mode by `hostname`.
 
 Skip the review skills for trivial changes (single-file fixes, doc tweaks, formatting). Each skill carries its own guidance on what it checks, when to skip, and how findings get applied.

@@ -198,6 +198,38 @@ handoff — *"run Step N on the GPU / high-throughput-CPU box; read results back
 CPU executor"* — and treat the machine switch as its own phase so the split is designed, not
 assumed.
 
+**The runnable artifact differs by class — a doc for Claude-Code, a script for the rest.** The
+`docs/vm-status/<date>-<sha>.md` handoff doc is a **Claude-driven** artifact: it presumes a
+Claude-Code executor that *reads* the steps, *runs* them, *interprets* each Expected/Stop, and
+*appends* the readback. A high-throughput-CPU or GPU box has no Claude Code, so it cannot be told
+*"pull the branch and run the vm-status doc"* — there is no agent there to interpret it. (This is
+the concrete failure this section exists to prevent.) For any step whose **run** lands on a
+non-Claude-Code class, the plan therefore carries two operator-usable deliverables in place of
+Claude-interpreted steps:
+
+- **A standalone runner script** — committed to the repo (listed in the plan's *Files to Modify*,
+  authored on the Mac during implementation like any other script — the Mac can write scripts it
+  cannot run) that does env setup (`uv sync` with the right extras, any required env exports such
+  as `HF_HUB_DISABLE_XET` / `HF_TOKEN`) **and** the run end-to-end, so the box needs **one command
+  and no Claude**. Committed runner scripts are already the established practice (e.g. a
+  `run_<x>_vm.sh` / `run_<x>_gpu.sh` per repo); this makes them the *required* artifact for a
+  non-Claude-Code run, not an optional convenience.
+- **Plain operator run-instructions** — which branch to check out, any precondition to land first,
+  the single command to invoke (`bash scripts/run_<x>.sh`), and where results land (the HTML /
+  parquets / logs) for readback. `/vm-handoff` renders these as an operator run-block that *points
+  at* the script, rather than the per-step Expected/Stop it renders for a Claude-Code box.
+
+**Default shape — phase the Claude judgment ahead of the throughput run.** The judgment-heavy,
+correctness-critical gates (a modality-aware join that could silently zero-merge, a before/after
+parity check, the metric-sanity floor) run as a *small* Claude-driven smoke on the Claude-Code CPU
+box first; a clean smoke is the STOP-gate that releases the standalone full-throughput run on the
+high-throughput-CPU / GPU box — only the *smoke* is gated here; the run's own results firewall out
+to HTML per §3 (read on the Claude-Code CPU box, or the Mac reads the HTML), never pasted into a
+handoff doc. This catches the correctness bug cheaply, before the expensive run. The
+**fully-standalone self-gating** variant — every gate baked into the script as an exit-non-zero
+assertion, no Claude anywhere — is the fallback for when there is no cheap Claude-verifiable smoke;
+state in the plan which shape applies and why.
+
 **Concrete class → host binding is repo-local.** This spec names *capability classes*, not
 machines; the actual hostnames (and which repo's data each mounts) live in the repo's machine
 posture — its `CLAUDE.md` / machine registry, per `claude_ops.md` Machine-Aware Operating Mode —
@@ -210,14 +242,15 @@ keeping specific host identifiers out of this shared spec.
 The batching decision above is recorded in the plan's *Verification & VM handoff* section as
 a **Handoff phasing** sub-block (the final item after `Anticipated forks`, per `claude_ops.md`'s
 Plan Document Structure). It is a compact **per-phase schema**, not free prose, so
-`/plan-handoff-readiness` can check its fields. Required for **complex-tier** plans (per the
+`/review-plan`'s handoff-readiness lens can check its fields. Required for **complex-tier** plans (per the
 classifier); a **simple** single-phase handoff states its one phase inline.
 
 ```
 Phase N — <name>
   · purpose               what this phase proves
   · machine               which executor class runs it (Claude-Code CPU / high-throughput CPU /
-                          GPU); name the readback machine too when it differs (§4)
+                          GPU); name the readback machine too when it differs (§4); for a
+                          non-Claude-Code run, name the committed runner script + operator run-block
   · banked-from-prior     which prior steps / SHA carry forward and are NOT re-run
   · gates                 the class-2 forks the executor resolves inline (if X -> A, else B)
   · destructive?          any irreversible write in this phase (STOP before it)

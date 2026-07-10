@@ -1,18 +1,20 @@
 ---
 name: vm-handoff
-description: Author and close the planner-Mac → executor-VM handoff round-trip. TRIGGER on explicit /vm-handoff, or proactively (offer via AskUserQuestion) after planner-Mac work that has never executed and needs first-time validation on real VM data. SKIP when the run is results-producing (linear-probe / KNN / cross-modality sweeps — read from the auto-generated HTML, not smoke-gated) or trivial. Auto-detects author (Mac) vs readback (VM) mode by `hostname` per claude_ops.md Machine-Aware Operating Mode. In author mode it DERIVES the runnable docs/vm-status/<date>-<sha>.md doc from the plan's "Verification & VM handoff" criteria (renders them, never invents) and gives you a tiered sign-off gate before landing; in readback mode it appends the VM's run results into the SAME doc, closing the loop. Reuses /review-plan, /plan-handoff-readiness, /phi-vet, and /commit-review rather than duplicating them.
+description: Author and close the planner-Mac → executor-VM handoff round-trip. TRIGGER on explicit /vm-handoff, or proactively (offer via AskUserQuestion) after planner-Mac work that has never executed and needs first-time validation on real VM data. SKIP when the run is results-producing (linear-probe / KNN / cross-modality sweeps — read from the auto-generated HTML, not smoke-gated) or trivial. Auto-detects author (Mac) vs readback (VM) mode by `hostname` per claude_ops.md Machine-Aware Operating Mode. In author mode it DERIVES the runnable docs/vm-status/<date>-<sha>.md doc from the plan's "Verification & VM handoff" criteria (renders them, never invents), names the executor-fleet class the work targets (Claude-Code CPU / high-throughput CPU / GPU) and — for non-Claude-Code compute — the box the readback runs on, and gives you a tiered sign-off gate before landing; in readback mode it appends the VM's run results into the SAME doc, closing the loop. Reuses /review-plan, /plan-handoff-readiness, /phi-vet, and /commit-review rather than duplicating them.
 ---
 
 # vm-handoff
 
 ## The principle
 
-VISTA work is split across two machines: the **planner Mac** authors plans, configs, and
+VISTA work is split across machines: the **planner Mac** authors plans, configs, and
 scripts but **cannot run code** (no runtime, GPU, data, or credentials); the **executor
-VM** holds the runtime + data mounts + credentials and runs everything. Every non-trivial
-change therefore crosses a machine boundary at least once, and the thing that crosses it is
-a *handoff doc*: the planner's statement of what to run, how to tell it worked, and when to
-stop and hand back.
+side** holds the runtime + data mounts + credentials and runs everything. That executor side
+is not one box — it's a small **fleet of capability classes** (a Claude-Code CPU box, a
+high-throughput CPU box, a GPU box; see *Which machine* below), and part of the handoff is
+naming which class the work targets. Every non-trivial change therefore crosses a machine
+boundary at least once, and the thing that crosses it is a *handoff doc*: the planner's
+statement of what to run, **where**, how to tell it worked, and when to stop and hand back.
 
 The success criteria of that handoff are **not invented here** — they live in the plan. A
 VISTA plan's *Verification & VM handoff* section (per `claude_ops.md` Plan Document
@@ -58,14 +60,37 @@ Run `hostname` first and resolve the machine's role from the repo's machine post
 `CLAUDE.md` / machine registry, per `claude_ops.md` Machine-Aware Operating Mode):
 
 - **Planner (the Mac, no runtime)** → **Author mode** (render the handoff doc).
-- **Executor (the VM with data + credentials)** → **Readback mode** (append results).
+- **Executor (the Claude-Code CPU box with data + credentials)** → **Readback mode** (append
+  results). This is the only executor class that can run this skill — the readback append is
+  Claude-driven, so the high-throughput CPU and GPU boxes (no Claude Code) never invoke it;
+  when the compute ran on one of those, a human ran it there and the readback here reads its
+  results / logs (see *Which machine* below).
 - **Unknown hostname** → do not guess. Ask which role applies, and offer to record it
   wherever the repo declares its posture (its `CLAUDE.md`, or a `docs/machines.md` if it
   uses one — `claude_ops.md` is deliberately non-prescriptive about which) so the next
   session doesn't re-prompt.
 
-State the detected mode in one line before acting (`On phil-mbp → planner → author mode`)
+State the detected mode in one line before acting (`On <mac-host> → planner → author mode`)
 so a mis-detection is visible and correctable.
+
+## Which machine — the executor fleet
+
+The executor side is a **fleet of capability classes**; author mode names which one each step
+targets, and renders it into the handoff header. The full taxonomy + routing is the canonical
+spec's (`references/verification-and-handoff-design.md` §4) — don't restate it; the operational
+essentials:
+
+- **Claude-Code CPU** — the default / interactive executor: smoke tests, structural readback,
+  BQ / OMOP queries, moderate eval. **The only class that runs this skill's readback.**
+- **High-throughput CPU** — bulk preprocessing, linear-probe / KNN parallelization,
+  core-saturating batch. No Claude Code.
+- **GPU** — model training, embedding generation, GPU-only tests. No Claude Code.
+
+**Run-machine ≠ readback-machine.** When a step runs on the high-throughput-CPU or GPU class,
+the *run* happens there but the *readback* is done on the Claude-Code CPU box (or the Mac reads
+results). Render both — the machine switch is its own phase — so the executor isn't left
+assuming one box does both. If the plan's *Target machine* field is missing, **recommend** a
+class from the routing above rather than defaulting silently, and flag it for the sign-off gate.
 
 ---
 
@@ -118,6 +143,11 @@ code — allowed on the Mac):
   committed when you author the handoff.
 - **Prior-handoff link(s)** — the most recent `docs/vm-status/*.md` this continues, so the
   lineage of what-ran-when is walkable from this doc alone.
+- **Target machine** — read the plan's *Target machine* field and carry its executor class
+  (Claude-Code CPU / high-throughput CPU / GPU) into the header. If the plan omits it,
+  **recommend** a class from the *Which machine* routing rather than defaulting silently, and
+  surface it at the sign-off gate. When the run class has no Claude Code (high-throughput CPU /
+  GPU), also name the **readback** machine (the Claude-Code CPU box) — the run and readback split.
 
 ### Phase A3 — Render the doc (one doc per session)
 
@@ -133,7 +163,8 @@ Reference: docs/claude_ops.md
 
 **Status: Handoff to VM** (<date>)
 **Branch:** `<branch>` (<pinned SHA, or "commit+push first, SHA set at commit time">)
-**Machine posture:** authored on the planner Mac (no runtime). Everything below has **never executed** — run it on `<vm-host>` (executor, holds <data it needs>).
+**Machine posture:** authored on the planner Mac (no runtime). Everything below has **never executed** — run it on the **<executor class>** box (`<vm-host>`, holds <data it needs>). <If that class has no Claude Code: "Run there; read results back on the Claude-Code CPU box `<readback-host>`.">
+**Target machine:** <executor class per step/phase — e.g. "Steps 0–2 Claude-Code CPU; Step 3 GPU (train), readback on Claude-Code CPU"> <— from the plan's Target machine field
 **Plans:** [`<plan-stem>.md`](../plans/<plan-stem>.md#verification--vm-handoff) <— criteria source of truth
 **Prior handoffs:** [`<date>-<sha>.md`](./<date>-<sha>.md) (omit if first)
 
@@ -180,6 +211,12 @@ plan's criteria, not freshly authored.
 **Multi-repo handoff:** keep it **one doc**, but give Step 0 a checkout block per repo (pin
 each repo's branch / SHA explicitly) — cross-repo SHA ripple is exactly why the lineage
 belongs in a single place.
+
+**Multi-machine handoff:** when steps span executor classes (e.g. preprocess on
+high-throughput CPU → train on GPU → eval on Claude-Code CPU), label **each step** with its
+class and treat every machine switch as a phase boundary (per the plan's *Handoff phasing*).
+Name the readback box wherever the run box has no Claude Code, so no step is left assuming one
+machine does both the run and the Claude-driven readback.
 
 ### Phase A3.5 — Tiered success-criteria gate (your sign-off)
 
@@ -228,7 +265,8 @@ Under the doc's `## VM run results` heading (create it if the doc predates this 
 lacks one), append a stamped section:
 
 ```markdown
-## VM run results — `<hostname>`, <date>, ran at `<sha>`
+## VM run results — readback on `<hostname>`, <date>, ran at `<sha>`
+<When compute ran on a different (no-Claude-Code) box, name it too: "compute on `<gpu/ht-cpu-host>`, readback on `<claude-code-cpu-host>`" — so a split run's two machines are both on the record.>
 - **Step 0:** ✅ checked out `<sha>`, sync clean.
 - **Step 1:** ✅ / ❌ <outcome vs the Expected block; if ❌, the traceback or failing eyeball>
 - **Step N:** ...
@@ -346,6 +384,11 @@ turns a forgotten Stop into a conscious decision):
 ## What this skill deliberately does NOT do
 
 - **Decide planner vs executor roles** — that's `claude_ops.md` Machine-Aware mode.
+- **Own the machine taxonomy or the class→host binding** — the executor-fleet classes and the
+  routing live in the canonical spec (`references/verification-and-handoff-design.md` §4), and
+  the concrete class→host binding is repo-local (its `CLAUDE.md` / machine registry). This skill
+  only *renders* the plan's *Target machine* field (and *recommends* a class when the plan omits
+  it, flagged at the sign-off gate) — it does not invent the taxonomy.
 - **Author or audit the design** — the success criteria live in the plan's *Verification &
   VM handoff* section and are reviewed by `/review-plan` (whose verification-design pass audits
   them against the canonical spec, `references/verification-and-handoff-design.md`); this skill

@@ -12,6 +12,7 @@ Convert a plan doc into an interactive HTML explanation. Plans for repo-wide cha
 - User invokes `/explain-plan <path-to-plan>` or `/explain-plan` (auto-detect the most-recently-referenced plan in conversation).
 - Right after `/review-plan` finishes substantive edits, as an alternative to `/read-plan` for plans the user reports losing track of.
 - When the user says "I'm losing the thread" / "show me visually" / "let me see this as a diagram" about a plan doc.
+- **The user pastes back the clipboard export** — a blob starting `# Resume: apply explain-plan feedback` or `# Feedback on <plan>`. Route to *Feedback ingestion* below; resolve the plan from the resume header first (fresh session → read the plan doc + related context, `/next`-style; already in flight → apply against the plan you already hold).
 
 ## When NOT to use
 
@@ -35,7 +36,7 @@ The HTML embeds:
 7. **Step accordion** — `<details>`/`<summary>` per step. Closed by default. Each step: description, files touched, verify-gate, and a `<textarea class="section-feedback">` for inline comments. For steps with substeps (like a "Materialize and diff" step with 6a–6f), include a sub-flowchart.
 8. **Gotchas accordion** — same shape as steps; closed by default to reduce visual load on first open.
 9. **Open Questions panel** — one card per OQ with a `<select>` (Pending / Resolved / Deferred), a `<textarea>` for notes, and the full question prose. These pre-populate the export with `OQ<N>: <status> — <notes>` lines.
-10. **Feedback sidebar / footer** — a global `<textarea>` plus a single button `Copy all feedback as Claude prompt`. JS gathers all per-section textareas, OQ statuses, and the global box; formats them as a markdown prompt; copies to clipboard. **Persist all textarea values to `localStorage` keyed by plan-stem + section-id** — first user complaint after using the HTML is invariably "I refreshed and lost everything." Restore on page load; clear when the plan SHA changes (the HTML has been regenerated, old feedback is stale). Show a small pending-count badge on the button (e.g., "Copy feedback (3 pending)") so the user can see they have unsubmitted notes before navigating away.
+10. **Feedback sidebar / footer** — a global `<textarea>` plus a single button `Copy all feedback as Claude prompt`. JS gathers all per-section textareas, OQ statuses, and the global box; formats them as a markdown prompt — **prefixed with a resume header** so a *fresh* session that receives the paste can bootstrap itself (plan path + branch + `plan-sha`, plus a one-line read-the-plan instruction; exact format in *Feedback ingestion* below) — then copies to clipboard. **Persist all textarea values to `localStorage` keyed by plan-stem + section-id** — first user complaint after using the HTML is invariably "I refreshed and lost everything." Restore on page load; clear when the plan SHA changes (the HTML has been regenerated, old feedback is stale). Show a small pending-count badge on the button (e.g., "Copy feedback (3 pending)") so the user can see they have unsubmitted notes before navigating away.
 11. **Node drill-down panel (OPTIONAL — opt-in per generation; default OFF)** — Mermaid nodes that represent *changing* entities (kind `added` / `modified` / `deferred`) become drillable via double-click; `untouched` / `external` nodes are not drillable (the cursor stays default, so the pointer affordance itself encodes "this box is where the change lives"). Authors can opt in an unchanged-but-load-bearing node with `forceDrillable: true`. Dblclick opens a side panel with kind chip + plan-anchor jump chips (cheap, embedded) plus a **"Generate detail" button**. The button POSTs the drill prompt to a local relay (`research-skills/relay/explain-plan-relay.py`, default `http://127.0.0.1:7237`) that wraps `claude -p`; the markdown response is rendered inline in the panel and cached to `localStorage[\`drill::${planSha}::${nodeId}\`]`. **If the relay isn't running, the button falls back gracefully to clipboard** (copies the prompt, toast tells the reader how to start the relay). **Detail is generated on-the-fly per node the reader inspects — NOT precomputed at HTML-generation time.** See `## Node drill-down (double-click)` below for the contract, prompt template, and relay wiring. **Generation cost (why this is opt-in):** drill-down adds noticeable time and token spend at HTML-generation. Claude has to hand-author a `nodeManifest` entry (label + kind + plan-anchors) for every drillable diagram node — typically 20–40 entries cross-referenced against the plan's `data-section` IDs, plus three additional verification classes (ORPHAN_NODE, ORPHAN_MANIFEST, BROKEN_ANCHOR). Expect roughly an extra 1–3 minutes and a few hundred lines of generated JS. **When generating, ALWAYS surface this trade-off before turning drill-down on** — via `AskUserQuestion` with the cost stated plainly ("Drill-down adds ~1–3 min of generation time and per-node Claude round-trips when the reader inspects a node — include it?"). Default the recommendation to OFF unless the user explicitly requested drill-down (e.g., `/explain-plan <path> --drill`, "include drill-down", "make the nodes clickable"), or the plan is genuinely large (≥ 3 diagrams AND ≥ 25 distinct drillable nodes), in which case lean ON. When turning drill-down ON, **mention the relay in the hand-off message**: "Drill-down is wired to the relay at `RELAY_URL` — run `python research-skills/relay/explain-plan-relay.py` in a spare terminal before double-clicking nodes, or the panel will fall back to clipboard."
 
 ### Optional sections (case-by-case)
@@ -347,6 +348,10 @@ After writing the HTML, run a drift-reconciliation step. The user explicitly ask
 If the user pastes back the clipboard-exported markdown, the format will be:
 
 ```
+# Resume: apply explain-plan feedback
+Plan: <repo-relative path> · branch: <branch> · plan-sha: <first-12>
+→ If you're picking this up in a fresh session, read the plan doc above (plus any related docs / memory it points to) first. Then apply the feedback below.
+
 # Feedback on <plan-name>
 
 ## blast-radius
@@ -362,6 +367,8 @@ Status: Resolved
 ## Overall
 <user text>
 ```
+
+**Fresh session vs in-flight — resolve the plan cheaply.** The resume header at the top of the paste names the plan path, branch, and `plan-sha`. If you are **already in flight on this plan this session** — you generated the HTML or read the plan earlier and the header's `plan-sha` matches what you hold — apply the feedback against the plan already in your context; you needn't re-open it. If you are a **fresh session**, follow the header: read the plan doc at that path first, plus any related docs or memory it points to, then ingest. If the live plan's SHA has drifted from the header's, flag it — the HTML feedback was written against an older version of the plan.
 
 To ingest:
 1. Parse the H2 sections.

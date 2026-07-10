@@ -59,6 +59,25 @@ git -C ~/code/research-skills fetch --quiet 2>/dev/null && \
 
 If the local clone is behind by **any** commits, tell the user how far behind it is, show the unpulled commit subjects, and ask whether to `git -C ~/code/research-skills pull --ff-only` before starting — don't pull unprompted, but don't skip silently either. Mid-session skill-spec drift (a `/wrapup` or `/review-plan` invocation reading a different version than expected) is harder to reason about than a clean pull at the start, and even a single unpulled commit can change a skill's behavior. Only stay silent when the clone is already up to date (0 commits behind) or the path doesn't exist on this machine.
 
+### Check for parallel work in the same checkout (before you touch anything)
+
+VISTA repos are **shared single checkouts** — several Claude sessions (usually other agents, often on unrelated tasks) may `cd` into the *same* repo subfolder at once. They then share one working tree, one index, and one HEAD. A branch switch, `git reset`, `git stash`, or commit by any one session is immediately visible to — and can silently clobber — the others. This has already caused real data loss: a commit landed on a parallel session's branch, and the `git reset --hard` used to relocate it discarded three of that session's uncommitted docs. Because git had never staged those edits, no blob existed to restore — the loss was permanent.
+
+So **before beginning work in a repo, take stock of what else is in flight there:**
+
+```bash
+git -C <repo> status --short          # uncommitted work you didn't create?
+git -C <repo> branch --show-current   # is HEAD on an unexpected feature branch?
+git -C <repo> worktree list           # are sibling worktrees already active?
+```
+
+Also cross-check `MEMORY.md` / `docs/next.md` for concurrently-active branches. Read any of these as a sign a parallel session is live in this checkout:
+- tracked files modified, or untracked files present, that aren't yours;
+- HEAD sitting on a feature branch you didn't check out;
+- the user mentioning another agent or session working this repo.
+
+**When parallel work is present (or likely), isolate in your own git worktree before editing** — `EnterWorktree` (this project authorizes it for exactly this case) or `git worktree add`. A worktree gives you a private working dir + branch, so your branch switches, commits, stashes, and any destructive tree ops can't reach the other session's tree. When the checkout is clearly yours alone and no other worktrees are active, working in place is fine — just re-verify the branch at commit time (see Git Practices → Before Committing).
+
 ---
 
 ## Planning Workflow
@@ -201,7 +220,9 @@ Don't paper over the tension with a hedge ("I'll extract it if needed later"); n
 ### Before Committing
 
 - **Always check and report the current branch.** Before any commit, verify which branch you're on and tell the user. Never assume you're on the expected branch.
+- **Re-verify the branch the *instant* before you commit — not just at task start.** In a shared checkout a parallel session can switch HEAD out from under you between when you began and when you commit. Run `git branch --show-current` immediately before `git commit` / `/commit-review` and confirm it's the branch you mean to land on.
 - Confirm with the user if the branch seems unexpected for the task.
+- **Prefer non-destructive recovery over `git reset --hard` in a shared checkout.** Operations like `git reset --hard`, a broad `git stash`, or `git checkout -- .` act on the *whole* tree — including another session's uncommitted edits — and edits git never staged have no blob to restore, so the loss is permanent. If you commit to the wrong branch, move the work with `git cherry-pick` / `git reset --soft` / a branch-ref move instead. If you truly must reset, snapshot the *full* working tree first (`git stash -u` of everything, or a filesystem copy) — not just the files you happened to notice in an earlier `status`.
 
 ### Feature Branching
 

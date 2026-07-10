@@ -127,7 +127,7 @@ Raise an `AskUserQuestion` with three options:
 
 Based on the answer:
 
-- *Commit and push* / *Commit only*: stage only the files you touched (`git -C <repo> add <file1> <file2>`; do **not** use `git -C <repo> add -A`), then commit with a short single-line thematic message describing what changed (e.g., `plan-handoff-readiness: add implementation-forward principle`). No AI attribution lines, matching the project commit-message convention. Push only if the option chosen requires it.
+- *Commit and push* / *Commit only*: stage only the files you touched (`git -C <repo> add <file1> <file2>`; do **not** use `git -C <repo> add -A`), then commit with a short single-line thematic message describing what changed (e.g., `review-plan: fold in the handoff-readiness lens`). No AI attribution lines, matching the project commit-message convention. Push only if the option chosen requires it.
 - *Skip*: do nothing; surface in Step 8 summary.
 
 The `-C <path>` form keeps the project's cwd intact; do not `cd` into the skills repo.

@@ -1,0 +1,61 @@
+Reference: docs/claude_ops.md
+
+# Implementation Feedback: Verification & VM-Handoff Design agent (Fresh Claude Code review)
+
+## Verdict
+Revise before commit. The design is faithfully implemented — one canonical spec, two touchpoints, consistent "Handoff phasing" label and complexity classifier everywhere, and the lens migration genuinely moved content OUT of `review-plan.md` with nothing substantive lost. Two revise-level issues block a clean commit: (1) the migrated lens at `review-plan.md:80` (and its feedback-section twin at `:156`) re-enumerates the archetype-menu / envelope / batching keywords inline and then literally says "do not restate them here" — a self-contradiction that violates the plan's own load-bearing acceptance rule; (2) the canonical spec (the core deliverable) is peppered with HTML entities (`&amp;`, `&lt;`, `&gt;`, `&ge;`) that agents read as literal text.
+
+## Plan Coverage
+| Slice / section | Status | Evidence: path:line | Notes |
+|---|---|---|---|
+| NEW canonical spec `references/` (top-level dir, parallel to `commands/`) | Done | references/verification-and-handoff-design.md (new); `find` confirms top-level `references/` | Four content buckets + §4 schema + classifier all present; mode-neutral intro. |
+| claude_ops.md — Planning Workflow generative step | Done | claude_ops.md:78-85 | Tiered per classifier, points at spec, names symlink resolution. |
+| claude_ops.md — "Handoff phasing" 5th bullet in plan template | Done | claude_ops.md:134 | Per-phase schema fields present; links spec for batching rules. |
+| review-plan.md — lens migration (VM verification + 4-pillar behavioral) OUT of prompt | Done (content moved) / Drifted (partial re-statement) | commands/review-plan.md:80, :156 | Old lenses gone from body (rg confirms `'Behavioral test design'` / `'ABD(OMEN)?'` no longer in review-plan.md); but :80 re-lists menu/envelope/batching keywords — see Contract Violations. |
+| review-plan.md — Phase 2c audit pass (simple inline / complex silent 2nd invocation) | Done | commands/review-plan.md:119-126 | Matches plan OQ1 residual (silent) and classifier tiers. |
+| review-plan.md — Required read #4 (spec, symlink resolution) + feedback section | Done | commands/review-plan.md:73, :155-156 | |
+| vm-handoff.md — one-line cross-ref (ownership boundary intact) | Done | commands/vm-handoff.md:350-356 | Mechanics + cross-ref only; no menu/envelope/batching restated. |
+| plan-handoff-readiness.md — complex-tier phasing-fields check | Done | commands/plan-handoff-readiness.md:155 | |
+| backlog.md — rad-eval no-checklist followup (former OQ5) | Done | backlog.md:19-29 | Matches plan's "moved out of OQ" note. |
+| Complexity classifier stated in spec + consistent across touchpoints | Done | references/…:191-200; claude_ops.md:134; review-plan.md:124; plan-handoff-readiness.md:155 | All four copies are the same 6-item list today (drift risk noted below). |
+
+## Critical Drift
+- None rising to "critical." The load-bearing migration succeeded and no substantive idea was dropped (see Contract Violations for the acceptance-rule tension, which is Revise-level, not Critical).
+
+## Missing Pieces
+- **Nothing substantive dropped in the lens migration.** Spot-checked every idea the task named: behavioral-over-structural (references/…:90-95), edge/boundary (`:59-61`), cross-task invariants (`:62-66`), relative-over-absolute domain sanity (`:67-71`), "local unit tests are not VM verification" (`:16-19`), reject-substring-asserts (`:90-95`) — all present in the canonical spec. Only *illustrative examples* were trimmed (the vista-ct `'ABD(OMEN)?'` two-field example, `CHEST.overlap_with == ('abd_pel',)`, the "bad shapes" percentage list). That trimming is defensible (the diagnostic essence survives), but it interacts with the plan's readback — see Test Gaps.
+
+## Contract Violations
+- **Acceptance-rule breach + self-contradiction at review-plan.md:80 (primary finding).** The plan's checkable acceptance rule (plan `:110-114`, "load-bearing"): command docs "may contain only invocation / ownership / mechanics text plus a link — the archetype menu, the envelope, and the batching discipline live *only* in the canonical spec"; and Files-to-Modify for review-plan.md: "what remains here is mechanics + a link, **not the menu**." But `commands/review-plan.md:80` enumerates ~11 archetypes by keyword (cheap-gate-first, migration EXCEPT-DISTINCT, before/after parity, data-sanity, cross-task invariants, relative-over-absolute, metric-sanity floor, guard-that-must-go-RED, silent-fallback STOPs, PHI-clean readback, no-substring-asserts), the envelope, AND the batching keywords (order cheap→expensive→destructive, bundle-by-SHA, bank-and-un-bank, decision-gates-over-round-trips) — then closes with "the canonical spec owns the menu, envelope, and batching (**do not restate them here**)." It restates them and disclaims restating them in the same bullet. `:156` (feedback-section) repeats the batching keywords. This re-introduces, in compressed form, the exact "second surface owning the same archetypes with subtly different wording" drift the migration existed to eliminate. **Required fix:** resolve the contradiction — either trim `:80`/`:156` to a pure pointer ("audit the section against the spec's archetype menu / envelope / batching; do not restate"), OR consciously relax the acceptance rule to permit a keyword *index* in prompts and delete the "do not restate them here" clause. Do not ship the contradiction. (Defensible-deviation angle noted below — a prompt arguably needs actionable keywords — but the author must pick a side.)
+- **Stale lens name at review-plan.md:49.** Line 49 still enumerates "The three universal lenses below (**VM verification**, cross-repo contracts, modularity-vs-YAGNI) are always-on regardless of whether a checklist exists." The lens was renamed at `:80` to "Verification & handoff design (always-on lens **for VM-handoff-bound plans**)". So `:49` is stale on both the *name* (should read "Verification & handoff design") and the *scope* ("always-on regardless" now conflicts with the lens's new VM-handoff-bound conditioning). **Fix:** update the `:49` parenthetical to the new name and reconcile the always-on claim with the conditional scope.
+- **Spec-discovery mechanism is coherent for its real use case, with one self-referential edge.** The instruction ("resolve its root by following this repo's `docs/claude_ops.md` symlink") is stated wherever a touchpoint reads the spec (claude_ops.md:80/134, review-plan.md:73/80) and is sound for sibling VISTA repos (which symlink `docs/claude_ops.md → ../../research-skills/claude_ops.md`). Edge: **research-skills itself has no `docs/claude_ops.md`** (confirmed: `ls docs/claude_ops.md` → absent), so a touchpoint running *inside* research-skills (as this very plan review is) can't follow that symlink. Low impact — research-skills is not a Mac/VM-split repo (`CLAUDE.md`: "Code execution is allowed on this machine"), so the VM-handoff-bound touchpoints effectively never fire here. Worth a one-clause note in the instruction ("or, within research-skills, at `references/…` from the repo root") but not a blocker.
+
+## Test Gaps
+- **The plan's own acceptance-rule readback is partially unsound as written.** Plan `:217` says: `rg` the moved content (`'Behavioral test design'`, `'ABD(OMEN)?'`, `'Stage IV'`) and "confirm it now hits `references/verification-and-handoff-design.md`, **not** the body of `commands/review-plan.md`." I ran it: the *primary* assertion holds (all three are gone from review-plan.md's body). But the "now hits the spec" half fails for two of three — `'Behavioral test design'` appears in **no** file except the plan/its HTML/Codex feedback (the phrase was not carried into the spec), and `'ABD(OMEN)?'` lands in `commands/review-tests.md:104` + `commands/review-implementation.md:71` (pre-existing sibling skills, correctly out of scope) but **not** in the spec. Only `'Stage IV'` actually hits the spec (references/…:68). This is a plan-verification defect, not an implementation defect — the migration is genuinely complete — but the readback as written would confuse whoever runs it. **Fix:** correct plan `:217` to greps that actually confirm the spec absorbed the concepts (e.g. `'reject substring asserts'`, `'relative over absolute'`, `'guard that must go RED'`), keeping the "not in review-plan.md body" assertion for the migrated phrases.
+- The rest of the plan's Verification section (structural coherence, symlink ripple `readlink ../vista_bench/docs/claude_ops.md`, dogfood passes) is sound and appropriate for a prose/skills change; symlink ripple is unverifiable from inside research-skills but the mechanism is correct.
+
+## Defensible Deviations
+- **Inline archetype keyword-index in the reviewer prompt (review-plan.md:80).** A reviewer *prompt* plausibly needs actionable keywords so the pass isn't shallow without a mandatory second file-read. This is a legitimate design call — but it collides with the plan's strict, explicitly "checkable" acceptance rule and the bullet's own closing disclaimer. Flagging for the author to confirm the intended contract (pure pointer vs. permitted keyword index) rather than leaving both the rule and its violation in the tree.
+- **Trimming illustrative examples during the migration** (vista-ct ABDOMEN case, `overlap_with`, "bad shapes" list). Consistent with "point at canonical, don't duplicate"; the diagnostic essence is preserved in the spec. Confirm this was intentional (it interacts with the plan's readback greps above).
+- **Classifier trigger list duplicated in 4 places** (spec:191-200, claude_ops.md:134, review-plan.md:124, plan-handoff-readiness.md:155). All four are the identical 6-item set today, so no current inconsistency — but it's a maintenance-drift surface. The plan wanted the classifier "referenced/consistent across," and the acceptance rule scopes only menu/envelope/batching to the spec (not the classifier), so this is within-plan. Note only.
+
+## Suggested Edits
+- `commands/review-plan.md:80` — remove the self-contradiction: either delete the inline menu/envelope/batching keyword enumeration (leaving "audit the *Verification & VM handoff* section against the canonical spec's archetype menu, envelope, and batching; defer repo recipes to the checklist"), or delete the trailing "(do not restate them here)" clause and treat the keyword list as a sanctioned index. Apply the same choice at `:156`.
+- `commands/review-plan.md:49` — change "(VM verification, cross-repo contracts, modularity-vs-YAGNI)" to "(Verification & handoff design, cross-repo contracts, modularity-vs-YAGNI)" and soften "always-on regardless of whether a checklist exists" so it doesn't clash with the lens's VM-handoff-bound scoping at `:80`.
+- `references/verification-and-handoff-design.md:1,7,42,68,114,127,172` — replace HTML entities with the raw characters used everywhere else in the repo: `&amp;`→`&`, `&lt;`/`&gt;`→`<`/`>`, `&ge;`→`≥`. Agents consume this file as raw markdown text, so "Stage IV mortality &gt; Stage I" and "Verification &amp; VM-Handoff Design" read literally. (Contrast: claude_ops.md/review-plan.md use raw `&`, `→`, `≥` — confirmed zero entities there.) The core deliverable should match repo convention.
+- `docs/plans/verification-and-handoff-design-agent.md:217` — fix the readback greps per Test Gaps.
+
+## Questions For The Author
+- Acceptance-rule intent: is the inline archetype/batching keyword index at `review-plan.md:80`/`:156` a deliberate relaxation (prompt actionability) or an accidental re-duplication? Your answer decides whether the fix is "trim to pointer" or "relax the rule + drop the disclaimer." This is the one call that changes the shape of the fix.
+
+## Audit Trail
+- claude_ops.md
+- docs/plans/verification-and-handoff-design-agent.md
+- references/verification-and-handoff-design.md
+- commands/review-plan.md
+- commands/vm-handoff.md
+- commands/plan-handoff-readiness.md
+- backlog.md
+- CLAUDE.md
+- git diff (uncommitted, tracked) + rg readback greps + find/ls dir-structure checks
+- NOT read (per instruction): docs/plans/reviews/verification-and-handoff-design-agent-feedback.md (prior Codex plan-review)

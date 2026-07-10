@@ -1,0 +1,552 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="plan-sha256" content="2d100c4b34667af6828ff88a53289eb0e345ce92dd01f97a6cbadc7450b6c87f">
+<title>Verification &amp; VM-Handoff Design agent — plan</title>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/svg-pan-zoom@3.6.2/dist/svg-pan-zoom.min.js"></script>
+<style>
+  :root {
+    --bg:#f6f7f9; --card:#ffffff; --ink:#12181f; --muted:#5b6673; --line:#dfe3e8;
+    --accent:#0e7490; --accent2:#be185d; --chip:#eef2f6; --code:#f0f3f6; --resp:#0e7490;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg:#0e1319; --card:#161c24; --ink:#e7edf3; --muted:#94a2b2; --line:#28313c;
+      --accent:#22d3ee; --accent2:#f472b6; --chip:#1d2833; --code:#10161d; --resp:#22d3ee;
+    }
+  }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--ink);
+    font:15px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif; }
+  .wrap { max-width:1100px; margin:0 auto; padding:28px 22px 120px; }
+  h1 { font-size:26px; margin:0 0 4px; letter-spacing:-.01em; }
+  h2 { font-size:19px; margin:34px 0 12px; padding-top:10px; border-top:1px solid var(--line); }
+  h3 { font-size:15px; margin:18px 0 8px; }
+  a { color:var(--accent); }
+  code, pre { font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; }
+  code { background:var(--code); padding:1px 5px; border-radius:4px; font-size:.9em; }
+  pre { background:var(--code); padding:12px 14px; border-radius:8px; overflow-x:auto;
+    border:1px solid var(--line); font-size:13px; line-height:1.5; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:12px;
+    padding:16px 18px; margin:12px 0; }
+  .hdr { display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:10px 20px; }
+  .hdr div { font-size:13px; }
+  .hdr .k { color:var(--muted); text-transform:uppercase; font-size:10.5px; letter-spacing:.06em; }
+  .hdr .v { font-weight:600; word-break:break-word; }
+  .tldr { font-size:15.5px; }
+  .chip { display:inline-block; padding:1px 8px; border-radius:999px; font-size:11.5px;
+    font-weight:700; border:1px solid var(--line); background:var(--chip); }
+  .chip.pending { background:#94a3b8; color:#0f172a; border-color:#64748b; }
+  .chip.revise { background:#f59e0b; color:#291a03; border-color:#b45309; }
+  .chip.pivot { background:#f472b6; color:#2a0715; border-color:#be185d; }
+  table { width:100%; border-collapse:collapse; font-size:13px; margin:6px 0; }
+  th, td { text-align:left; padding:7px 9px; border-bottom:1px solid var(--line); vertical-align:top; }
+  th { color:var(--muted); font-size:11px; text-transform:uppercase; letter-spacing:.05em; }
+  details { border:1px solid var(--line); border-radius:10px; margin:8px 0; background:var(--card); }
+  details > summary { cursor:pointer; padding:11px 14px; font-weight:600; list-style:none; }
+  details > summary::-webkit-details-marker { display:none; }
+  details > summary::before { content:"\25B8"; display:inline-block; width:1em; color:var(--muted); }
+  details[open] > summary::before { content:"\25BE"; }
+  .body { padding:2px 16px 14px; }
+  .files { font-size:12.5px; color:var(--muted); }
+  .files code { font-size:.92em; }
+  .gate { border-left:3px solid var(--accent); padding:4px 10px; margin:8px 0; background:var(--chip);
+    border-radius:0 6px 6px 0; font-size:13px; }
+  textarea { width:100%; min-height:52px; margin-top:8px; padding:8px 10px; border-radius:8px;
+    border:1px solid var(--line); background:var(--bg); color:var(--ink);
+    font:13px/1.5 inherit; resize:vertical; }
+  select { padding:5px 8px; border-radius:7px; border:1px solid var(--line);
+    background:var(--bg); color:var(--ink); font-size:13px; }
+  .oq { margin:10px 0; }
+  .oq .q { margin:6px 0; }
+  .diagram-wrap { position:relative; border:1px solid var(--line); border-radius:10px;
+    background:var(--card); height:520px; overflow:hidden; margin:8px 0; }
+  .diagram-wrap.full { position:fixed; inset:12px; height:auto; z-index:60; }
+  .diagram-wrap pre.mermaid { margin:0; border:0; background:transparent; height:100%; }
+  .dctrl { position:absolute; top:8px; right:8px; z-index:5; display:flex; gap:6px; }
+  .dctrl button { font-size:11.5px; padding:3px 9px; border-radius:6px; border:1px solid var(--line);
+    background:var(--card); color:var(--ink); cursor:pointer; }
+  .hint { position:absolute; bottom:6px; left:10px; z-index:5; font-size:11px; color:var(--muted); }
+  .resp { border-left:3px solid var(--resp); background:var(--chip); padding:8px 12px; margin:8px 0;
+    border-radius:0 6px 6px 0; font-size:13.5px; }
+  .resp .lbl { font-size:10px; text-transform:uppercase; letter-spacing:.06em; color:var(--resp);
+    font-weight:800; display:block; margin-bottom:3px; }
+  .fbbar { position:fixed; bottom:0; left:0; right:0; background:var(--card);
+    border-top:1px solid var(--line); padding:10px 18px; display:flex; gap:12px; align-items:center;
+    z-index:50; }
+  .fbbar textarea { min-height:34px; flex:1; margin:0; }
+  .fbbar button { padding:9px 15px; border-radius:8px; border:1px solid var(--accent);
+    background:var(--accent); color:#04222a; font-weight:700; cursor:pointer; white-space:nowrap; }
+  @media (prefers-color-scheme: dark) { .fbbar button { color:#04222a; } }
+  .muted { color:var(--muted); }
+  .small { font-size:12px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <h1>Verification &amp; VM-Handoff Design agent</h1>
+  <p class="muted small">Interactive companion to
+    <a href="verification-and-handoff-design-agent.md">docs/plans/verification-and-handoff-design-agent.md</a>
+    · regenerate with <code>/explain-plan</code> after any plan edit.</p>
+
+  <div class="card hdr">
+    <div><div class="k">Status</div><div class="v"><span class="chip revise">Implemented · reviewed (Codex plan + fresh-Claude impl) · pending commit</span></div></div>
+    <div><div class="k">Owner</div><div class="v">the maintainer</div></div>
+    <div><div class="k">Repo / branch</div><div class="v">research-skills · <code>main</code></div></div>
+    <div><div class="k">Source SHA-256</div><div class="v"><code>2d100c4b3466</code></div></div>
+    <div><div class="k">Generated</div><div class="v">2026-07-08</div></div>
+    <div><div class="k">Drill-down</div><div class="v">off</div></div>
+  </div>
+
+  <h2>TL;DR</h2>
+  <div class="card tldr">
+    Adds a <b>Verification &amp; VM-Handoff Design capability</b> to research-skills: one
+    <b>canonical spec</b> (the archetype menu — <i>what to verify</i> — plus the
+    expected-vs-unexpected envelope and the handoff-batching discipline — <i>how many
+    handoffs</i>) consumed by <b>two touchpoints</b>: a generative step during plan authoring
+    and a dedicated audit pass inside <code>/review-plan</code>. The goal is to design the
+    verification suite and the number of VM round-trips <i>before</i> the expensive
+    commit-review + PHI-scrub cycles begin. Grounded in ~90 mined <code>vm-status</code>
+    handoff docs across vista_bench, vista-eval, vista-ct, and rad-eval; Codex-reviewed
+    (verdict: Revise — all findings applied).
+  </div>
+
+  <h2>Review history</h2>
+  <table>
+    <thead><tr><th>Pass</th><th>Reviewer</th><th>Verdict</th><th>Key findings surfaced</th><th>Applied</th></tr></thead>
+    <tbody>
+      <tr>
+        <td>1</td>
+        <td>Codex (gpt-5.5)<br/><span class="small muted"><a href="reviews/verification-and-handoff-design-agent-feedback.md">feedback</a></span></td>
+        <td><span class="chip revise">Revise</span></td>
+        <td>Reconcile the new pass with review-plan's existing VM-verification + 4-pillar lenses (the load-bearing one); pin the exact <code>claude_ops.md</code> insertion; add a concrete simple/complex classifier; give <code>Handoff phasing</code> a schema; naming consistency; correct the checklist-format claim.</td>
+        <td>Yes — 11 findings, 0 disagreements</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h2>Repo map — where this sits in the skill ecosystem</h2>
+  <div class="diagram-wrap" data-diagram="repomap">
+    <div class="dctrl"><button data-act="reset">Reset</button><button data-act="full">Fullscreen</button></div>
+    <div class="hint">scroll to zoom · drag to pan</div>
+    <pre class="mermaid">
+flowchart LR
+  spec["references/verification-and-handoff-design.md<br/>NEW canonical spec"]:::pr
+  claudeops["claude_ops.md<br/>plus Handoff phasing bullet"]:::mod
+  rp["commands/review-plan.md<br/>migrate lenses, add audit pass"]:::mod
+  vmh["commands/vm-handoff.md<br/>cross-ref only"]:::xref
+  phr["commands/plan-handoff-readiness.md<br/>cross-ref only"]:::xref
+  gen["Plan-mode generative touchpoint"]:::pr
+  aud["review-plan audit touchpoint"]:::pr
+  checklist["Per-repo plan-review-checklist.md<br/>vista_bench, vista-eval, vista-ct"]:::ext
+  plansec["Plan Verification and VM handoff section<br/>plus Handoff phasing schema"]:::mod
+
+  claudeops -->|"planning workflow spawns"| gen
+  rp -->|"review runs"| aud
+  spec -. both read .-> gen
+  spec -. both read .-> aud
+  checklist -. defer for recipes .-> spec
+  gen -->|"co-designs"| plansec
+  aud -->|"audits"| plansec
+  plansec -->|"vm-handoff renders next"| vmh
+  phr -. checks phasing .-> plansec
+
+  subgraph legend["Color legend"]
+    lpr["THIS PR adds (cyan)"]:::pr
+    lmod["Modified (amber)"]:::mod
+    lxref["Cross-ref only (grey)"]:::xref
+    lext["External, consumed (green)"]:::ext
+  end
+
+  classDef pr fill:#22d3ee,stroke:#0e7490,stroke-width:3px,color:#08252b;
+  classDef mod fill:#f59e0b,stroke:#b45309,color:#291a03;
+  classDef xref fill:#94a3b8,stroke:#475569,color:#0f172a;
+  classDef ext fill:#a3e635,stroke:#4d7c0f,color:#14210a;
+    </pre>
+  </div>
+
+  <h2>Blast radius — the lens migration and the two outputs</h2>
+  <div class="diagram-wrap" data-diagram="blast">
+    <div class="dctrl"><button data-act="reset">Reset</button><button data-act="full">Fullscreen</button></div>
+    <div class="hint">scroll to zoom · drag to pan</div>
+    <pre class="mermaid">
+flowchart LR
+  subgraph specg["New canonical spec"]
+    menu["Archetype menu<br/>what to verify"]:::pr
+    envelope["Expected-vs-unexpected envelope"]:::pr
+    batch["Batching discipline<br/>plus Handoff phasing schema"]:::pr
+  end
+  subgraph rpg["Review plan skill"]
+    lens1["OLD VM-verification lens<br/>review-plan.md line 79"]:::moved
+    lens2["OLD 4-pillar behavioral-test lens<br/>review-plan.md line 83"]:::moved
+    auditpass["NEW verification-design audit pass"]:::pr
+    ptr["Pointer to canonical spec"]:::mod
+  end
+  subgraph cog["Claude ops standard"]
+    bullet5["NEW 5th bullet<br/>Handoff phasing schema"]:::pr
+    planwf["Planning Workflow<br/>generative step"]:::mod
+  end
+  outsec["Plan Verification and VM handoff section"]:::mod
+  accept["Acceptance rule<br/>command docs keep pointer plus mechanics only"]:::rule
+
+  lens1 -->|"migrate into"| menu
+  lens2 -->|"migrate into"| menu
+  ptr -. links .-> specg
+  menu -. read by .-> auditpass
+  envelope -. read by .-> auditpass
+  batch -. read by .-> auditpass
+  auditpass -->|"writes findings into"| outsec
+  planwf -->|"co-designs"| outsec
+  bullet5 -->|"hosts schema in"| outsec
+  accept -. governs .-> rpg
+  accept -. governs .-> cog
+
+  subgraph legend["Color legend"]
+    lpr2["THIS PR adds (cyan)"]:::pr
+    lmoved["Migrates into spec (rose)"]:::moved
+    lmod2["Modified (amber)"]:::mod
+    lrule["Constraint (muted)"]:::rule
+  end
+
+  classDef pr fill:#22d3ee,stroke:#0e7490,stroke-width:3px,color:#08252b;
+  classDef moved fill:#f472b6,stroke:#be185d,color:#2a0715;
+  classDef mod fill:#f59e0b,stroke:#b45309,color:#291a03;
+  classDef rule fill:#e2e8f0,stroke:#94a3b8,stroke-dasharray:4 3,color:#1e293b;
+    </pre>
+  </div>
+
+  <h2>Order of operations</h2>
+  <div class="diagram-wrap" data-diagram="ooo">
+    <div class="dctrl"><button data-act="reset">Reset</button><button data-act="full">Fullscreen</button></div>
+    <div class="hint">scroll to zoom · drag to pan</div>
+    <pre class="mermaid">
+flowchart TD
+  s1["Step 1 (pending)<br/>Write canonical spec<br/>references/verification-and-handoff-design.md"]:::pending
+  s2["Step 2 (pending)<br/>Migrate review-plan lenses into spec<br/>plus add audit pass"]:::risk
+  s3["Step 3 (pending)<br/>claude_ops.md Handoff phasing bullet<br/>plus Planning Workflow generative step"]:::pending
+  s4["Step 4 (pending)<br/>Cross-refs in vm-handoff and plan-handoff-readiness"]:::pending
+  s5["Step 5 (pending)<br/>Verify grep readback, symlink check, dogfood"]:::pending
+
+  s1 -->|"canonical home before any pointer"| s2
+  s1 -->|"link target"| s3
+  s1 -->|"link target"| s4
+  s2 --> s5
+  s3 --> s5
+  s4 --> s5
+
+  subgraph legend["Color legend"]
+    lp["Pending (grey)"]:::pending
+    lr["Delicate, higher risk (rose)"]:::risk
+  end
+
+  classDef pending fill:#94a3b8,stroke:#475569,color:#0f172a;
+  classDef risk fill:#f472b6,stroke:#be185d,color:#2a0715;
+    </pre>
+  </div>
+
+  <h2>Knobs &amp; contracts</h2>
+
+  <div class="card">
+    <h3>Complexity classifier (both touchpoints share it)</h3>
+    <pre>simple  = one handoff, one repo, no decision gates,
+          no banked prior-SHA, no destructive write
+complex = ANY of { cross-repo SHA ripple, more than one handoff phase,
+          class-2 decision gates, bank / un-bank logic,
+          destructive or irreversible writes, multi-target bundling }
+
+simple  -> generative: inline guidance   · audit: distinct section in the one chosen reviewer's pass
+complex -> generative: spawn subagent     · audit: separate focused reviewer invocation</pre>
+  </div>
+
+  <div class="card">
+    <h3>Handoff phasing schema (new 5th bullet in claude_ops.md's Verification &amp; VM handoff template)</h3>
+    <p class="small muted">Compact per-phase schema (not free prose) so <code>/plan-handoff-readiness</code> can check its fields. Required for complex-tier plans; a simple single-phase handoff states its one phase inline.</p>
+    <pre>Phase N — &lt;name&gt;
+  · purpose
+  · banked-from-prior   (which steps / SHA carry forward, do NOT re-run)
+  · gates               (class-2 forks the executor resolves inline)
+  · destructive?        (irreversible write — STOP before it)
+  · stop / deviation routing
+  · next-doc trigger</pre>
+  </div>
+
+  <div class="card">
+    <h3>Acceptance rule (checkable)</h3>
+    <p>The command docs (<code>review-plan.md</code>, <code>vm-handoff.md</code>,
+    <code>plan-handoff-readiness.md</code>) may contain only invocation / ownership /
+    mechanics text plus a link. The archetype menu, the envelope, and the batching discipline
+    live <b>only</b> in the canonical spec; repo-specific recipes live <b>only</b> in the
+    per-repo checklist. Enforced by a <code>rg</code> readback in the verification pass.</p>
+  </div>
+
+  <h2>Implementation steps</h2>
+
+  <details data-section="step-1">
+    <summary><span class="chip pending">Pending</span> &nbsp;Step 1 — Write the canonical spec</summary>
+    <div class="body">
+      <p>Author <code>references/verification-and-handoff-design.md</code> (new top-level
+      <code>references/</code> dir) — the single home for all mined content: the archetype
+      menu, the expected-vs-unexpected envelope, the batching discipline (incl. the
+      <code>Handoff phasing</code> schema), and the "defer to the per-repo checklist" note.
+      Everything else points at this file.</p>
+      <div class="files">Files: <code>references/verification-and-handoff-design.md</code> (new)</div>
+      <div class="gate">Verify: the four content buckets present; written mode-neutral (readable by both the generative and audit touchpoints); no repo-specific recipes (those stay in the per-repo checklist).</div>
+      <textarea class="section-feedback" data-section="step-1" placeholder="Comments on Step 1..."></textarea>
+    </div>
+  </details>
+
+  <details data-section="step-2">
+    <summary><span class="chip pending">Pending</span> &nbsp;Step 2 — Migrate review-plan lenses + add the audit pass <span class="chip pivot">delicate</span></summary>
+    <div class="body">
+      <p><b>The load-bearing edit Codex surfaced.</b> (1) Move the two existing always-on
+      lenses — <i>VM verification</i> (<code>review-plan.md:79</code>) and the 4-pillar
+      <i>Behavioral test design</i> (<code>review-plan.md:83</code>) — out of the prompt and
+      into the canonical spec, leaving a pointer. (2) Add the dedicated verification-design
+      audit pass (auto-run for VM-handoff-bound plans, tiered per the classifier) with its
+      feedback-section shape and classify/apply handling. What remains in <code>review-plan.md</code>
+      is mechanics + a link, not the menu.</p>
+      <div class="files">Files: <code>commands/review-plan.md</code></div>
+      <div class="gate">Verify: <code>rg</code> the moved phrases (e.g. <code>'Behavioral test design'</code>, <code>'ABD(OMEN)?'</code>, <code>'Stage IV'</code>) hits the canonical spec, NOT the body of <code>review-plan.md</code>. This catches the lens-duplication failure.</div>
+      <textarea class="section-feedback" data-section="step-2" placeholder="Comments on Step 2..."></textarea>
+    </div>
+  </details>
+
+  <details data-section="step-3">
+    <summary><span class="chip pending">Pending</span> &nbsp;Step 3 — Extend claude_ops.md</summary>
+    <div class="body">
+      <p>Add the <b>fifth bullet, <code>Handoff phasing</code></b>, after <code>Anticipated
+      forks</code> in the Plan Document Structure template (the per-phase schema above; link
+      the spec for the rules). In Planning Workflow, add that VM-handoff-bound plans co-design
+      that section via the generative step (tiered per the classifier). Because
+      <code>claude_ops.md</code> is symlinked into every repo, this edit ripples everywhere.</p>
+      <div class="files">Files: <code>claude_ops.md</code> (canonical; symlinked as <code>docs/claude_ops.md</code> in every repo)</div>
+      <div class="gate">Verify: schema fields render as a flat bullet extension (not a new nested heading that reshapes the template); <code>readlink ../vista_bench/docs/claude_ops.md</code> still resolves to <code>../../research-skills/claude_ops.md</code>.</div>
+      <textarea class="section-feedback" data-section="step-3" placeholder="Comments on Step 3..."></textarea>
+    </div>
+  </details>
+
+  <details data-section="step-4">
+    <summary><span class="chip pending">Pending</span> &nbsp;Step 4 — Cross-refs in vm-handoff + plan-handoff-readiness</summary>
+    <div class="body">
+      <p>One-line cross-refs only. <code>vm-handoff.md</code>: it renders the next doc from the
+      <code>Handoff phasing</code> strategy which the audit pass vetted — ownership boundary
+      unchanged (it keeps rendering, the tiered sign-off, Expected/Stop enforcement, the
+      class-1/2/3 taxonomy, and supersede mechanics). <code>plan-handoff-readiness.md</code>:
+      for complex-tier VM-bound plans, check the <code>Handoff phasing</code> bullet is present
+      and its schema fields are filled.</p>
+      <div class="files">Files: <code>commands/vm-handoff.md</code>, <code>commands/plan-handoff-readiness.md</code></div>
+      <div class="gate">Verify: neither doc restates the batching rules (acceptance rule); the vm-handoff ownership list is not duplicated into the canonical spec.</div>
+      <textarea class="section-feedback" data-section="step-4" placeholder="Comments on Step 4..."></textarea>
+    </div>
+  </details>
+
+  <details data-section="step-5">
+    <summary><span class="chip pending">Pending</span> &nbsp;Step 5 — Verify (structural + dogfood)</summary>
+    <div class="body">
+      <p>No VM — verification is structural + dogfood: the acceptance-rule <code>rg</code>
+      readback (Step 2), the symlink-ripple check (Step 3), an <b>audit-touchpoint dogfood</b>
+      (run the new pass on a real VM-bound vista_bench/vista-eval plan — confirms it selects
+      archetypes, proposes a <code>Handoff phasing</code> decomposition, surfaces an envelope,
+      and does NOT just re-emit the old lens findings), and a <b>generative-touchpoint
+      dogfood</b> (start from a thin VM-bound plan and draft its phasing schema + envelope).</p>
+      <div class="files">Files: none (verification only)</div>
+      <div class="gate">Verify: label <code>Handoff phasing</code> identical everywhere; audit output is one distinct section, not a duplicate of the design review.</div>
+      <textarea class="section-feedback" data-section="step-5" placeholder="Comments on Step 5..."></textarea>
+    </div>
+  </details>
+
+  <h2>Gotchas</h2>
+
+  <details data-section="gotcha-lens">
+    <summary>Lens duplication is the failure mode if Step 2 is skipped</summary>
+    <div class="body">The plan preaches "point at canonical, don't duplicate," but
+      <code>review-plan.md</code> already owns the archetype/behavioral content inline. If the
+      migration is skipped, you stand up a second review surface owning the same archetypes with
+      subtly different wording — the exact drift the plan exists to prevent. The
+      <code>rg</code> readback is the teeth.
+      <textarea class="section-feedback" data-section="gotcha-lens" placeholder="Comments..."></textarea>
+    </div>
+  </details>
+
+  <details data-section="gotcha-symlink">
+    <summary>claude_ops.md edits ripple to every repo (symlink)</summary>
+    <div class="body">Every VISTA repo's <code>docs/claude_ops.md</code> is a symlink to
+      <code>research-skills/claude_ops.md</code>. The <code>Handoff phasing</code> bullet is a
+      change to the shared operating standard — blast radius is all ~50 repos. Keep the addition
+      backward-compatible (a new optional bullet), and verify the symlink still resolves.
+      <textarea class="section-feedback" data-section="gotcha-symlink" placeholder="Comments..."></textarea>
+    </div>
+  </details>
+
+  <details data-section="gotcha-autoinvoke">
+    <summary>Auto-run is intended — and fine, because /review-plan is basically always run</summary>
+    <div class="body">The audit pass "auto-runs" only as a <i>component</i> of a review the user
+      already opted into — the outer <code>/review-plan</code> is still offered, never
+      auto-invoked. And since <code>/review-plan</code> is run on essentially every non-trivial
+      plan, auto-running the verification component is a <b>feature</b>, not a loss of control
+      (resolved 2026-07-08). The complex-tier separate reviewer invocation is authorized by the
+      same initial reviewer choice and runs <b>silent</b> (OQ1 resolved).
+      <textarea class="section-feedback" data-section="gotcha-autoinvoke" placeholder="Comments..."></textarea>
+    </div>
+  </details>
+
+  <details data-section="gotcha-ownership">
+    <summary>Don't double-own vm-handoff's operational mechanics</summary>
+    <div class="body">The canonical spec owns <i>plan-time strategy selection</i> only. Rendering,
+      the tiered sign-off gate, Expected/Stop enforcement, the class-1/2/3 deviation taxonomy,
+      and supersede mechanics stay owned by <code>vm-handoff.md</code> — the spec points at them
+      rather than restating them.
+      <textarea class="section-feedback" data-section="gotcha-ownership" placeholder="Comments..."></textarea>
+    </div>
+  </details>
+
+  <h2>Open questions</h2>
+  <div id="oq-panel"></div>
+
+</div>
+
+<div class="fbbar">
+  <textarea id="overall-fb" placeholder="Overall feedback on the plan..."></textarea>
+  <button id="copy-fb">Copy feedback</button>
+</div>
+
+<script>
+const PLAN_STEM = "verification-and-handoff-design-agent";
+const PLAN_SHA = document.querySelector('meta[name="plan-sha256"]').content;
+const LS = (id) => `${PLAN_STEM}::${id}`;
+
+// Open questions data
+const OQS = [
+  { n:1, title:"Audit-pass reviewer (RESOLVED)", def:"Pending",
+    text:"Reuse the reviewer the user already chose — no re-ask. Simple: a distinct section in that reviewer's pass. Complex: a separate focused invocation authorized by the same initial choice. Residual RESOLVED: the complex-tier second run is silent — no notice." },
+  { n:2, title:"Generative step: subagent vs inline (RESOLVED via classifier)", def:"Pending",
+    text:"Inline for simple; spawn the subagent for complex (classifier draws the line: cross-repo SHA / more than one phase / class-2 gates / bank-unbank / destructive writes / multi-target). Confirm the thresholds match your intent." },
+  { n:3, title:"Is Handoff phasing required for every VM-bound plan? (RESOLVED)", def:"Pending",
+    text:"Complex-tier only — a simple single-phase handoff states its one phase inline rather than filling the schema. Confirmed." },
+  { n:4, title:"Thin invocable /design-verification skill", def:"Pending",
+    text:"Defer, with a concrete revisit trigger: add it after (a) one dogfood where you ask for the generative pass by name, or (b) two plans that need complex phasing. Until then it stays claude_ops.md planning guidance." },
+];
+
+// Responses to review questions (co-located answers). Empty for now.
+const OQRESP = {};
+
+// Invalidate saved feedback if the plan SHA changed (HTML regenerated).
+(function migrate(){
+  const prev = localStorage.getItem(LS("__sha"));
+  if (prev && prev !== PLAN_SHA) {
+    Object.keys(localStorage).filter(k => k.startsWith(PLAN_STEM + "::")).forEach(k => localStorage.removeItem(k));
+  }
+  localStorage.setItem(LS("__sha"), PLAN_SHA);
+})();
+
+// Render OQ panel
+(function renderOQ(){
+  const host = document.getElementById("oq-panel");
+  OQS.forEach(oq => {
+    const id = "OQ" + oq.n;
+    const div = document.createElement("div");
+    div.className = "card oq";
+    div.innerHTML =
+      `<h3>OQ${oq.n} — ${oq.title}</h3>` +
+      `<label class="small muted">Status: </label>` +
+      `<select data-section="${id}-status">` +
+        `<option>Pending</option><option>Resolved</option><option>Deferred</option>` +
+      `</select>` +
+      `<p class="q">${oq.text}</p>` +
+      (OQRESP[oq.n] ? `<div class="resp"><span class="lbl">Claude</span>${OQRESP[oq.n]}</div>` : ``) +
+      `<textarea class="section-feedback" data-section="${id}" placeholder="Notes on OQ${oq.n}..."></textarea>`;
+    host.appendChild(div);
+  });
+})();
+
+// Persist + restore all textareas and selects
+function wirePersistence(){
+  document.querySelectorAll("textarea[data-section], select[data-section], #overall-fb").forEach(el => {
+    const id = el.id === "overall-fb" ? "overall" : el.getAttribute("data-section");
+    const saved = localStorage.getItem(LS(id));
+    if (saved !== null) el.value = saved;
+    el.addEventListener("input", () => { localStorage.setItem(LS(id), el.value); updateBadge(); });
+    el.addEventListener("change", () => { localStorage.setItem(LS(id), el.value); updateBadge(); });
+  });
+}
+
+function pendingCount(){
+  let n = 0;
+  document.querySelectorAll("textarea[data-section], #overall-fb").forEach(t => { if (t.value.trim()) n++; });
+  document.querySelectorAll("select[data-section]").forEach(s => { if (s.value !== "Pending") n++; });
+  return n;
+}
+function updateBadge(){
+  const n = pendingCount();
+  document.getElementById("copy-fb").textContent = n ? `Copy feedback (${n})` : "Copy feedback";
+}
+
+document.getElementById("copy-fb").addEventListener("click", async () => {
+  let out = `# Feedback on ${PLAN_STEM}\n(HTML SHA ${PLAN_SHA.slice(0,12)})\n`;
+  document.querySelectorAll("details[data-section]").forEach(d => {
+    const id = d.getAttribute("data-section");
+    const t = d.querySelector("textarea[data-section]");
+    if (t && t.value.trim()) out += `\n## ${id}\n${t.value.trim()}\n`;
+  });
+  OQS.forEach(oq => {
+    const id = "OQ" + oq.n;
+    const status = (document.querySelector(`select[data-section="${id}-status"]`)||{}).value || "Pending";
+    const note = (document.querySelector(`textarea[data-section="${id}"]`)||{}).value || "";
+    if (status !== "Pending" || note.trim()) out += `\n## ${id}\nStatus: ${status}\n${note.trim()}\n`;
+  });
+  const overall = document.getElementById("overall-fb").value.trim();
+  if (overall) out += `\n## Overall\n${overall}\n`;
+  try { await navigator.clipboard.writeText(out); flash("Feedback copied to clipboard"); }
+  catch { flash("Copy failed — select the text manually"); console.log(out); }
+});
+
+function flash(msg){
+  const b = document.getElementById("copy-fb");
+  const old = b.textContent; b.textContent = msg;
+  setTimeout(() => { b.textContent = old; updateBadge(); }, 1600);
+}
+
+// Mermaid + pan/zoom
+const dark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+mermaid.initialize({ startOnLoad:false, theme: dark ? "dark" : "default", flowchart:{ useMaxWidth:false } });
+
+const panzoom = {};
+async function renderDiagrams(){
+  await mermaid.run({ querySelector:"pre.mermaid" });
+  document.querySelectorAll(".diagram-wrap").forEach(wrap => {
+    const svg = wrap.querySelector("svg");
+    if (!svg) return;
+    svg.removeAttribute("style");
+    svg.style.width = "100%"; svg.style.height = "100%";
+    const inst = svgPanZoom(svg, { zoomEnabled:true, controlIconsEnabled:false, fit:true, center:true,
+      minZoom:0.3, maxZoom:8, zoomScaleSensitivity:0.35 });
+    panzoom[wrap.dataset.diagram] = inst;
+    wrap.querySelector('[data-act="reset"]').addEventListener("click", () => { inst.resize(); inst.fit(); inst.center(); });
+    wrap.querySelector('[data-act="full"]').addEventListener("click", () => toggleFull(wrap, inst));
+  });
+}
+function toggleFull(wrap, inst){
+  wrap.classList.toggle("full");
+  setTimeout(() => { inst.resize(); inst.fit(); inst.center(); }, 60);
+}
+document.addEventListener("keydown", e => {
+  if (e.key === "Escape") document.querySelectorAll(".diagram-wrap.full").forEach(w => {
+    w.classList.remove("full");
+    const inst = panzoom[w.dataset.diagram];
+    if (inst) setTimeout(() => { inst.resize(); inst.fit(); inst.center(); }, 60);
+  });
+});
+window.addEventListener("resize", () => {
+  Object.values(panzoom).forEach(inst => { inst.resize(); inst.fit(); inst.center(); });
+});
+
+wirePersistence();
+updateBadge();
+renderDiagrams();
+</script>
+</body>
+</html>

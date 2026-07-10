@@ -137,8 +137,8 @@ The number of handoffs is a design decision, not an accident. Minimize expensive
   (materialize to a scratch / temp target before publishing), so a failure costs the least.
 - **Bundle all checks that share one checkout / SHA into one handoff.** One handoff per
   code-change increment. Split out only: checks that need *new data* not yet available, checks
-  that need a *different machine* (CPU vs GPU → a partial gate), or checks *gated on a decision*
-  that hasn't resolved.
+  that need a *different executor class* (a machine boundary is a phase boundary — see §4), or
+  checks *gated on a decision* that hasn't resolved.
 - **Pre-encode every foreseeable fork as a class-2 decision gate** the executor resolves inline
   ("if X → A, else B; record which"). More gates = fewer round-trips. Reserve round-trips
   (class-3) for genuine plan-premise violations.
@@ -167,10 +167,48 @@ The number of handoffs is a design decision, not an accident. Minimize expensive
 
 ---
 
-## 4. The Handoff phasing schema
+## 4. Which machine — the executor-fleet taxonomy
+
+The "executor VM" is not one box — it's a small fleet of **capability classes**, and *which*
+class a check runs on is a verification-design decision the plan should state, not a runtime
+accident. A machine boundary is a **phase boundary** (§3): route each check to the class that
+fits its workload, and when a check's run-machine differs from where its readback happens, split
+the phase so the boundary is explicit.
+
+Three classes (routed by capability, not by hostname):
+
+- **Claude-Code CPU** — a standard-CPU executor with Claude Code installed plus the repo's data
+  mounts + credentials. The **default** executor and the interactive one: smoke tests, structural
+  readback, BigQuery / OMOP queries, moderate aggregator and eval runs. It is the **only** class
+  that can run `/vm-handoff`'s readback itself (the readback append is Claude-driven), so every
+  handoff whose results are read back by Claude lands here.
+- **High-throughput CPU** — a many-core executor **without** Claude Code, provisioned for
+  embarrassingly-parallel CPU throughput: large-scale preprocessing (sharded download / convert /
+  manifest), linear-probe / KNN parallelization across many tasks, batch jobs that saturate cores.
+  The *run* is launched here (by a human or a script); the `/vm-handoff` readback is **not** — it
+  happens on the Claude-Code CPU box (or the Mac reads the results / logs), because this class has
+  no Claude Code.
+- **GPU** — an accelerator executor for model **training**, **embedding generation**, and
+  GPU-only tests. Same Claude-Code-absent posture as high-throughput CPU: the compute runs here,
+  the readback happens on the Claude-Code CPU box (or the Mac reads results).
+
+**Run-machine ≠ readback-machine.** For the two non-Claude-Code classes, the box that runs the
+compute is not the box that runs the readback. State both in the plan and render both in the
+handoff — *"run Step N on the GPU / high-throughput-CPU box; read results back on the Claude-Code
+CPU executor"* — and treat the machine switch as its own phase so the split is designed, not
+assumed.
+
+**Concrete class → host binding is repo-local.** This spec names *capability classes*, not
+machines; the actual hostnames (and which repo's data each mounts) live in the repo's machine
+posture — its `CLAUDE.md` / machine registry, per `claude_ops.md` Machine-Aware Operating Mode —
+keeping specific host identifiers out of this shared spec.
+
+---
+
+## 5. The Handoff phasing schema
 
 The batching decision above is recorded in the plan's *Verification & VM handoff* section as
-a **Handoff phasing** sub-block (a fifth item after `Anticipated forks`, per `claude_ops.md`'s
+a **Handoff phasing** sub-block (the final item after `Anticipated forks`, per `claude_ops.md`'s
 Plan Document Structure). It is a compact **per-phase schema**, not free prose, so
 `/plan-handoff-readiness` can check its fields. Required for **complex-tier** plans (per the
 classifier); a **simple** single-phase handoff states its one phase inline.
@@ -178,6 +216,8 @@ classifier); a **simple** single-phase handoff states its one phase inline.
 ```
 Phase N — <name>
   · purpose               what this phase proves
+  · machine               which executor class runs it (Claude-Code CPU / high-throughput CPU /
+                          GPU); name the readback machine too when it differs (§4)
   · banked-from-prior     which prior steps / SHA carry forward and are NOT re-run
   · gates                 the class-2 forks the executor resolves inline (if X -> A, else B)
   · destructive?          any irreversible write in this phase (STOP before it)
@@ -195,13 +235,14 @@ does not invent the phasing — it reads it from here.
   chosen reviewer's pass. The single phase is stated inline; no separate schema required.
 - **Complex** = **any** of { cross-repo SHA ripple; more than one handoff phase; class-2
   decision gates; bank / un-bank logic; destructive or irreversible writes; multi-target
-  bundling }. → Generative: spawn a dedicated verification-design subagent (keeps the main
+  bundling; more than one executor class (§4), which forces a run-vs-readback split }. →
+  Generative: spawn a dedicated verification-design subagent (keeps the main
   planning context lean). Audit: a separate focused reviewer invocation, authorized by the
   reviewer choice already made for the design review (runs **silent** — no second prompt).
 
 ---
 
-## 5. Defer to the per-repo checklist
+## 6. Defer to the per-repo checklist
 
 Each repo's `.claude/references/plan-review-checklist.md` holds the concrete, repo-specific
 recipes this spec deliberately does not: exact queries / scripts, table and dataset-version

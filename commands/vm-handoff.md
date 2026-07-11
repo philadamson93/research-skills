@@ -105,6 +105,33 @@ before the throughput run. (See *Non-Claude-Code full run — render an operator
 
 ---
 
+## Finding a handoff — the locator (both directions)
+
+A handoff's doc **and** its `next.md` pointer usually live on the **unmerged feature branch** the
+work sits on — *not* on `main`. So a receiver who surveys a stale `main` checkout, or runs
+`git log --all` / `git ls-files` **before fetching**, finds nothing and wrongly concludes the
+handoff was never authored — the branch it lives on was simply never fetched. This is the most
+common handoff-*finding* failure (the handoff itself is fine); head it off by **printing where the
+artifact lives in every relay, both directions**:
+
+- **Lead with a locator line.** Every handoff artifact (the doc header) and every relay message
+  (the author→VM hand-off, the VM→Mac readback) opens with the coordinates, so the receiver can
+  reach the artifact *before* they have it:
+  `REPO <repo> · BRANCH <branch> (unmerged — fetch first) [or WORKTREE <path>] · DOC docs/vm-status/<name>.md · SHA <sha | set-at-commit>`.
+- **Fetch before you survey.** A receiver looking for a handoff runs `git fetch origin` first, then
+  checks out the named branch (or `git worktree add`s it), and reads the artifact there. A branch
+  that was never fetched is invisible to `git log --all` / `git ls-files`, so "not found" on a
+  stale tree means *fetch + check the named branch*, not *it was never authored*.
+- **Name the repo explicitly.** Cross-repo handoffs (producer in one repo, consumer + handoff doc
+  in another) make "which repo" ambiguous — state it, so the receiver searches the right tree
+  rather than the sibling.
+- **The pointer is branch-local too.** The `next.md` pointer is committed on the *same* unmerged
+  branch as the doc, so a receiver on `main` won't see the pointer either — which is why the
+  locator travels in the **relay message** that crosses the machine boundary, not only inside the
+  branch. Once the branch merges to `main`, both become visible the ordinary way.
+
+---
+
 ## Author mode (planner Mac)
 
 ### Phase A1 — Confirm this handoff is warranted
@@ -175,6 +202,7 @@ Reference: docs/claude_ops.md
 
 **Status: Handoff to VM** (<date>)
 **Branch:** `<branch>` (<pinned SHA, or "commit+push first, SHA set at commit time">)
+**Locator:** REPO `<repo>` · BRANCH `<branch>` — **unmerged; `git fetch` first** (or WORKTREE `<path>`) · this doc `docs/vm-status/<name>.md`. Reach it: `git fetch origin && git checkout <branch> && git pull` (shared / dirty checkout → `git worktree add ../<repo>-<slug> <branch>`). <— the coordinates a receiver needs to find this doc *and* the code before they have either (see *Finding a handoff*).
 **Machine posture:** authored on the planner Mac (no runtime). Everything below has **never executed** — run it on the **<executor class>** box (`<vm-host>`, holds <data it needs>). <If that class has no Claude Code: "Run there; read results back on the Claude-Code CPU box `<readback-host>`.">
 **Target machine:** <executor class per step/phase — e.g. "Steps 0–2 Claude-Code CPU; Step 3 GPU (train), readback on Claude-Code CPU"> <— from the plan's Target machine field
 **Plans:** [`<plan-stem>.md`](../plans/<plan-stem>.md#verification--vm-handoff) <— criteria source of truth
@@ -282,6 +310,11 @@ Revise → edit and re-surface. Approve → Phase A4.
   else `NEXT.md` — same precedence as `/next`; create `docs/next.md` if none exists):
   `- VM smoke pending: [docs/vm-status/<date>-<sha>.md](...) — <one-line what>`. Pointer in
   the tracking doc; substance in the handoff doc (pointer-style discipline, like `/wrapup`).
+- **Carry the locator in the relay, not only the doc.** The pointer *and* the handoff doc both sit
+  on the unmerged branch (see *Finding a handoff*), so whatever crosses to the VM — the
+  `AskUserQuestion` hand-off, the message you relay — states `REPO · BRANCH (fetch first) · DOC path`
+  explicitly, so the executor lands on the branch and finds the doc instead of surveying `main` and
+  reporting "missing."
 - Then **offer the next step** via `AskUserQuestion`: run `/commit-review` now, or stop
   here. This is the **single** commit-review for the whole change: because the handoff doc
   was authored while the implementation is *still uncommitted* (`/review-implementation` ·
@@ -307,7 +340,7 @@ Under the doc's `## VM run results` heading (create it if the doc predates this 
 lacks one), append a stamped section:
 
 ```markdown
-## VM run results — readback on `<hostname>`, <date>, ran at `<sha>`
+## VM run results — readback on `<hostname>`, <date> · REPO `<repo>` · BRANCH `<branch>` @ `<sha>` (pushed to `origin/<branch>`)
 <When compute ran on a different (no-Claude-Code) box, name it too: "compute on `<gpu/ht-cpu-host>`, readback on `<claude-code-cpu-host>`" — so a split run's two machines are both on the record.>
 - **Step 0:** ✅ checked out `<sha>`, sync clean.
 - **Step 1:** ✅ / ❌ <outcome vs the Expected block; if ❌, the traceback or failing eyeball>

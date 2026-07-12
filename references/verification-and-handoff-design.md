@@ -219,6 +219,20 @@ Claude-interpreted steps:
   parquets / logs) for readback. `/vm-handoff` renders these as an operator run-block that *points
   at* the script, rather than the per-step Expected/Stop it renders for a Claude-Code box.
 
+**Self-provision regenerable inputs — don't inherit a prior run's scratch.** *One command
+and no Claude* also covers the step's **inputs**, not just its env. When a step consumes a
+producer artifact from an earlier phase (a localization CSV, a manifest, a cached embedding),
+decide its provenance deliberately: a **durable** artifact (committed, or on a persistent
+mount) is referenced by path; an **ephemeral** one — a smoke run's `/tmp` scratch, often
+correctly short-lived because it carries PHI-adjacent content — will not survive across runs
+or across the machine boundary, so the consuming runner regenerates it on demand rather than
+assume it is still there. Shape it as: input path provided → use it; unset / absent →
+self-provision a minimal N-row copy (kept ephemeral when PHI-adjacent); the underlying mount /
+producer genuinely missing → fail-fast with the exact command to produce it. *Real cost of
+not doing this:* a GPU runner that hard-required the path a small verification smoke had left
+in `/tmp` failed at its precondition when the next operator ran it a day later on a swept
+`/tmp` — a self-provisioning fallback would have kept it the intended one command.
+
 **Default shape — phase the Claude judgment ahead of the throughput run.** The judgment-heavy,
 correctness-critical gates (a modality-aware join that could silently zero-merge, a before/after
 parity check, the metric-sanity floor) run as a *small* Claude-driven smoke on the Claude-Code CPU

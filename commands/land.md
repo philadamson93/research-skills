@@ -32,6 +32,8 @@ Same discipline as `/next` Phase 0, scoped to **this repo**:
 
 Gate the branch against the conditions that make a merge premature. Surface any that fail; do not merge past a red.
 
+**Follow the plan's *Landing & cleanup* section if it has one** (per `claude_ops.md` → Plan Document Structure): it states the intended branch, landing gate, and — for multi-branch work — the merge sequence, all reviewed *with* the plan. `/land` follows that design; surface any drift from it rather than silently re-deriving the merge order in Phase 2.
+
 - **Behind main?** `git -C <wt> rev-list --left-right --count origin/main...<branch>`. If the branch is behind `origin/main`, a clean ff is impossible — it needs `origin/main` merged/rebased in first. Surface the behind-count and the choice (rebase vs merge-main-in); don't force it.
 - **Green-gate freshness — has main moved under the branch?** The branch's VM gate proves the tree that was *tested*; that equals the tree landing on main only when main hasn't advanced past the branch's merge-base. Read it off the **same left-right count** above — the trigger is identical to "Behind main?", but the concern is semantic (does the green run still describe the post-merge tree?), not textual (does the ff apply?):
   - **main-ahead == 0** → a clean ff, so the branch's existing green run already covers the exact tree that becomes main. Say so and re-verify nothing — this is the trivial path, keep it unblocked.

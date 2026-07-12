@@ -168,10 +168,26 @@ later at handoff time:
 handoff doc and tracks the VM's results back into it. It should be **deriving** the
 criteria from this section, not authoring fresh ones — if this section is thin, the plan
 isn't handoff-ready (see `/review-plan`'s handoff-readiness lens).
+
+## Landing & cleanup
+How this work reaches `main` and how its branch is retired — planned here so the merge and
+the branch-deletion are *designed*, not improvised at the end. `/land` executes this: it
+should be **following** this section, not inventing the sequence.
+- **Branch** — the feature branch this lands on (`feat/…`), or "direct on main" for doc-only /
+  minor-fix work (per Git Practices → Feature Branching).
+- **Landing gate** — what must hold before `/land` merges: review sign-off (`/read-plan`),
+  VM gate green, PHI-vetted. Name any sibling branch that must land first.
+- **Merge sequence** — *single-branch plan:* one line ("`/land` at end → main, prune branch +
+  worktree"). *Multi-branch / phased plan:* the order branches hit `main` and which rebases
+  which (foundational/smaller first; big rename/refactor last, unless it's a prerequisite).
+- **Cleanup on land** — `/land` Phase 4 prunes the branch (local + remote) + worktree, marks
+  the plan `Status: Completed`, prunes the `next.md` / in-flight entries. Name anything extra
+  to retire (scratch dirs, temp tables, parallel-branch notes owed to siblings).
 ```
 
 ### After Completing a Plan
 
+- **Land the branch via `/land`** (branch-based work) — merge to `main` and prune the branch + worktree + `next.md` / in-flight entries, following the plan's *Landing & cleanup* section. Don't merge or delete branches ad hoc — `/land` is the mechanism, and its Phase 4 performs the three updates below; for doc-only / direct-on-main work (no branch to land) do them inline.
 - **Update all affected documentation** when a plan is implemented. Fix stale paths, CLI examples, import references, and cross-links in `docs/`.
 - **Mark plan docs as completed** by adding `**Status: Completed** (date)` at the top.
 - **Update the plans README** (`docs/plans/README.md`) feature table with the new status.

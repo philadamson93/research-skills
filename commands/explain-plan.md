@@ -39,6 +39,8 @@ The HTML embeds:
 10. **Feedback sidebar / footer** — a global `<textarea>` plus a single button `Copy all feedback as Claude prompt`. JS gathers all per-section textareas, OQ statuses, and the global box; formats them as a markdown prompt — **prefixed with a resume header** so a *fresh* session that receives the paste can bootstrap itself (plan path + branch + `plan-sha`, plus a one-line read-the-plan instruction; exact format in *Feedback ingestion* below) — then copies to clipboard. **Persist all textarea values to `localStorage` keyed by plan-stem + section-id** — first user complaint after using the HTML is invariably "I refreshed and lost everything." Restore on page load; clear when the plan SHA changes (the HTML has been regenerated, old feedback is stale). Show a small pending-count badge on the button (e.g., "Copy feedback (3 pending)") so the user can see they have unsubmitted notes before navigating away.
 11. **Node drill-down panel (OPTIONAL — opt-in per generation; default OFF)** — Mermaid nodes that represent *changing* entities (kind `added` / `modified` / `deferred`) become drillable via double-click; `untouched` / `external` nodes are not drillable (the cursor stays default, so the pointer affordance itself encodes "this box is where the change lives"). Authors can opt in an unchanged-but-load-bearing node with `forceDrillable: true`. Dblclick opens a side panel with kind chip + plan-anchor jump chips (cheap, embedded) plus a **"Generate detail" button**. The button POSTs the drill prompt to a local relay (`research-skills/relay/explain-plan-relay.py`, default `http://127.0.0.1:7237`) that wraps `claude -p`; the markdown response is rendered inline in the panel and cached to `localStorage[\`drill::${planSha}::${nodeId}\`]`. **If the relay isn't running, the button falls back gracefully to clipboard** (copies the prompt, toast tells the reader how to start the relay). **Detail is generated on-the-fly per node the reader inspects — NOT precomputed at HTML-generation time.** See `## Node drill-down (double-click)` below for the contract, prompt template, and relay wiring. **Generation cost (why this is opt-in):** drill-down adds noticeable time and token spend at HTML-generation. Claude has to hand-author a `nodeManifest` entry (label + kind + plan-anchors) for every drillable diagram node — typically 20–40 entries cross-referenced against the plan's `data-section` IDs, plus three additional verification classes (ORPHAN_NODE, ORPHAN_MANIFEST, BROKEN_ANCHOR). Expect roughly an extra 1–3 minutes and a few hundred lines of generated JS. **When generating, ALWAYS surface this trade-off before turning drill-down on** — via `AskUserQuestion` with the cost stated plainly ("Drill-down adds ~1–3 min of generation time and per-node Claude round-trips when the reader inspects a node — include it?"). Default the recommendation to OFF unless the user explicitly requested drill-down (e.g., `/explain-plan <path> --drill`, "include drill-down", "make the nodes clickable"), or the plan is genuinely large (≥ 3 diagrams AND ≥ 25 distinct drillable nodes), in which case lean ON. When turning drill-down ON, **mention the relay in the hand-off message**: "Drill-down is wired to the relay at `RELAY_URL` — run `python research-skills/relay/explain-plan-relay.py` in a spare terminal before double-clicking nodes, or the panel will fall back to clipboard."
 
+12. **Change-since-last-review layer (default ON when a baseline exists)** — plans are reviewed *iteratively*, and on a re-generation most of the plan is unchanged; re-reading the whole HTML to find the handful of edits is the friction this removes. The layer calls out *what changed since the last review* inline — a summary card up top, `✦ new` / `● changed` chips on each touched section (auto-expanded, with a one-line "what changed" note at the top of the section body), **unchanged sections receded** (dimmed) so the eye tracks deltas while scrolling, and a sticky toolbar with change counts, a Show-changed-only toggle, and Next / Prev-change navigation. On a genuine first pass it degrades to a one-line "first review" banner. The full contract — baseline resolution, section-level attribution, the honesty rules, the `CHANGES` data model, and the verification classes — lives in `## Change-since-last-review layer` below.
+
 ### Optional sections (case-by-case)
 
 - **Before/after diagrams** — include ONLY when the change reshapes data flow (e.g., a refactor that moves a query layer between repos, an API migration where the call graph changes, an architectural extraction). SKIP for mechanical token substitutions (e.g., "regex literal → Jinja variable in 3 templates") — two near-identical diagrams differing only in node labels have low signal density. The behavioral diff in those cases lives in the verification step's diff queries (Step 6 EXCEPT-DISTINCT, etc.), not in a static visual. When in doubt, ask the user via AskUserQuestion.
@@ -301,6 +303,61 @@ Add to the verification pass:
 - **`BROKEN_ANCHOR`**: a `planAnchors` value doesn't match any `data-section` ID in the HTML. The chip would scroll to nothing.
 - **`MISLABELED_KIND`**: a node labeled `untouched` / `external` is reachable from a step the plan says is `SHIPPED` or `PENDING` and likely modifies it (and vice-versa: a node labeled `modified` that the plan never mentions in any change-bearing step). Catches "author forgot to update the kind after the plan changed scope." Borderline calls are fine — only flag clear mismatches.
 
+## Change-since-last-review layer
+
+Plans are reviewed **iteratively** — the reader has usually seen a prior version, and on a re-generation most of the plan is unchanged. Re-reading the whole HTML to re-find the handful of edits is exactly the friction this layer removes: it calls out *what changed since the last review* inline, so the reader scrolls to the deltas and skims past the settled parts. Default **ON** whenever a baseline is resolvable (below); on a genuine first pass it degrades to a one-line "first review" banner that says the layer activates next round.
+
+### Resolve the baseline (what "since last review" means)
+
+Pick the first that applies:
+
+1. **Explicit override** — `/explain-plan <path> --since <ref-or-sha>` names the baseline directly.
+2. **Recorded last-reviewed anchor** — the plan SHA (or commit) stamped at the *previous* approval (see *Completion*). This is the truest "since you last reviewed," and it differs from "since last generated" when the HTML was regenerated several times between the reader's reads — prefer it.
+3. **Prior generated HTML / git HEAD** — diff the current plan against the version recorded by the prior HTML, or against `git show HEAD:<path>` when the plan is committed. The good default for the common "review round N committed → feedback applied → regenerate" loop (working tree vs HEAD is exactly that round's deltas).
+4. **Review-reconstructed** — no diffable prior version exists (e.g. the reviewed plan landed in a single commit), but the plan just went through review passes. Reconstruct the delta from the review artifacts (`docs/plans/reviews/<stem>-*.md` + the review-history table), attributing each change to its pass. Label the baseline honestly as *reconstructed from the review passes*, not a git diff.
+5. **First pass** — none of the above resolves. Render the "first review" banner; the layer lights up on the next iteration.
+
+### Compute the delta at section granularity
+
+Parse both versions into sections (H2/H3, each step, each gotcha, each OQ, each Files-to-Modify row) and classify each `new` / `changed` / `unchanged` / `removed` by comparing normalized text. For every `new`/`changed` node, **author a one-line "what changed" note** — the human-readable *why it matters* ("scope flipped to recompute-fresh", "OQ7 resolved in scope", "added the embedding-fingerprint decision-gate"). The authored note is the high-signal element; a raw word-diff is noisy and usually not worth rendering. If a section genuinely needs the exact text delta, embed old/new and render it behind a per-section toggle — case-by-case, not the default.
+
+**Honesty rules — the highest-priority correctness bar for this layer** (a padded or wrong change list is worse than none, because the reader *trusts it to decide what to skip*):
+
+- Mark a section `unchanged` only when the baseline actually confirms it. On the review-reconstructed path, flag only the sections the review artifacts demonstrably touched and leave the rest **neutral**, rather than asserting an "unchanged" you can't prove.
+- Attribute each delta to its source (which review pass, which decision doc) when known — it tells the reader *why* it moved.
+- Author a delta only where the baseline diff or the review artifacts support it. Never invent one to make the layer look busy.
+
+### `CHANGES` data model (embed at generation time)
+
+A small JS object the render logic consumes — the only per-plan authored artifact. Keys match the `data-section` ids on the `<details>` and the OQ `#oq-N` ids:
+
+```js
+const CHANGES = {
+  round: "diff",                 // "diff" | "review-reconstructed" | "first"
+  baseline: "…one line naming the baseline the reader is being diffed against…",
+  sections: {                    // one entry per touched section, keyed by data-section id
+    "track-c": { s: "new",     note: "…one line, attributed…" },
+    "b4":      { s: "changed", note: "…" }
+  },
+  oqs: { 7: { s: "resolved", note: "…" }, 12: { s: "new", note: "…" } }
+};
+// round:"first" needs only { round, firstPassNote }.
+```
+
+Keep it thin — status + one-line note per touched node, nothing more. Sections absent from the object are treated as not-flagged (neutral, receded), never asserted unchanged. The render logic: stamp chips + inline notes, auto-open changed `<details>`, add `.recede` to the rest, build the summary card from the object, and wire the toolbar (counts, `body.changes-only` toggle that hides `details:not([data-changed])`, and Next/Prev over `[data-changed]` in document order).
+
+### Verification additions
+
+Fold these into the verification pass:
+
+- **UNVERIFIED_UNCHANGED** — a section is counted/styled `unchanged` on a path where the baseline can't confirm it. Downgrade to neutral.
+- **ORPHAN_CHANGE** — a `CHANGES.sections` / `CHANGES.oqs` key has no matching `data-section` / `#oq-N` in the HTML. Fix the key or drop the entry.
+- **UNSOURCED_DELTA** — a `new`/`changed` note asserts a change with no support in the baseline diff or the review artifacts. Re-check or remove it.
+
+### SHA / drift discipline
+
+The change layer is **annotation, not plan content** — like the `.resp` response callouts, adding or refreshing it does **not** bump `plan-sha256` when the source `.md` is unchanged. That keeps the HTML in-sync for the *Completion* gate and preserves the reader's localStorage feedback (which wipes on a SHA change). Only a genuine plan edit re-bumps the SHA — at which point the layer's baseline advances too.
+
 ## Inputs
 
 - **Required**: path to plan doc (markdown). Resolve from the skill argument or, if absent, from the most-recently-referenced plan in conversation; fail with a clear message if neither is available.
@@ -410,7 +467,8 @@ When a feedback round is **non-trivial** — the user asks several questions at 
    - Response-callout-only annotations deliberately leave the SHA untouched (see *SHA / drift discipline*), so an HTML carrying only `.resp` callouts is still in-sync and may promote.
 2. **Confirm the plan is settled** — no unaddressed feedback, no open questions left dangling. If something is open, surface it once before closing out: "Before I mark this Reviewed — OQ2 is still Pending. Resolve or defer?"
 3. **Mark the plan as Reviewed.** If the project has a plan-tracking index (`docs/plans/README.md` or equivalent with a `Reviewed` column), update this plan's row to `Reviewed: Yes` — the same step as `/read-plan` Phase 5, just reached via the visual path. Confirm inline: "Marked `<plan>` as Reviewed: Yes in `docs/plans/README.md` (HTML in-sync at `<sha-first-12>`)." If no such index exists, skip silently (don't bootstrap one mid-review — that's `/wrapup`'s job).
-4. Then offer the natural next steps in one line: commit the plan + HTML via `/commit-review`, run `/review-plan` (its handoff-readiness lens checks fresh-agent implementability), or start implementation.
+4. **Stamp the reviewed version as the next baseline.** Record the just-approved plan SHA (or its committing git SHA) as the *last-reviewed anchor* for the change-since-last-review layer — a note on the plans-README row, a small sidecar, or simply relying on the `Reviewed: Yes` commit itself all work. The next `/explain-plan` then diffs against "what you last reviewed," not merely "what was last generated" (baseline resolution step 2). Skip if the project has no place to record it — the layer falls back to git HEAD / prior-HTML.
+5. Then offer the natural next steps in one line: commit the plan + HTML via `/commit-review`, run `/review-plan` (its handoff-readiness lens checks fresh-agent implementability), or start implementation.
 
 Like `/read-plan`, this is gated on an **explicit** approval signal — never infer it from a mid-loop "ok" or the user moving on, and never promote on a drifted HTML.
 
@@ -419,6 +477,7 @@ Like `/read-plan`, this is gated on an **explicit** approval signal — never in
 - Re-running on the same plan: regenerate HTML in place. Diff the old vs new HTML; if structure changed substantively, surface that as a "structure delta" note before handing off.
 - If the source plan's SHA-256 differs from the HTML's embedded SHA, the HTML is stale. Warn the user before they review it.
 - The HTML is meant to be committed alongside plan revisions; regenerate on every substantive plan edit.
+- **A re-run is the moment the change-since-last-review layer earns its keep** — resolve the baseline and author the `CHANGES` object on every regeneration, not just the first (see `## Change-since-last-review layer`). The "structure delta" note above is the coarse version; the change layer is the section-level, reader-facing form of the same idea.
 
 ## Iteration mode
 

@@ -159,6 +159,23 @@ Inline free-text yes/no is the wrong shape here — the answer space is enumerab
 
 Do not auto-commit. Do not run `git commit` inline — always go through `commit-review`, which handles the appropriateness review and project commit conventions in one step.
 
+### Resume block — print last, always
+
+After the commit gate resolves (whether or not you committed), the **final output** is a copy-paste **resume block** — the coordinates Phil pastes into the next session (here or on the VM) to pick the work back up without re-deriving it from git. Print one block per in-flight branch/worktree you touched this session (reuse the Step 6 entries — usually just one). Use the **same locator format as `/vm-handoff`'s *Finding a handoff* section** so both skills speak one language:
+
+```
+Resume ▸ research-skills
+  REPO   research-skills
+  BRANCH feat/foo            (unmerged — git fetch first)   [WORKTREE .claude/worktrees/foo]
+  DOC    docs/plans/foo.md   (plan)  ·  docs/vm-status/2026-07-13-abc.md  (latest handoff, if any)
+  SHA    <pushed short sha | ⚠ UNPUSHED | set-at-commit>
+```
+
+- **BRANCH** — say `main` plainly when that's where it landed; otherwise append `(unmerged — git fetch first)`, and add the `[WORKTREE <path>]` when you're in a non-primary checkout. Both are the coordinates the next session needs to reach the work.
+- **DOC** — the plan doc this session advanced, and/or the latest `docs/vm-status/*.md` handoff if one is in flight. Omit the field that doesn't apply; drop the DOC line entirely for a pure-hygiene session with no doc to resume from.
+- **SHA** — the pushed short SHA, or `⚠ UNPUSHED` / `set-at-commit` per the Step 6 state (so the honesty about what's actually on `origin` carries into the next session).
+- Skip the resume block only for sessions that advanced no branch/worktree (pure doc-tweak or vista-pm-only sessions) — nothing to resume.
+
 ---
 
 For deeper, full-tree doc consolidation (across files you didn't touch this session), use a separate, heavier-scoped skill — that's a different task with different context needs and shouldn't be folded into routine end-of-session wrapup.

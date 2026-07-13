@@ -326,6 +326,10 @@ Revise → edit and re-surface. Approve → Phase A4.
   offer it (per `claude_ops.md` Skill Composition). (`/commit-review` escalates to `/phi-vet`
   in medical-data repos — though on the planner Mac `/phi-vet` is inert per its machine gate,
   so the real PHI scan is the VM readback leg, Phase R2.)
+- **Print the resume block last** — once the `/commit-review` offer resolves (committed, or
+  declined), the final output is the copy-paste **resume block** (see *Resume block* below):
+  the same locator, reprinted at the very end so it's the last thing on screen for Phil to
+  paste into the VM session that runs this handoff.
 
 ---
 
@@ -373,7 +377,40 @@ medical-data repos) to push the results section. On landing, update the `next.md
 status (`VM smoke pending` → `VM smoke PASS <sha>` / `BLOCKED — see doc`). The planner pulls
 and reads the round-trip from one file.
 
+Finally, **print the resume block last** (see *Resume block* below) — the locator reprinted
+as the copy-paste block, as the final output after the `/commit-review` offer resolves, so the
+Mac side can pull and continue from one paste (smoke clean → land / launch full run; a Stop
+fired → re-plan).
+
 ---
+
+## Resume block — print last, after the commit-review offer (both legs)
+
+The last thing `/vm-handoff` prints — in **both** author mode (after Phase A4's commit-review
+offer) and readback mode (after Phase R3's) — is the **locator as a copy-paste resume block**,
+so Phil can paste it straight into the next session (Mac → VM for the author leg, VM → Mac for
+the readback leg) and land on the right branch + doc without re-deriving them. It's the same
+locator already in the doc header (*Finding a handoff*), reprinted at the very end so it's the
+last thing on screen. Same field format as `/wrapup`'s resume block, so both skills speak one
+language:
+
+```
+Resume ▸ <repo>   → <next leg>
+  REPO   <repo>
+  BRANCH <branch>   (unmerged — git fetch first)   [WORKTREE <path>]
+  DOC    docs/vm-status/<date>-<sha>.md
+  SHA    <pinned sha | set-at-commit | ⚠ UNPUSHED>
+```
+
+- **`<next leg>`** — author mode: `run on <executor class> (<vm-host>)` (name the readback box
+  too when the run class has no Claude Code). Readback mode: `pull + read back on the Mac`, or
+  `launch full run on <box>` when the smoke cleared, or `re-plan on the Mac` when a Stop fired.
+- **BRANCH** — append `(unmerged — git fetch first)` (the doc lives on the unmerged branch —
+  see *Finding a handoff*), and the `[WORKTREE <path>]` when a worktree holds it.
+- **DOC** — the `docs/vm-status/<...>.md` this session authored or read back.
+- **SHA** — `set-at-commit` when the offer was declined / still uncommitted, `⚠ UNPUSHED` when
+  committed but not yet pushed, else the pushed short SHA. Print the block even when the user
+  declined the commit-review — with the honest un-landed SHA — so the coordinates travel anyway.
 
 ## Deviation workflow — when a finding contradicts the plan
 

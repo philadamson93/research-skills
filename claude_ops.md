@@ -35,6 +35,7 @@ For repos where the executor / planner split is hostname-dependent (a project VM
 1. **At session start, run `hostname`** to determine which mode applies.
 2. **The repo declares its machine posture** — typically in `CLAUDE.md` or a dedicated registry like `docs/machines.md`. The registry names known hosts and assigns each one Executor or Planner role, plus PHI posture if relevant.
 3. **Executor mode** (a project VM with data, credentials, and a runtime):
+   - **Fetch before you survey or act.** The executor is always downstream of the planner's pushes, so your local refs — **`main` included** — lag `origin` by default. Run `git fetch origin` *before* finding a handoff doc / branch / SHA, checking one out, or concluding "not found" — a ref that was never fetched is invisible to a stale tree, so *fetch first*, don't improvise (see *Session Start → Fetch before you survey*). This is where the stale-checkout trap always fires.
    - Run queries, scripts, and exploration as directed by plan docs.
    - Commit results frequently.
    - **The executor may be a *fleet* of capability classes, not one box** — a Claude-Code CPU box (the default / interactive one), a high-throughput CPU box (bulk preprocessing, parallel linear-probe / KNN), and a GPU box (training, embedding generation). Route each step to the class that fits; only the Claude-Code CPU class can run `/vm-handoff` readback itself, so work on the other two runs there but reads back on the Claude-Code CPU box (or the Mac reads results). The class taxonomy + routing live in the canonical spec, `references/verification-and-handoff-design.md` (§4); concrete class→host bindings are repo-local (below).
@@ -58,6 +59,10 @@ git -C ~/code/research-skills fetch --quiet 2>/dev/null && \
 ```
 
 If the local clone is behind by **any** commits, tell the user how far behind it is, show the unpulled commit subjects, and ask whether to `git -C ~/code/research-skills pull --ff-only` before starting — don't pull unprompted, but don't skip silently either. Mid-session skill-spec drift (a `/wrapup` or `/review-plan` invocation reading a different version than expected) is harder to reason about than a clean pull at the start, and even a single unpulled commit can change a skill's behavior. Only stay silent when the clone is already up to date (0 commits behind) or the path doesn't exist on this machine.
+
+### Fetch before you survey — your local refs lag the other machine
+
+VISTA work is **cross-machine**: the planner Mac pushes (plans, handoff docs, `next.md` pointers, branches, SHAs) and the executor VM consumes them — so a receiver's local refs, **`main` included**, are stale by default. Before you survey git to *find* something another session produced (`git log` / `git ls-files` / a branch-or-file lookup), before you check out a named branch or SHA, and before you conclude *"not found"*, run `git fetch origin` **first**. A commit that was never fetched is invisible to a stale tree, so "can't find the branch / doc / SHA" means *fetch first* — never *it was never authored, so improvise a plausible substitute*. This bites hardest **VM-side** (the executor is always downstream of the Mac's pushes — see *Machine-Aware Operating Mode → Executor mode*); it's the operating-standard root of the resume-block `SYNC` line that `/vm-handoff` and `/wrapup` print. It's orthogonal to the shared-checkout check below: that guards against *local* clobbering, this against *stale remote* refs.
 
 ### Check for parallel work in the same checkout (before you touch anything)
 

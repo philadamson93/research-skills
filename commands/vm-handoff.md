@@ -107,21 +107,27 @@ before the throughput run. (See *Non-Claude-Code full run — render an operator
 
 ## Finding a handoff — the locator (both directions)
 
-A handoff's doc **and** its `next.md` pointer usually live on the **unmerged feature branch** the
-work sits on — *not* on `main`. So a receiver who surveys a stale `main` checkout, or runs
-`git log --all` / `git ls-files` **before fetching**, finds nothing and wrongly concludes the
-handoff was never authored — the branch it lives on was simply never fetched. This is the most
-common handoff-*finding* failure (the handoff itself is fine); head it off by **printing where the
-artifact lives in every relay, both directions**:
+A handoff's doc **and** its `next.md` pointer live wherever the work was committed — often an
+**unmerged feature branch**, but just as often `main`. Either way the receiver's local copy of that
+ref is **stale**: the commit was pushed from another machine, so a receiver who surveys their
+checkout — or runs `git log --all` / `git ls-files` / a file-exists check **before fetching** —
+finds nothing and wrongly concludes the handoff was never authored, when the commit was simply
+never fetched. `main` is **not** the safe case: the VM's local `main` is behind the Mac's
+just-pushed `main` exactly as much as any feature branch. This is the most common handoff-*finding*
+failure (the handoff itself is fine); head it off by **printing where the artifact lives — and the
+one command that syncs to it — in every relay, both directions**:
 
 - **Lead with a locator line.** Every handoff artifact (the doc header) and every relay message
   (the author→VM hand-off, the VM→Mac readback) opens with the coordinates, so the receiver can
   reach the artifact *before* they have it:
-  `REPO <repo> · BRANCH <branch> (unmerged — fetch first) [or WORKTREE <path>] · DOC docs/vm-status/<name>.md · SHA <sha | set-at-commit>`.
-- **Fetch before you survey.** A receiver looking for a handoff runs `git fetch origin` first, then
-  checks out the named branch (or `git worktree add`s it), and reads the artifact there. A branch
-  that was never fetched is invisible to `git log --all` / `git ls-files`, so "not found" on a
-  stale tree means *fetch + check the named branch*, not *it was never authored*.
+  `REPO <repo> · BRANCH <branch> (fetch first — `main` included) [or WORKTREE <path>] · DOC docs/vm-status/<name>.md · SHA <sha | set-at-commit>`.
+- **Fetch before you survey — unconditionally, `main` included.** A receiver looking for a handoff
+  runs `git fetch origin` *first*, then checks out the named branch / SHA (or `git worktree add`s
+  it), and reads the artifact there. A ref that was never fetched is invisible to `git log --all` /
+  `git ls-files` / a file-exists check, so "can't find the branch / doc" on a stale tree means
+  *fetch + check the named ref* — never *it was never authored, so improvise a plausible substitute*.
+  The stale-tree trap is not specific to feature branches: a `<sha>` pushed from another machine is
+  absent from *this* machine's `main` too until it fetches.
 - **Name the repo explicitly.** Cross-repo handoffs (producer in one repo, consumer + handoff doc
   in another) make "which repo" ambiguous — state it, so the receiver searches the right tree
   rather than the sibling.
@@ -202,7 +208,7 @@ Reference: docs/claude_ops.md
 
 **Status: Handoff to VM** (<date>)
 **Branch:** `<branch>` (<pinned SHA, or "commit+push first, SHA set at commit time">)
-**Locator:** REPO `<repo>` · BRANCH `<branch>` — **unmerged; `git fetch` first** (or WORKTREE `<path>`) · this doc `docs/vm-status/<name>.md`. Reach it: `git fetch origin && git checkout <branch> && git pull` (shared / dirty checkout → `git worktree add ../<repo>-<slug> <branch>`). <— the coordinates a receiver needs to find this doc *and* the code before they have either (see *Finding a handoff*).
+**Locator:** REPO `<repo>` · BRANCH `<branch>` — **`git fetch` first** (even on `main`; or WORKTREE `<path>`) · this doc `docs/vm-status/<name>.md`. Reach it: `git fetch origin && git checkout <branch> && git pull --ff-only` (shared / dirty checkout, or non-ff → `git worktree add ../<repo>-<slug> <sha>`). <— the coordinates a receiver needs to find this doc *and* the code before they have either (see *Finding a handoff*).
 **Machine posture:** authored on the planner Mac (no runtime). Everything below has **never executed** — run it on the **<executor class>** box (`<vm-host>`, holds <data it needs>). <If that class has no Claude Code: "Run there; read results back on the Claude-Code CPU box `<readback-host>`.">
 **Target machine:** <executor class per step/phase — e.g. "Steps 0–2 Claude-Code CPU; Step 3 GPU (train), readback on Claude-Code CPU"> <— from the plan's Target machine field
 **Plans:** [`<plan-stem>.md`](../plans/<plan-stem>.md#verification--vm-handoff) <— criteria source of truth
@@ -214,10 +220,11 @@ Reference: docs/claude_ops.md
 ## Step 0 — get the artifacts onto the VM
 ```bash
 cd <repo>
-git checkout <branch> && git pull
+git fetch origin && git checkout <branch> && git pull --ff-only   # fetch FIRST — local <branch> is stale, even on main
+git rev-parse --short HEAD   # must show <sha>; if not, the fetch didn't land the handoff — do not proceed on a stale tree
 uv sync --extra dev
 ```
-**Expected:** clean checkout at the intended SHA; lockfile resolves.
+**Expected:** clean checkout at the intended SHA (`git rev-parse --short HEAD` == `<sha>`); lockfile resolves.
 **STOP:** none — pure setup.
 
 ## Step 1 — <name>   (rendered from the plan's Expected/Stop for this step)
@@ -397,20 +404,31 @@ language:
 ```
 Resume ▸ <repo>   → <next leg>
   REPO   <repo>
-  BRANCH <branch>   (unmerged — git fetch first)   [WORKTREE <path>]
+  BRANCH <branch>   [WORKTREE <path>]
   DOC    docs/vm-status/<date>-<sha>.md
   SHA    <pinned sha | set-at-commit | ⚠ UNPUSHED>
+  SYNC   git fetch origin && git checkout <branch> && git pull --ff-only   # run FIRST, always — local <branch> is stale; DOC+code live in <sha>. verify: git rev-parse --short HEAD → <sha>
 ```
 
 - **`<next leg>`** — author mode: `run on <executor class> (<vm-host>)` (name the readback box
   too when the run class has no Claude Code). Readback mode: `pull + read back on the Mac`, or
   `launch full run on <box>` when the smoke cleared, or `re-plan on the Mac` when a Stop fired.
-- **BRANCH** — append `(unmerged — git fetch first)` (the doc lives on the unmerged branch —
-  see *Finding a handoff*), and the `[WORKTREE <path>]` when a worktree holds it.
+- **BRANCH / WORKTREE** — the branch the doc lives on (`main` or a `feat/…`), plus
+  `[WORKTREE <path>]` when a worktree holds it. The branch name is a coordinate, **not** a
+  freshness signal — the receiver still fetches first (see SYNC), `main` included.
 - **DOC** — the `docs/vm-status/<...>.md` this session authored or read back.
 - **SHA** — `set-at-commit` when the offer was declined / still uncommitted, `⚠ UNPUSHED` when
   committed but not yet pushed, else the pushed short SHA. Print the block even when the user
   declined the commit-review — with the honest un-landed SHA — so the coordinates travel anyway.
+- **SYNC — the runnable first action, always printed (`main` included).** The receiving session
+  lands in a **stale checkout**, so the block carries the exact command to sync *before* surveying
+  git, and the receiver runs it verbatim first. A `<sha>` committed on another machine is absent
+  from this session's local `<branch>` until it fetches — so "can't find the branch / the DOC file"
+  means *hasn't fetched yet*, and the fix is to fetch, not to invent a plausible-looking substitute.
+  Shared / dirty tree, or `--ff-only` can't fast-forward → reach the SHA in a worktree instead of
+  `reset --hard`: `git worktree add ../<repo>-<slug> <sha>`. When SHA is `⚠ UNPUSHED` /
+  `set-at-commit`, origin has nothing to fetch yet → render the SYNC line as
+  `⚠ nothing on origin yet — push from <box> first`, so the receiver waits rather than fetching a ghost.
 
 ## Deviation workflow — when a finding contradicts the plan
 

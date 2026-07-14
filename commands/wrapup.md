@@ -166,14 +166,16 @@ After the commit gate resolves (whether or not you committed), the **final outpu
 ```
 Resume ▸ research-skills
   REPO   research-skills
-  BRANCH feat/foo            (unmerged — git fetch first)   [WORKTREE .claude/worktrees/foo]
+  BRANCH feat/foo   [WORKTREE .claude/worktrees/foo]
   DOC    docs/plans/foo.md   (plan)  ·  docs/vm-status/2026-07-13-abc.md  (latest handoff, if any)
   SHA    <pushed short sha | ⚠ UNPUSHED | set-at-commit>
+  SYNC   git fetch origin && git checkout feat/foo && git pull --ff-only   # run FIRST, always — local branch is stale; verify: git rev-parse --short HEAD → <sha>
 ```
 
-- **BRANCH** — say `main` plainly when that's where it landed; otherwise append `(unmerged — git fetch first)`, and add the `[WORKTREE <path>]` when you're in a non-primary checkout. Both are the coordinates the next session needs to reach the work.
+- **BRANCH / WORKTREE** — the branch the work landed on (`main` or a `feat/…`), plus `[WORKTREE <path>]` when you're in a non-primary checkout. The branch name is a coordinate, **not** a freshness signal — the next session still fetches first (see SYNC), `main` included.
 - **DOC** — the plan doc this session advanced, and/or the latest `docs/vm-status/*.md` handoff if one is in flight. Omit the field that doesn't apply; drop the DOC line entirely for a pure-hygiene session with no doc to resume from.
 - **SHA** — the pushed short SHA, or `⚠ UNPUSHED` / `set-at-commit` per the Step 6 state (so the honesty about what's actually on `origin` carries into the next session).
+- **SYNC — the runnable first action, always printed (`main` included).** The next session's checkout is stale relative to the pushed `<sha>`, so the block carries the exact sync command to run *before* surveying git. A `<sha>` pushed from this machine is absent from the next session's local `<branch>` until it fetches — so "can't find the branch / doc" there means *fetch first*, not *improvise*. Shared / dirty tree or non-ff → `git worktree add ../<repo>-<slug> <sha>` rather than `reset --hard`. `⚠ UNPUSHED` / `set-at-commit` → render it as `⚠ nothing on origin yet — push first`, since there's nothing to fetch.
 - Skip the resume block only for sessions that advanced no branch/worktree (pure doc-tweak or vista-pm-only sessions) — nothing to resume.
 
 ---

@@ -28,6 +28,21 @@ This is the *simple single-machine default* — assumed by all VISTA repos. Repo
 
 ---
 
+## Hard Boundary: Never Open a Remote Shell Into a VM (PHI)
+
+**A local / planner Claude session must NEVER open a remote shell into a project VM** — no `ssh`, no `gcloud compute ssh`, no IAP / SSH tunnel, no remote command execution of any kind against a VM. This is a **hard rule in every mode**. It is *not* the overridable "no code execution" default above, and it is *not* relaxed by Machine-Aware Operating Mode — it holds even where a repo otherwise splits planner / executor roles.
+
+**Why — this is a PHI boundary, not a convenience rule.** The VMs hold PHI. A shell opened from a local Claude pulls VM state — directory listings, file contents, query results, anything a remote command prints — back into this Claude's context and transcript, which live *outside* the PHI boundary. That is a PHI exposure / exfiltration risk **regardless of intent**: a read-only `ls` / `du` / `cat` is exactly as forbidden as anything else, because the output still crosses the boundary.
+
+**Do this instead:**
+- VM-side work runs in a Claude session **on** the VM (executor mode, per Machine-Aware Operating Mode below) — never by reaching *in* from the local machine.
+- When something must be inspected or run on the VM, hand the user the exact command to run themselves; they decide what (PHI-free) output to paste back.
+- Cloud **control-plane** calls that never enter the VM (e.g. `gcloud compute instances list` / `describe` for machine type, zone, disk size) are acceptable — the line is: *opening a shell or executing a command inside the VM is forbidden; querying cloud resource metadata about the VM is not.*
+
+A PreToolUse hook to enforce this mechanically is on the research-skills backlog — but the rule stands now, hook or not.
+
+---
+
 ## Machine-Aware Operating Mode
 
 For repos where the executor / planner split is hostname-dependent (a project VM holds the runtime + credentials, the local Mac is planner-only), this section overrides **Environment Constraints** above.

@@ -49,46 +49,62 @@ cmd="$(printf '%s' "$payload" | jq -r '.tool_input.command // empty')"
 [ -n "$cmd" ] || exit 0
 
 # ---- 2. command matching ---------------------------------------------------
+# Strip quoted spans FIRST, so a verb or shell separator mentioned INSIDE a
+# string — e.g. a commit message '... && ssh vm', or echo "connect via ssh" —
+# is not read as a real command position. Non-nested / unescaped quotes only;
+# adequate for a non-adversarial tripwire (a deliberately obfuscated command is
+# out of scope — see the "Known limitations" note in hooks/README.md).
+scan="$(printf '%s' "$cmd" | sed -e "s/'[^']*'//g" -e 's/"[^"]*"//g')"
+
 # A verb is in COMMAND POSITION if it starts the line or follows a real shell
-# separator (; & | ( backtick $( newline) — NOT plain whitespace (so a verb
-# mentioned inside a string arg, e.g. echo "connect via ssh", does not trip).
-# Leading wrappers (sudo, nohup, env, command, exec, timeout <n>, VAR=val) are
-# consumed so `sudo ssh vm` / `timeout 30 gcloud compute ssh vm` still match.
+# separator (; & | ( backtick $( newline) — NOT plain whitespace (so a verb that
+# is merely an argument, e.g. `echo ssh`, does not trip). Leading wrappers (sudo,
+# nohup, env, command, exec, timeout <n>, VAR=val) are consumed so `sudo ssh vm`
+# / `timeout 30 gcloud compute ssh vm` still match.
 SEP='(^|[;&|`(]|\$\()'
 WRAP='(sudo|nohup|env|command|exec|timeout[[:space:]]+[0-9smhd.]+|[A-Za-z_][A-Za-z0-9_]*=[^[:space:]]*)[[:space:]]+'
 CMDPOS="${SEP}[[:space:]]*(${WRAP})*"
 
-# A "remote spec" — user@host:path or host:/path|~ — marks scp/rsync as crossing
-# to a remote box (so local-only scp/rsync are left alone).
-REMOTE='[[:alnum:]_.-]+@?[[:alnum:]_.-]*:(/|~|[[:alnum:]])'
+# A "remote spec" — user@host:path or host:/path|~ at an ARGUMENT boundary
+# (leading ^/space, so a local path like ./notes:2026.txt is not misread as a
+# remote). Marks scp/rsync as crossing to a remote box; local-only scp/rsync are
+# left alone.
+REMOTE='(^|[[:space:]])[[:alnum:]_.-]+@?[[:alnum:]_.-]*:(/|~|[[:alnum:]])'
+
+# Public git hosts reached over ssh are NOT project VMs — never block them
+# (e.g. `ssh -T git@github.com`). Non-adversarial: a contrived comment naming a
+# git host to dodge the guard is out of scope.
+GITHOST='(github\.com|gitlab\.com|bitbucket\.org|ssh\.dev\.azure\.com|git-codecommit\.[[:alnum:].-]*amazonaws\.com)'
 
 blocked=""
 
-# (a) bare ssh / sshpass opening a remote shell.
+# (a) bare ssh / sshpass opening a remote shell — but not to a public git host.
 #     `ssh` must be followed by whitespace/end so ssh-keygen/ssh-add/ssh-copy-id
-#     (hyphen, not space) and the leading token of `sshpass` are NOT matched.
-if printf '%s' "$cmd" | grep -qE "${CMDPOS}(ssh|sshpass)([[:space:]]|\$)"; then
+#     (hyphen, not space) are NOT matched. `sshpass` (a password-ssh wrapper) IS
+#     blocked outright — it is only ever a reach-in vector.
+if printf '%s' "$scan" | grep -qE "${CMDPOS}(ssh|sshpass)([[:space:]]|\$)" \
+   && ! printf '%s' "$scan" | grep -qE "$GITHOST"; then
   blocked="ssh"
 fi
 
-# (b) gcloud [alpha|beta] compute ssh|scp|start-iap-tunnel (flags may interleave;
-#     [^;&|]* keeps the match inside one command segment). `compute instances …`
-#     and `compute os-login ssh-keys …` do NOT match.
-if printf '%s' "$cmd" | grep -qE "${CMDPOS}gcloud[[:space:]]+([^;&|]*[[:space:]]+)?compute[[:space:]]+(ssh|scp|start-iap-tunnel)([[:space:]]|\$)"; then
+# (b) gcloud [alpha|beta] compute ssh|scp|start-iap-tunnel. Flags may interleave
+#     anywhere before AND after `compute` (…compute --project x ssh…); [^;&|]*
+#     keeps the match inside one command segment. `compute instances …` and
+#     `compute os-login ssh-keys …` do NOT match (verb needs a trailing boundary).
+if printf '%s' "$scan" | grep -qE "${CMDPOS}gcloud[[:space:]]+([^;&|]*[[:space:]]+)?compute[[:space:]]+([^;&|]*[[:space:]]+)?(ssh|scp|start-iap-tunnel)([[:space:]]|\$)"; then
   blocked="gcloud-compute-shell"
 fi
 
-# (c) scp with a remote spec (data pull/push over ssh). Local-only scp: no colon
-#     host → not blocked.
-if printf '%s' "$cmd" | grep -qE "${CMDPOS}scp([[:space:]]|\$)" \
-   && printf '%s' "$cmd" | grep -qE "$REMOTE"; then
+# (c) scp with a remote spec (data pull/push over ssh). Local-only scp → allowed.
+if printf '%s' "$scan" | grep -qE "${CMDPOS}scp([[:space:]]|\$)" \
+   && printf '%s' "$scan" | grep -qE "$REMOTE"; then
   blocked="scp"
 fi
 
 # (d) rsync to/from a remote (host:path, or an explicit -e ssh transport).
-#     Local-only rsync (rsync -a /src /dst) → not blocked.
-if printf '%s' "$cmd" | grep -qE "${CMDPOS}rsync([[:space:]]|\$)" \
-   && printf '%s' "$cmd" | grep -qE "($REMOTE|-e[[:space:]]+[\"']?ssh)"; then
+#     Local-only rsync (rsync -a /src /dst) → allowed.
+if printf '%s' "$scan" | grep -qE "${CMDPOS}rsync([[:space:]]|\$)" \
+   && printf '%s' "$scan" | grep -qE "($REMOTE|-e[[:space:]]+ssh)"; then
   blocked="rsync"
 fi
 

@@ -128,17 +128,15 @@ Append it to the existing `PreToolUse` → `Bash` matcher array (a matcher can h
 
 Use the absolute path (Claude Code does **not** expand `~` in hook command paths).
 
-### Step 3 — Machine gate (shared with phi-vet)
+### Step 3 — Register this planner (REQUIRED — the gate is fail-open here)
 
-This hook reuses the **same** `phi-free-machines.local` allowlist as `phi-vet` — one "I am a planner" registration *both* silences `phi-vet`'s commit gate AND arms this guard. Confirm this machine's status:
+This hook reuses the **same** `phi-free-machines.local` allowlist as `phi-vet` — one "I am a planner" registration *both* silences `phi-vet`'s commit gate AND arms this guard. But note the fail-open seam: **an unregistered planner reads as `ASSUME_PHI` and the guard is INERT there** (opposite of `phi-vet`, which stays *on* when unsure). So registration is a **required** install step, not optional — do not consider this hook installed until:
 
 ```bash
-hooks/lib/is-phi-free-machine.sh --explain
-# PHI_FREE   → this guard is ACTIVE here (blocks reach-into-VM commands)
-# ASSUME_PHI → inert (a PHI VM, or an unregistered planner — see the seam below)
+hooks/lib/is-phi-free-machine.sh --explain   # must print: PHI_FREE
 ```
 
-**Narrow seam vs. phi-vet's fail-*closed* posture:** an *unregistered* planner reads as `ASSUME_PHI` → this guard is inert until the machine is registered. The window is self-correcting: an unregistered planner is *also* getting `phi-vet` commit friction on every commit, and the same registration that stops that friction arms this guard. See [Machine gate](#machine-gate--fail-closed-phi-free-allowlist).
+If it prints `ASSUME_PHI` on a planner box, register it (per the [Machine gate](#machine-gate--fail-closed-phi-free-allowlist) section: `cp phi-free-machines.example phi-free-machines.local` then add this host's stable name) and re-check until it prints `PHI_FREE`. Only then is the guard actually protecting this machine. (On a PHI VM, `ASSUME_PHI` is correct — the guard is meant to be inert there.)
 
 ### Step 4 — Verify with the test matrix
 
@@ -169,6 +167,17 @@ blk 'echo "connect via ssh to the box"'         # ssh only inside a string arg
 ```
 
 On a **PHI-FREE** machine every BLOCK line emits block-JSON and every ALLOW line is silent. On a **PHI VM** the hook is inert (all silent) — verify there, or by temporarily pointing at an empty `phi-free-machines.local`.
+
+### Known limitations (documented, non-adversarial scope)
+
+The hook matches the command string with lightweight regex, not a shell lexer, and is a tripwire for a *well-intentioned* session — not an evasion-proof control. Out of scope by design (the reflex it catches fires on plain `ssh vm` / `gcloud compute ssh vm`, which ARE caught):
+
+- **Inline shell-string wrappers** — `bash -c "ssh vm"`, `eval "ssh vm"`, `xargs ssh`, or `bash script.sh` where the script contains ssh: the verb lives inside a string/file the hook can't see.
+- **Non-ssh remote-shell clients not in team use** — `mosh`, `autossh`.
+- **Bracketed IPv6 remotes** — `scp '[2001:db8::1]:/x' .` (VMs are reached by name / gcloud, not raw IPv6).
+- **A quoted scp/rsync remote spec** — `scp 'vm:/path' .` — is stripped together with its quotes.
+
+If any of these becomes a real path in day-to-day use, extend the matcher; until then they are acceptable gaps for a non-adversarial guard.
 
 ### Uninstallation
 

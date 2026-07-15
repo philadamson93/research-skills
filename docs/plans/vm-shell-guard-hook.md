@@ -2,12 +2,16 @@ Reference: claude_ops.md
 
 # VM-Shell-Guard — PreToolUse hook enforcing the "no remote shell into a VM" PHI boundary
 
-**Status: Implemented — locally verified, pending /commit-review + /land** (2026-07-15)
-Hook `hooks/vm-shell-guard.sh` built on branch `feat/vm-shell-guard-hook` and verified
-against the test matrix below: **27/27 block/allow cases + 5/5 edge cases pass** (incl.
-wrapped/chained/`sshpass`/`gcloud alpha|beta`/IAP-tunnel/scp/rsync blocked; control-plane,
-git-over-ssh, `ssh-keygen`/`ssh-add`, `os-login ssh-keys`, local rsync, and `git commit -m
-"…ssh…"` allowed). Open Question #1 resolved as the recommended reuse design.
+**Status: Implemented + Codex-reviewed — locally verified, pending /land** (2026-07-15)
+Hook `hooks/vm-shell-guard.sh` built on branch `feat/vm-shell-guard-hook`, then hardened
+per an independent Codex review (read-only). Verified **39/39** block/allow cases pass —
+adds the review's cases to the original matrix: interleaved `gcloud compute --project x ssh`
+now blocks; quote-blind false-block (`git commit -m "… && ssh vm"`), `ssh -T git@github.com`,
+and local colon paths (`scp ./notes:2026.txt`) now allow. Review fixes applied: quote-stripping,
+git-host carve-out, argument-boundary REMOTE spec, `sshpass` blocked outright, required-
+registration mitigation for the fail-open seam. Open Question #1 (fail-open reuse vs. dedicated
+fail-closed allowlist) — Codex re-raised it; recommendation holds (reuse + required registration),
+left as a design fork for Phil.
 
 ## Goal
 
@@ -86,20 +90,34 @@ command position) blocks.
 | `rsync -a /local/src /local/dst` | no remote spec (`host:` / `-e ssh`) → local-only |
 | `echo "use ssh to connect"` / `cat notes-mentioning-ssh.md` | verb not in command position |
 
-**Refinements baked into the patterns:**
-- `ssh` matches only when followed by whitespace/end (so `ssh-keygen`/`ssh-add`/`ssh-copy-id`
-  and `sshpass` don't false-trip on the leading token; a real `ssh` later in a `sshpass … ssh
-  host` line still blocks).
-- `scp` / `rsync` block **only** with a remote spec present (`\S+@?\S+:` target or `-e ssh`),
-  so local-only `rsync`/`scp` pass.
-- `gcloud … compute ssh|scp|start-iap-tunnel` matches the `compute <verb>` token sequence
-  after a command-position `gcloud` (optionally `alpha`/`beta`), independent of interleaved
-  flags (`--zone`, `--project`, `--command`).
+**Refinements baked into the patterns** (as shipped, incl. post-review hardening):
+- **Quoted spans are stripped before matching**, so a verb or separator *inside a string* —
+  a commit message `'… && ssh vm'`, `echo "connect via ssh"` — does not read as a command
+  position. (Fixes a quote-blind false-block the Codex review caught: ironically, committing
+  docs about this very hook could otherwise trip it.)
+- `ssh` matches only when followed by whitespace/end, so `ssh-keygen`/`ssh-add`/`ssh-copy-id`
+  are excluded. **`sshpass` is blocked outright** — a password-ssh wrapper is only ever a
+  reach-in vector.
+- **Public git hosts over ssh are never blocked** (`ssh -T git@github.com`): github.com /
+  gitlab.com / bitbucket.org / ssh.dev.azure.com / codecommit are not project VMs.
+- `scp` / `rsync` block **only** with a remote spec at an argument boundary (`host:/path|~`
+  or `-e ssh`), so local-only usage and a local path bearing a colon (`./notes:2026.txt`)
+  pass.
+- `gcloud [alpha|beta] compute ssh|scp|start-iap-tunnel` matches with flags interleaved
+  **anywhere before AND after** `compute` (`gcloud compute --project x ssh …`), staying inside
+  one command segment (`[^;&|]*`).
 
-**Known limitation** (state it, don't paper over — mirrors phi-vet's "can't see inside an
-alias"): the hook sees only the command string. `bash myscript.sh` where `myscript.sh`
-contains `ssh` is not caught — script interiors are a deeper layer. The guard is a tripwire
-for direct invocations, which is where the accidental reach-in reflex actually fires.
+**Known limitations** (state them, don't paper over — mirrors phi-vet's "can't see inside an
+alias"). The hook sees only the command string and matches with lightweight regex, not a
+shell lexer. Out of scope for this *non-adversarial* tripwire, and acceptable because the
+reflex it targets fires on plain `ssh vm` / `gcloud compute ssh vm` (which are caught):
+- **Inline shell-string wrappers** — `bash -c "ssh vm"`, `eval "ssh vm"`, `xargs ssh`, or
+  `bash script.sh` where the script contains ssh — the verb is inside a string/file the hook
+  can't see.
+- **Non-ssh remote-shell clients not in team use** — `mosh`, `autossh`.
+- **Bracketed IPv6 remotes** — `scp '[2001:db8::1]:/x' .` (VMs are addressed by name/gcloud,
+  not raw IPv6).
+- **A quoted scp/rsync remote spec** — `scp 'vm:/path' .` — is stripped along with its quotes.
 
 ## Machine gate — planner-only, via reuse of `is-phi-free-machine.sh`
 
@@ -121,22 +139,29 @@ registration *simultaneously* (a) silences `phi-vet` and (b) **arms** this guard
 allowlist file, no new `.gitignore` entry (`phi-free-machines.local` is already ignored).
 Phil's Mac is already registered → guard active there today.
 
-**Fail-open caveat (documented, narrow, self-correcting).** The one behavioral seam vs.
-phi-vet's fail-*closed* posture: on an **unregistered** planner Mac (fresh clone, no `.local`
-yet), `is-phi-free-machine.sh` exits non-zero, so this guard is **inert** — no ssh
-protection until the machine is registered. This window is narrow and self-correcting: an
-unregistered planner is *also* suffering phi-vet commit friction on every commit, which the
-user fixes immediately by registering — and that same registration arms this guard.
-claude_ops.md (loaded every session) still carries the rule in the meantime.
+**Fail-open caveat (documented, narrow).** The one behavioral seam vs. phi-vet's
+fail-*closed* posture: on an **unregistered** planner Mac (fresh clone, no `.local` yet),
+`is-phi-free-machine.sh` exits non-zero, so this guard is **inert** — no ssh protection until
+the machine is registered. claude_ops.md (loaded every session) still carries the rule in the
+meantime.
 
-> **Open question (raise at /review-plan):** if we want strict fail-*closed* (guard fires on
-> *unknown* machines too, inert only on a **confirmed** PHI-VM), that needs a *separate*
-> positive allowlist of fleet VMs (`hooks/lib/vm-fleet-ssh-allowed.local` + `.example` +
-> gitignore) — the guard would fire *everywhere except* listed fleet boxes. More correct for
-> a PHI rule, but a second machine-registry to maintain and it flips the VM default to
-> "blocked until registered." **Recommendation: ship the reuse design above** (narrow,
-> self-correcting hole; zero new machinery) and only escalate to the dedicated list if the
-> fail-open window proves real. Decide with eyes open.
+**Closing the seam (post-Codex-review).** The original story leaned on phi-vet commit
+friction to self-correct an unregistered planner. The Codex review sharpened a real hole:
+**phi-vet-gate need not be wired** (on Phil's Mac today, `~/.claude/settings.json` wires
+*neither* PreToolUse hook), so that friction may never fire — an unregistered planner could
+stay silently inert. Mitigation adopted (kept the reuse design, no new machinery): the
+install doc makes **registering the planner in `phi-free-machines.local` a REQUIRED setup
+step**, and the guard is not considered installed until `is-phi-free-machine.sh --explain`
+prints `PHI_FREE`. Registration is thus an explicit gate, not a side effect of phi-vet nagging.
+
+> **Open question #1 (Codex re-raised it — decide at review):** strict fail-*closed* would
+> fire the guard on *unknown* machines too, inert only on a **confirmed** PHI-VM — a *separate*
+> positive fleet-VM allowlist (`hooks/lib/vm-fleet-ssh-allowed.local` + `.example` + gitignore),
+> guard firing *everywhere except* listed fleet boxes. More correct for a PHI rule, but a
+> second machine-registry to maintain, and it flips the VM default to "blocked until
+> registered." **Recommendation: ship the reuse design + the required-registration mitigation
+> above**; escalate to the dedicated allowlist only if the fail-open window proves real in
+> practice. This is a design fork for Phil, not a blocker.
 
 ## The block reason (teaching message)
 

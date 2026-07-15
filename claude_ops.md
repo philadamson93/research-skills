@@ -39,7 +39,7 @@ This is the *simple single-machine default* — assumed by all VISTA repos. Repo
 - When something must be inspected or run on the VM, hand the user the exact command to run themselves; they decide what (PHI-free) output to paste back.
 - Cloud **control-plane** calls that never enter the VM (e.g. `gcloud compute instances list` / `describe` for machine type, zone, disk size) are acceptable — the line is: *opening a shell or executing a command inside the VM is forbidden; querying cloud resource metadata about the VM is not.*
 
-A PreToolUse hook to enforce this mechanically is on the research-skills backlog — but the rule stands now, hook or not.
+A PreToolUse hook enforces this mechanically on planner machines — [`hooks/vm-shell-guard.sh`](hooks/vm-shell-guard.sh) (wire-up in [`hooks/README.md`](hooks/README.md)) — blocking `ssh` / `gcloud compute ssh` / IAP SSH tunnels / `gcloud compute scp` / `scp` / `rsync` into a VM while leaving cloud control-plane calls (`gcloud compute instances list` / `describe`) untouched. It reuses the same PHI-FREE machine allowlist as `phi-vet` (active on planner boxes, inert on the PHI VMs). The hook is a **backstop, not the source of the obligation** — the rule stands regardless, and holds on machines where the hook is inert.
 
 ---
 

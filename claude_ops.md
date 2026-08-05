@@ -264,6 +264,12 @@ Don't paper over the tension with a hedge ("I'll extract it if needed later"); n
 
 - **Major changes should be made in a new feature branch**, not directly on main.
 - Documentation updates and minor bug fixes can go directly on main.
+- **Simple, additive new files** — a new training config, a new one-off script, a new
+  fixture — can also go directly on main. The test is additive-and-isolated: the change
+  only adds a file (or a self-contained new entry in a registry-style file, e.g. one new
+  dataset-config dict key) that nothing else yet references, so it can't break an existing
+  path. Reserve feature branches for changes that touch or depend on existing shared
+  code/behavior.
 
 ### Commit Messages
 

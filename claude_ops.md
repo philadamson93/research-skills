@@ -270,6 +270,11 @@ Don't paper over the tension with a hedge ("I'll extract it if needed later"); n
   dataset-config dict key) that nothing else yet references, so it can't break an existing
   path. Reserve feature branches for changes that touch or depend on existing shared
   code/behavior.
+- **`research-skills` itself**: a simple fix already discussed and approved in
+  conversation (a skill wording tweak, a doc correction, a small hook adjustment) can skip
+  the branch + `/land` ceremony entirely and go straight on `main` — this repo is Phil's
+  own tooling, iterated on directly across many sessions. Reserve a branch here for a
+  larger skill rewrite or anything that still needs review before landing.
 
 ### Commit Messages
 

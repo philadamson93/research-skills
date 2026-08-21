@@ -32,18 +32,28 @@ alike — see below) and the VISTA/rad-eval-specific files layered on top:
   gate in `dispatcher.py` (Chaudhari Lab's separate BAA arrangement) is untouched — confirmed
   with Phil to leave as-is. rad-eval's *separate* `docs/machines.md` PHI-posture registry
   **does** change (confirmed with Phil after `/review-plan` surfaced it — see Phase 6).
+- **Open as of this revision**: whether direct Claude Code use on VISTA data needs to route
+  through the Stanford AI API Gateway for literal PHI, versus being covered directly as
+  "high-risk" data — see Background's citation and Open Question 7. This gates Phase 0's actual
+  execution (not just its documentation) and, if the answer is "Gateway required," Phase 1's
+  Environment Constraints framing too.
 
 ## Background — grounding facts
 
 - **GCP project**: `som-nero-plevriti-deidbdf` (confirmed — "Stanford Oncology de-identified
   BigQuery domain" per `vista-pm/docs/onboarding/glossary.md`, independently corroborated by
   rad-eval's `dispatcher.py` hard-coding the same project ID in its own BAA allowlist).
-- **The compliance premise itself is Phil's own representation, not independently verified by
-  this session.** "Claude Code for Education through Stanford is high-risk-data compliant,
-  covering both Mac and VM sessions" has zero corroborating hits anywhere in the VISTA or
-  rad-eval trees (checked directly during `/review-plan`) — unlike the GCP project ID above,
-  which is corroborated in two independent places. This plan proceeds on Phil's stated
-  authority; see Open Questions for naming an actual source.
+- **Compliance source, now cited — but with a nuance that needs resolving (Open Question 7).**
+  Phil pointed to Stanford IT's own page, <https://uit.stanford.edu/service/claude>: *"Claude
+  Code is approved for low, moderate, and high-risk data. PHI use requires routing through the
+  Stanford AI API Gateway."* This confirms Claude Code's high-risk-data approval generally, but
+  it draws a line this plan doesn't yet account for: **"high-risk" classification and literal
+  PHI are treated differently** — high-risk data is fine via direct Claude Code (subscription
+  auth, no gateway), but PHI specifically requires routing through a Stanford-run gateway this
+  plan never mentions. Whether VISTA's `som-nero-plevriti-deidbdf` data is "de-identified
+  high-risk" (this plan's direct-Mac-execution design holds) or contains literal PHI (the
+  gateway would be required instead) is unresolved — see Open Question 7, which is the most
+  consequential open item in this plan.
 - **`RadAWS/code/research-skills` is a symlink to `VISTA/code/research-skills`, not a second
   clone** (`readlink`/`realpath` confirm it — corrects my first draft's "two clones kept in
   sync by git pull"). One physical checkout, one `claude_ops.md`, one `hooks/` directory, one
@@ -62,6 +72,13 @@ alike — see below) and the VISTA/rad-eval-specific files layered on top:
   and `BDS-H2DLP0QFM4` as `PHI present? No`, execution deferred to the VM — the same premise
   this plan retires, independently encoded. Found during `/review-plan`; confirmed with Phil to
   update it too (Phase 6).
+- **Practical expectation, per Phil (explain-plan feedback round):** even though this plan
+  retires the *compliance* reason execution was Mac-blocked, most of Phil's actual work will
+  probably stay VM-side going forward regardless — that's where his `uv` environments already
+  live, and code execution broadly is VM-side across his repos per the comments above. The Mac
+  gains the *ability* to run light code / read data; it isn't expected to become the primary
+  execution environment. This sharpens Phase 1's "capacity, not compliance" framing rather than
+  changing it.
 - **Confirmed with Phil** (across three rounds of clarification — one `AskUserQuestion` got
   interrupted and was re-asked clean; a later round followed `/review-plan`'s findings):
   1. Retire the hard SSH-into-VM boundary entirely — not a soft downgrade, not left as-is.
@@ -71,6 +88,33 @@ alike — see below) and the VISTA/rad-eval-specific files layered on top:
      reviewer's YAGNI recommendation to split it into a separate mechanical PR — Phil's call.
 
 ## Approach
+
+### Phase 0 — Mac-side bucket mount (test first — moved up per Phil's feedback)
+
+Test this before anything else in this plan — it's the foundational capability the rest of the
+plan assumes works. Recipe: `brew install --cask macfuse` (or gcsfuse's macOS install path) +
+`gcsfuse --implicit-dirs su-vista-uscentral1 <mount-point>`, same bucket the VMs already mount,
+mirroring the existing pattern in `vista-eval/src/vistaeval/io/gcs.py`. BigQuery access from the
+Mac already works today via `gcloud auth application-default login` (`vista-pm/docs/onboarding/bigquery.md`)
+— the bucket mount is the only new piece, since OMOP/clinical text lives in BigQuery, not the
+bucket. The recipe itself is documented in Phase 5's `vista-pm/README.md` edit.
+
+**Cost/practicality note (Phil asked about egress):** reads FROM a GCS bucket TO a client
+*outside* Google Cloud (the Mac, over the internet) bill as network egress; writes/uploads
+don't. A VM in the same region as the bucket reads for free; a Mac over home/office internet
+pays per-GB egress past GCS's small free tier. Practical guidance: fine for light, exploratory
+reads (browsing structure, small config/text files) from the Mac; keep bulk data pulls (large
+parquets, imaging volumes) on the VM as today — a cost/bandwidth reason layered on top of the
+compute-capacity reason already in Phase 1.
+
+**Execution note:** macOS requires a one-time GUI approval for the `macfuse` kernel extension
+(System Settings → Privacy & Security) that a headless/background session can't click through —
+Phil runs the install step himself; a session can prepare and verify the commands.
+
+**Held pending Open Question 7.** Do not run this against real bucket content until the
+Stanford AI API Gateway question below is resolved — testing the mount mechanism itself (auth,
+gcsfuse install) doesn't require touching PHI-adjacent content, but listing or reading real
+directories under `su-vista-uscentral1` does.
 
 ### Phase 1 — `claude_ops.md` rewrite (research-skills)
 
@@ -203,15 +247,22 @@ discipline as VISTA — while `phil-sllm-01` stays the executor for GPU/throughp
 dispatcher's Vertex-only gate are two different mechanisms serving two different purposes
 (general machine posture vs. a specific LLM-dispatch BAA control), and only the table changes.
 
-### Phase 7 — Mac-side bucket mount (a follow-on action, not part of this branch)
+### Phase 7 — VM-side plan/HTML viewing via the bucket mount (new, from explain-plan feedback)
 
-Concrete recipe once this plan lands: `brew install --cask macfuse` (or gcsfuse's macOS install
-path) + `gcsfuse --implicit-dirs su-vista-uscentral1 <mount-point>`, same bucket the VMs already
-mount, mirroring the existing pattern in `vista-eval/src/vistaeval/io/gcs.py`. BigQuery access
-from the Mac already works today via `gcloud auth application-default login` — the bucket mount
-is the only new piece, since OMOP/clinical text lives in BigQuery, not the bucket. This step is
-Phil's to run (real GCP credentials + a literal mount on his machine); this plan documents the
-recipe (Phase 5's README edit) but does not execute the mount. See Open Questions.
+Phil's practical concern once he does most work VM-side: the VM can generate plan docs and
+`/explain-plan` HTML companions, but it's typically headless — no browser to `open` them in.
+Only the Mac can display a rendered HTML. Proposed mechanism (mirrors this plan's own
+git-to-bucket shift): when `/explain-plan` (or `/read-plan`) runs in VM mode, write the
+generated file to a bucket-mounted scratch path (e.g.
+`gs://su-vista-uscentral1/scratch/explain-plan/<repo>-<plan-stem>.html`) in addition to the
+git-tracked repo path, rather than requiring a commit+push+pull round-trip just to view it. The
+VM prints the bucket path in its hand-off; Phil pastes a short pointer to his Mac session, which
+`open`s the equivalent local path under its own gcsfuse mount. Needs one more decision before
+implementing: exact scratch-path convention and whether `/open`/`/read-plan`/`/explain-plan`
+gain an explicit VM-mode branch for this, or whether it's simpler to keep the existing
+git-commit path for anything meant to be reviewed (a natural checkpoint) and reserve the bucket
+relay for pure scratch/WIP viewing. Not resolved in this pass — flagged for a follow-up plan
+once Phase 0's mount is actually working.
 
 ## Files to Modify
 
@@ -255,32 +306,35 @@ recipe (Phase 5's README edit) but does not execute the mount. See Open Question
 
 ## Open Questions
 
-1. **Delete `vm-shell-guard.sh` outright, or archive it under `hooks/archive/`?** Recommend
-   outright deletion — the legacy branch and git history already preserve it, and a live
-   `archive/` directory invites someone re-wiring it "just in case" later without re-deriving
-   whether the reasoning still applies.
-2. **`dicom-annotations`' PHI-copy sync workflow** (per memory: Phil hand-syncs a separate PHI
-   copy of `explore_ko_pr.ipynb` by copy-pasting changed cells between environments) — this
-   workaround exists because of exactly the kind of Mac/PHI separation this plan retires. Worth
-   a dedicated look at whether it can be replaced by the same Mac-side mount, but that repo
-   wasn't in scope for this pass (it sits outside `VISTA/code/`) — flagging as a likely-real
-   follow-on win, not resolving it here.
-3. **Does "leave rad-eval's dispatcher gate as-is" also mean `rad_eval_mac_author_only_no_pytest.md`
-   (Mac = author only, VM = authoritative pytest gate) stays unchanged?** That memory doesn't
-   cite PHI as its reason (more likely environment/GPU parity for the eval suite) — probably
-   untouched by this plan regardless, but flagging since it's adjacent and worth a conscious
-   answer rather than a silent assumption either way.
-4. **Mac-side bucket mount execution** (Phase 7) — this plan documents the recipe but doesn't
-   run it. Confirm: is actually mounting `su-vista-uscentral1` on the Mac a follow-up Phil runs
-   himself, or something to hand back to this session as a next step once this plan lands?
-5. **Where does "Claude Code for Education... is high-risk-data compliant" actually come
-   from** — a Stanford Data Security Office confirmation, an IT ticket, a vendor agreement
-   Phil has seen directly? Worth naming so a future reader (or a compliance audit) has
-   something to point at besides this plan's own prose (raised by `/review-plan`).
-6. **Is the `RadAWS/code/research-skills` symlink intentional, or an accident that should be a
-   real second clone instead** — e.g. for genuine toolchain isolation between the two labs?
-   (raised by `/review-plan`) If intentional, no action; if it should be a real clone, Phase 2's
-   single-edit simplification would need to come back as a two-location edit.
+1. ~~Delete `vm-shell-guard.sh` outright, or archive it under `hooks/archive/`?~~ **Resolved
+   (Phil): delete outright.** Matches Phase 3 as written.
+2. ~~`dicom-annotations`' PHI-copy sync workflow — replaceable by the Mac-side mount?~~
+   **Resolved (Phil): not pursuing — that repo isn't active.**
+3. ~~Does `rad_eval_mac_author_only_no_pytest.md` stay unchanged?~~ **Resolved (Phil): yes, it
+   stays.** Confirmed independently of PHI — code execution is largely VM-side across Phil's
+   repos generally (see Background's new bullet), so this memory's reasoning holds regardless.
+4. **Mac-side bucket mount execution (Phase 0).** Phil confirmed: needs to actually be tested
+   (not just documented) — "assume it will work but" — and asked about egress cost, now answered
+   in Phase 0. Still open: the test itself is **held pending Open Question 7** below.
+5. ~~Where does the compliance claim come from?~~ **Partially resolved (Phil): cited
+   <https://uit.stanford.edu/service/claude>.** This names a real source — good — but reading it
+   surfaced a sharper question than the one it answered. See Open Question 7.
+6. ~~Is the `RadAWS/code/research-skills` symlink intentional?~~ **Resolved (Phil): yes, it's a
+   deliberate convenience, not an accident.** No action needed; Phase 2's single-edit
+   simplification stands as written.
+7. **[MOST CONSEQUENTIAL — new, from OQ5's citation] Does VISTA's data need the Stanford AI API
+   Gateway, or is direct Claude Code use enough?** The cited page draws a line this plan hasn't
+   addressed: *"Claude Code is approved for low, moderate, and high-risk data. PHI use requires
+   routing through the Stanford AI API Gateway."* "High-risk" and literal "PHI" are handled
+   differently — high-risk data is fine via direct Claude Code (what this plan assumes
+   throughout); PHI specifically needs gateway routing, a mechanism this plan never mentions.
+   Is `som-nero-plevriti-deidbdf` de-identified-enough to count as "high-risk" rather than
+   literal PHI? `/phi-vet`'s own threat catalog (`person_id`, DICOM UIDs, accession numbers,
+   clinical dates, free-text report excerpts) treats this data as carrying real PHI-level risk
+   — worth reconciling against "de-identified" in the project's own name before trusting the
+   direct-execution design. **This gates**: Phase 0's actual mount-and-read test (not just
+   writing the recipe), and potentially Phase 1's Environment Constraints rewrite if the answer
+   is "gateway required" rather than "direct Claude Code is fine."
 
 ## Verification & VM handoff
 

@@ -1,0 +1,568 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="plan-sha256" content="cc4ac7abe1d616feb2f3800b6d7debed540e319bbaac1e4a4d95c330ac5a9582">
+<title>Plan: Retire the planner-Mac / PHI-VM split</title>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/svg-pan-zoom@3.6.1/dist/svg-pan-zoom.min.js"></script>
+<style>
+  :root {
+    --bg: #f7f7f8; --fg: #1a1a1e; --muted: #6b7280; --card: #ffffff; --border: #e2e2e6;
+    --accent: #0e7490; --accent2: #06b6d4; --amber: #b45309; --amber-bg: #fef3c7;
+    --danger: #b91c1c; --danger-bg: #fee2e2; --ok: #15803d; --ok-bg: #dcfce7;
+    --code-bg: #f1f1f4; --resp-bg: #eef6ff; --resp-border: #2563eb;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #14141a; --fg: #e6e6ea; --muted: #9ca3af; --card: #1d1d24; --border: #2e2e38;
+      --accent: #22d3ee; --accent2: #0e7490; --amber: #fbbf24; --amber-bg: #3f2d05;
+      --danger: #f87171; --danger-bg: #3f1414; --ok: #4ade80; --ok-bg: #0f2e1a;
+      --code-bg: #26262f; --resp-bg: #0f2537; --resp-border: #38bdf8;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    background: var(--bg); color: var(--fg); font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    max-width: 1080px; margin: 0 auto; padding: 24px 20px 80px; line-height: 1.55;
+  }
+  h1, h2, h3 { line-height: 1.25; }
+  h2 { border-bottom: 1px solid var(--border); padding-bottom: 6px; margin-top: 40px; }
+  code { background: var(--code-bg); padding: 1px 5px; border-radius: 4px; font-size: 0.92em; }
+  a { color: var(--accent); }
+  .card { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 16px 20px; margin: 14px 0; }
+  .header-card { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px,1fr)); gap: 10px 24px; }
+  .header-card .field-label { font-size: 0.72em; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); }
+  .header-card .field-value { font-size: 0.95em; }
+  .chip { display: inline-block; padding: 2px 9px; border-radius: 999px; font-size: 0.78em; font-weight: 600; }
+  .chip-draft { background: var(--amber-bg); color: var(--amber); }
+  .chip-pending { background: var(--amber-bg); color: var(--amber); }
+  .chip-deferred { background: var(--code-bg); color: var(--muted); }
+  .chip-revise { background: var(--danger-bg); color: var(--danger); }
+  .chip-yes { background: var(--ok-bg); color: var(--ok); }
+  table { border-collapse: collapse; width: 100%; margin: 10px 0; font-size: 0.92em; }
+  th, td { border: 1px solid var(--border); padding: 7px 10px; text-align: left; vertical-align: top; }
+  th { background: var(--code-bg); }
+  details { background: var(--card); border: 1px solid var(--border); border-radius: 8px; margin: 8px 0; padding: 10px 16px; }
+  details summary { cursor: pointer; font-weight: 600; }
+  details[open] summary { margin-bottom: 8px; }
+  .diagram-wrap { position: relative; border: 1px solid var(--border); border-radius: 10px; margin: 12px 0; background: var(--card); }
+  .diagram-wrap .hint { font-size: 0.76em; color: var(--muted); padding: 6px 12px; border-bottom: 1px solid var(--border); }
+  .diagram-controls { position: absolute; top: 8px; right: 10px; z-index: 5; display: flex; gap: 6px; }
+  .diagram-controls button {
+    font-size: 0.75em; padding: 3px 8px; border-radius: 6px; border: 1px solid var(--border);
+    background: var(--card); color: var(--fg); cursor: pointer;
+  }
+  .mermaid-container { height: 480px; overflow: hidden; }
+  .mermaid-container.fullscreen { position: fixed; inset: 0; height: 100vh; z-index: 999; background: var(--bg); }
+  pre.mermaid { margin: 0; }
+  textarea.section-feedback {
+    width: 100%; min-height: 54px; margin-top: 8px; padding: 8px; border-radius: 6px;
+    border: 1px solid var(--border); background: var(--bg); color: var(--fg); font-family: inherit; font-size: 0.9em;
+  }
+  .resp { border-left: 3px solid var(--resp-border); background: var(--resp-bg); padding: 8px 12px; border-radius: 0 6px 6px 0; margin-top: 10px; font-size: 0.92em; }
+  .resp .resp-label { font-size: 0.72em; text-transform: uppercase; letter-spacing: 0.05em; color: var(--resp-border); font-weight: 700; }
+  .oq-card { display: grid; grid-template-columns: 1fr 160px; gap: 12px; align-items: start; }
+  .oq-card select { padding: 4px 8px; border-radius: 6px; border: 1px solid var(--border); background: var(--card); color: var(--fg); }
+  .feedback-footer {
+    position: sticky; bottom: 0; background: var(--card); border-top: 1px solid var(--border);
+    padding: 12px 20px; margin: 40px -20px -80px; display: flex; gap: 12px; align-items: center; flex-wrap: wrap;
+  }
+  .feedback-footer textarea { flex: 1; min-width: 220px; min-height: 40px; padding: 8px; border-radius: 6px; border: 1px solid var(--border); background: var(--bg); color: var(--fg); }
+  .feedback-footer button {
+    background: var(--accent); color: #fff; border: none; padding: 9px 16px; border-radius: 8px; cursor: pointer; font-weight: 600;
+  }
+  .first-pass-banner { background: var(--code-bg); border: 1px dashed var(--muted); border-radius: 8px; padding: 10px 16px; font-size: 0.9em; color: var(--muted); }
+  .knob-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px,1fr)); gap: 12px; }
+  .knob-grid .knob { border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; background: var(--card); }
+  .knob .knob-name { font-weight: 700; font-size: 0.88em; }
+  .knob .knob-value { font-size: 0.85em; color: var(--muted); margin-top: 4px; }
+  ul.tight li { margin: 3px 0; }
+</style>
+</head>
+<body>
+
+<h1>Retire the planner-Mac / PHI-VM split as the VISTA default</h1>
+
+<div class="card header-card">
+  <div><div class="field-label">Status</div><div class="field-value"><span class="chip chip-draft">Draft</span> (revised post-review)</div></div>
+  <div><div class="field-label">Owner</div><div class="field-value">Phil Adamson</div></div>
+  <div><div class="field-label">Branch</div><div class="field-value"><code>feat/retire-planner-mac-phi-vm-split</code></div></div>
+  <div><div class="field-label">Source doc</div><div class="field-value"><a href="retire-planner-mac-phi-vm-split.md">retire-planner-mac-phi-vm-split.md</a></div></div>
+  <div><div class="field-label">Plan SHA-256</div><div class="field-value"><code id="sha-display">cc4ac7abe1d6</code>&hellip;</div></div>
+  <div><div class="field-label">Generated</div><div class="field-value">2026-08-21 12:21 PDT</div></div>
+</div>
+
+<div class="card">
+<b>TL;DR.</b> Phil's Stanford Claude Code for Education account is now high-risk-data compliant on both his Mac and his VMs, so the old "planner Mac has no PHI clearance, VM does" split no longer holds. This plan retires that split across one shared repo (<code>research-skills</code>) plus five downstream repos: code execution + <code>/phi-vet</code> discipline replace the Mac's hard no-execution/no-SSH-into-VM rules, GPU/throughput work still stays on the VM fleet (a capacity reason, not a compliance one), and a Mac-side GCS bucket mount replaces git commits as the cross-machine sync mechanism. rad-eval's own Vertex-only BAA gate for dispatched LLM sessions is explicitly untouched; its separate machine-posture table is not.
+</div>
+
+<h2>Review history</h2>
+<table>
+  <tr><th>Pass</th><th>Reviewer</th><th>Verdict</th><th>Key findings surfaced</th><th>Applied to plan</th></tr>
+  <tr>
+    <td>1</td>
+    <td>Fresh Claude Code subagent (no conversation context)</td>
+    <td><span class="chip chip-revise">Revise</span></td>
+    <td>Symlink-not-clone correction (RadAWS/code/research-skills is a symlink, not a second git clone); 2 more stale "no runtime environment" spots in claude_ops.md; uncited compliance premise; Phase 2 fail-open ordering risk; cross-repo landing mechanics unstated; rad-eval's docs/machines.md has its own PHI-posture table beyond the dispatcher gate; docs/plans/README.md doesn't exist in this repo; vm-shell-guard-hook.md needs a superseded banner; commands/land.md missed the same stale framing.</td>
+    <td><a href="reviews/retire-planner-mac-phi-vm-split-feedback-claude.md">Yes</a> &mdash; 13 findings applied, 2 design forks resolved with Phil via AskUserQuestion, 1 preserved as Open Question 6</td>
+  </tr>
+</table>
+
+<h2>Repo map &mdash; where this touches</h2>
+<div class="diagram-wrap" data-diagram="repo-map">
+  <div class="hint">scroll to zoom &bull; drag to pan</div>
+  <div class="diagram-controls"><button class="btn-reset">Reset</button><button class="btn-fullscreen">Fullscreen</button></div>
+  <div class="mermaid-container">
+<pre class="mermaid">
+flowchart LR
+  rs["research-skills<br/>claude_ops.md, hooks/, commands/"]
+  radsym["RadAWS/code/research-skills<br/>symlink, not a clone"]
+  settingsJson["settings.json<br/>local, not git"]
+
+  subgraph vcode["VISTA code umbrella, not a git repo"]
+    vclaude["CLAUDE.md"]
+    vvm["CLAUDE.vm.md"]
+  end
+
+  vpm["vista-pm README.md<br/>mount row"]
+  stale["3 stale claude_ops.md copies<br/>contrastive-3d-onc, MerlinOnc, tte-pretraining"]
+  crc["crc-extraction-agent<br/>Docker isolation plan, flagged only"]
+
+  subgraph radeval["rad-eval, separate repo"]
+    raddisp["dispatcher.py<br/>require_vertex_phi_env, untouched"]
+    radmach["docs/machines.md<br/>PHI-posture table"]
+  end
+
+  rs -->|referenced by| vclaude
+  rs -.->|resolves via symlink| radsym
+  radsym -.->|read by| radeval
+  settingsJson -->|hook wiring| rs
+
+  subgraph legend["Color legend"]
+    lg1["THIS PR changes, cyan"]
+    lg2["Untouched or flagged only, grey dashed"]
+    lg3["Symlink relationship, purple dashed"]
+  end
+
+  class rs,vclaude,vvm,vpm,stale,radmach,settingsJson,lg1 changed
+  class raddisp,crc,lg2 untouched
+  class radsym,lg3 symlink
+
+  classDef changed fill:#0e7490,stroke:#06b6d4,stroke-width:3px,color:#fff
+  classDef untouched fill:#374151,stroke:#6b7280,stroke-width:1px,stroke-dasharray: 5 5,color:#d1d5db
+  classDef symlink fill:#4c1d95,stroke:#a78bfa,stroke-width:2px,color:#fff,stroke-dasharray: 3 3
+</pre>
+  </div>
+</div>
+
+<h2>Blast radius</h2>
+<div class="diagram-wrap" data-diagram="blast-radius">
+  <div class="hint">scroll to zoom &bull; drag to pan</div>
+  <div class="diagram-controls"><button class="btn-reset">Reset</button><button class="btn-fullscreen">Fullscreen</button></div>
+  <div class="mermaid-container">
+<pre class="mermaid">
+flowchart LR
+  k1["Knob: Mac PHI posture<br/>allowlist entry"]
+  k2["Knob: SSH boundary<br/>vm-shell-guard.sh"]
+  k3["Knob: rad-eval Mac posture<br/>machines.md table"]
+
+  subgraph p1["Phase 1"]
+    opsEnv["Environment Constraints"]
+    opsHard["Hard Boundary section, deleted"]
+    opsMachine["Machine-Aware Operating Mode"]
+    opsVerify["Verification Approaches, plus subagent line"]
+  end
+
+  subgraph p2["Phase 2"]
+    settingsHook["settings.json hook wiring"]
+    allowlist["phi-free-machines.local"]
+  end
+
+  subgraph p3["Phase 3"]
+    guardsh["hooks/vm-shell-guard.sh, deleted"]
+    hooksReadme["hooks/README.md"]
+    guardplan["vm-shell-guard-hook.md banner"]
+  end
+
+  subgraph p4["Phase 4"]
+    vmhandoff["commands/vm-handoff.md"]
+    phivet["commands/phi-vet.md"]
+    reviewtests["commands/review-tests.md"]
+    landmd["commands/land.md"]
+  end
+
+  subgraph p5["Phase 5"]
+    vclaude2["CLAUDE.md"]
+    vvm2["CLAUDE.vm.md"]
+    vpmreadme["vista-pm README.md"]
+    staleFiles["3 stale symlinks"]
+  end
+
+  subgraph p6["Phase 6"]
+    radmach2["rad-eval docs/machines.md"]
+  end
+
+  subgraph consumers["Downstream consumers"]
+    futureSessions["Future Claude and Codex sessions"]
+    commitGate["git commit gate, phi-vet-gate.sh"]
+  end
+
+  subgraph deferred["Out of scope, Phase 7"]
+    bucketMount["Mac gcsfuse mount, follow on"]
+  end
+
+  k1 --> settingsHook
+  k1 --> allowlist
+  allowlist --> guardsh
+  k2 --> guardsh
+  k2 --> hooksReadme
+  k3 --> radmach2
+
+  p1 --> futureSessions
+  p2 --> commitGate
+  p3 --> futureSessions
+  p4 --> futureSessions
+  p5 --> futureSessions
+  p6 --> futureSessions
+  vpmreadme -.->|documents| bucketMount
+
+  subgraph legend["Color legend"]
+    lgKnob["Knob, decision point, magenta"]
+    lgChange["THIS PR changes, cyan"]
+    lgDeferred["Deferred, Phase 7, grey dashed"]
+  end
+
+  class k1,k2,k3,lgKnob knob
+  class opsEnv,opsHard,opsMachine,opsVerify,settingsHook,allowlist,guardsh,hooksReadme,guardplan,vmhandoff,phivet,reviewtests,landmd,vclaude2,vvm2,vpmreadme,staleFiles,radmach2,futureSessions,commitGate,lgChange changed
+  class bucketMount,lgDeferred deferred
+
+  classDef knob fill:#701a75,stroke:#e879f9,stroke-width:3px,color:#fff
+  classDef changed fill:#0e7490,stroke:#06b6d4,stroke-width:2px,color:#fff
+  classDef deferred fill:#374151,stroke:#6b7280,stroke-width:1px,stroke-dasharray: 5 5,color:#d1d5db
+</pre>
+  </div>
+</div>
+
+<h2>Order of operations</h2>
+<div class="diagram-wrap" data-diagram="order-of-ops">
+  <div class="hint">scroll to zoom &bull; drag to pan</div>
+  <div class="diagram-controls"><button class="btn-reset">Reset</button><button class="btn-fullscreen">Fullscreen</button></div>
+  <div class="mermaid-container">
+<pre class="mermaid">
+flowchart TD
+  startNode(["Plan reviewed once<br/>Revise, findings applied"])
+  ph1["Phase 1<br/>claude_ops.md rewrite<br/>PENDING"]
+  ph2a["Phase 2 step 1<br/>wire phi-vet-gate.sh<br/>PENDING"]
+  ph2b["Phase 2 step 2<br/>remove Mac from allowlist<br/>PENDING"]
+  ph3["Phase 3<br/>retire vm-shell-guard.sh<br/>PENDING"]
+  ph4["Phase 4<br/>skill wording<br/>PENDING"]
+  ph5["Phase 5<br/>VISTA files<br/>PENDING"]
+  ph6["Phase 6<br/>rad-eval machines.md<br/>PENDING"]
+  ph7["Phase 7<br/>Mac bucket mount<br/>DEFERRED, follow on"]
+  landphase["Landing<br/>4 separate ceremonies"]
+
+  startNode --> ph1
+  ph1 --> ph2a
+  ph2a -->|safe no op, hook inert| ph2b
+  ph2b -->|SSH guard now inert| ph3
+  ph1 --> ph4
+  ph1 --> ph5
+  ph1 --> ph6
+  ph4 --> landphase
+  ph5 --> landphase
+  ph6 --> landphase
+  ph3 --> landphase
+  landphase -.->|Phil call, Open Question 4| ph7
+
+  subgraph legend["Color legend"]
+    lgPending["Pending, not started, amber"]
+    lgDeferred2["Deferred, follow on, grey dashed"]
+  end
+
+  class ph1,ph2a,ph2b,ph3,ph4,ph5,ph6,landphase,lgPending pending
+  class ph7,lgDeferred2 deferred
+
+  classDef pending fill:#78350f,stroke:#f59e0b,stroke-width:2px,color:#fff
+  classDef deferred fill:#374151,stroke:#6b7280,stroke-width:1px,stroke-dasharray: 5 5,color:#d1d5db
+</pre>
+  </div>
+</div>
+
+<h2>Knobs &amp; contracts</h2>
+<div class="knob-grid">
+  <div class="knob"><div class="knob-name">GCP project</div><div class="knob-value"><code>som-nero-plevriti-deidbdf</code> &mdash; corroborated in vista-pm glossary + rad-eval's dispatcher.py</div></div>
+  <div class="knob"><div class="knob-name">GCS bucket (Phase 7)</div><div class="knob-value"><code>su-vista-uscentral1</code> &mdash; same bucket VMs already mount via gcsfuse</div></div>
+  <div class="knob"><div class="knob-name">Machine being de-registered</div><div class="knob-value"><code>BDS-H2DLP0QFM4</code> &mdash; removed from <code>phi-free-machines.local</code> in Phase 2 step 2</div></div>
+  <div class="knob"><div class="knob-name">Legacy branch</div><div class="knob-value"><code>legacy/planner-mac-phi-vm-split-2026-08</code> &mdash; preserves the old posture, branched from <code>main</code> at <code>30cf092</code></div></div>
+  <div class="knob"><div class="knob-name">rad-eval dispatcher gate</div><div class="knob-value"><code>require_vertex_phi_env()</code>, <code>PHI_VERTEX_PROJECTS</code> frozenset &mdash; explicitly untouched by this plan</div></div>
+  <div class="knob"><div class="knob-name">research-skills topology</div><div class="knob-value">One physical checkout at <code>VISTA/code/research-skills</code>; <code>RadAWS/code/research-skills</code> is a symlink to it (corrected by review &mdash; was wrongly described as a second clone)</div></div>
+</div>
+
+<h2>Steps</h2>
+
+<details data-section="phase-1">
+  <summary>Phase 1 &mdash; claude_ops.md rewrite (research-skills) <span class="chip chip-pending">PENDING</span></summary>
+  <p>Splits the old "no code execution" default into its two bundled reasons: PHI clearance (retired) vs. runtime/GPU capacity (kept). Deletes the "Hard Boundary: Never Open a Remote Shell Into a VM" section outright. Reframes Machine-Aware Operating Mode so the executor/planner split is about compute capacity, not PHI. Also fixes two more stale "no runtime environment" spots the review caught: line 350 (subagent instructions) and lines 361&ndash;363 (Verification Approaches opening).</p>
+  <p><b>Files:</b> <code>claude_ops.md</code> (Environment Constraints, Hard Boundary, Machine-Aware Operating Mode, Plan Document Structure, lines 350 &amp; 361&ndash;363)</p>
+  <p><b>Verify:</b> post-edit grep for residual "no runtime environment" / "code cannot run on this machine" phrasing &mdash; must return zero hits outside the legacy branch.</p>
+  <textarea class="section-feedback" data-section="phase-1" placeholder="Feedback on Phase 1..."></textarea>
+</details>
+
+<details data-section="phase-2">
+  <summary>Phase 2 &mdash; machine-gate registry, ordered steps <span class="chip chip-pending">PENDING</span></summary>
+  <p>Two steps, order matters: (1) wire <code>hooks/phi-vet-gate.sh</code> into <code>settings.json</code> while the Mac is still on the PHI-free allowlist (safe no-op, confirmed by <code>is-phi-free-machine.sh --explain</code> still reporting <code>PHI_FREE</code>); (2) then remove the <code>BDS-H2DLP0QFM4</code> line from <code>phi-free-machines.local</code> (confirms <code>ASSUME_PHI</code>). Reversing the order opens a window with zero mechanical commit gate. Step 2 alone also flips <code>vm-shell-guard.sh</code> to inert &mdash; the SSH boundary is retired in practice here, not at Phase 3.</p>
+  <p><b>Files:</b> <code>~/.claude/settings.json</code> (not git-tracked), <code>hooks/lib/phi-free-machines.local</code> (git-ignored, one location)</p>
+  <p><b>Verify:</b> <code>jq . ~/.claude/settings.json</code> parses; <code>is-phi-free-machine.sh --explain</code> reports <code>PHI_FREE</code>&rarr;<code>ASSUME_PHI</code> in that order.</p>
+  <textarea class="section-feedback" data-section="phase-2" placeholder="Feedback on Phase 2..."></textarea>
+</details>
+
+<details data-section="phase-3">
+  <summary>Phase 3 &mdash; retire vm-shell-guard.sh <span class="chip chip-pending">PENDING</span></summary>
+  <p>Deletes the hook (history preserved on the legacy branch), removes its <code>settings.json</code> entry, trims <code>hooks/README.md</code>, and adds a superseded banner to <code>docs/plans/vm-shell-guard-hook.md</code> (the hook's own original design plan) so it doesn't silently describe dead functionality.</p>
+  <p><b>Files:</b> <code>hooks/vm-shell-guard.sh</code> (deleted), <code>hooks/README.md</code>, <code>docs/plans/vm-shell-guard-hook.md</code></p>
+  <p><b>Verify:</b> file gone; no <code>settings.json</code> or doc reference to it remains without pointing at its replacement.</p>
+  <textarea class="section-feedback" data-section="phase-3" placeholder="Feedback on Phase 3..."></textarea>
+</details>
+
+<details data-section="phase-4">
+  <summary>Phase 4 &mdash; skill wording (research-skills) <span class="chip chip-pending">PENDING</span></summary>
+  <p>Tightens four command files whose prose still asserts the retired PHI-based split: <code>vm-handoff.md</code> (drop "data, or credentials" from the planner-Mac description), <code>phi-vet.md</code> (Step 0 prose), <code>review-tests.md</code> (narrow the infra-unavailable list to GPU only), and <code>land.md</code> line 21 (same class of stale framing, found by review, missed in the first draft).</p>
+  <p><b>Files:</b> <code>commands/vm-handoff.md</code>, <code>commands/phi-vet.md</code>, <code>commands/review-tests.md</code>, <code>commands/land.md</code></p>
+  <textarea class="section-feedback" data-section="phase-4" placeholder="Feedback on Phase 4..."></textarea>
+</details>
+
+<details data-section="phase-5">
+  <summary>Phase 5 &mdash; VISTA-specific files <span class="chip chip-pending">PENDING</span></summary>
+  <p>Updates the umbrella <code>CLAUDE.md</code>/<code>CLAUDE.vm.md</code> (ungated, not a git repo &mdash; manual copy to the actual VM afterward), adds a Mac-side mount row to <code>vista-pm/README.md</code>, and replaces 3 stale non-symlinked <code>claude_ops.md</code> copies with the canonical symlink (bundled here per Phil's call, against the reviewer's split-it-out recommendation). <code>crc-extraction-agent</code>'s isolation plan is flagged only, not edited.</p>
+  <p><b>Files:</b> <code>VISTA/code/CLAUDE.md</code>, <code>VISTA/code/CLAUDE.vm.md</code>, <code>vista-pm/README.md</code>, <code>contrastive-3d-onc/docs/claude_ops.md</code>, <code>MerlinOnc/docs/claude_ops.md</code>, <code>tte-pretraining/docs/claude_ops.md</code></p>
+  <textarea class="section-feedback" data-section="phase-5" placeholder="Feedback on Phase 5..."></textarea>
+</details>
+
+<details data-section="phase-6">
+  <summary>Phase 6 &mdash; rad-eval's own PHI-posture registry <span class="chip chip-pending">PENDING</span></summary>
+  <p>rad-eval's <code>docs/machines.md</code> is a general machine-posture table, separate from and broader than the dispatcher's Vertex-only gate. Both Mac rows get rewritten to match VISTA's new posture (confirmed with Phil after the review surfaced this as a missed Contract Check). <code>require_vertex_phi_env()</code> in <code>dispatcher.py</code> is explicitly untouched.</p>
+  <p><b>Files:</b> <code>RadAWS/code/rad-eval/docs/machines.md</code></p>
+  <textarea class="section-feedback" data-section="phase-6" placeholder="Feedback on Phase 6..."></textarea>
+</details>
+
+<details data-section="phase-7">
+  <summary>Phase 7 &mdash; Mac-side bucket mount <span class="chip chip-deferred">DEFERRED / follow-on</span></summary>
+  <p>Documents the recipe (<code>gcsfuse --implicit-dirs su-vista-uscentral1 &lt;mount-point&gt;</code>, same bucket the VMs already mount) but does not execute it &mdash; that's Phil's own machine, real GCP credentials, a literal mount. See Open Question 4 for who runs this and when.</p>
+  <textarea class="section-feedback" data-section="phase-7" placeholder="Feedback on Phase 7..."></textarea>
+</details>
+
+<h2>Gotchas</h2>
+
+<details data-section="gotcha-symlink">
+  <summary>The two research-skills "clones" are actually one symlink</summary>
+  <p><code>RadAWS/code/research-skills</code> is a symlink to <code>VISTA/code/research-skills</code> &mdash; confirmed via <code>readlink</code>/<code>realpath</code> during review, correcting the plan's first draft. Every research-skills edit is a single edit, visible to both trees the instant it lands. No <code>git pull</code> sync step exists or is needed.</p>
+  <textarea class="section-feedback" data-section="gotcha-symlink" placeholder="Feedback..."></textarea>
+</details>
+
+<details data-section="gotcha-ordering">
+  <summary>Phase 2's step order is load-bearing, not cosmetic</summary>
+  <p>Wiring the hook before removing the allowlist entry is a safe no-op (the hook stays inert while the Mac is still allowlisted). Reversing the order opens a real window where the Mac is <code>ASSUME_PHI</code> with zero mechanical commit gate.</p>
+  <textarea class="section-feedback" data-section="gotcha-ordering" placeholder="Feedback..."></textarea>
+</details>
+
+<details data-section="gotcha-settings">
+  <summary>settings.json and CLAUDE.vm.md have no landing ceremony</summary>
+  <p><code>~/.claude/settings.json</code> isn't version-controlled at all &mdash; the hook-wiring edit takes effect on save. <code>VISTA/code/CLAUDE.vm.md</code> lives in a directory that isn't a git repo, so editing it here doesn't get it onto the actual VM &mdash; Phil copies it over by hand.</p>
+  <textarea class="section-feedback" data-section="gotcha-settings" placeholder="Feedback..."></textarea>
+</details>
+
+<details data-section="gotcha-readme">
+  <summary>research-skills has no docs/plans/README.md</summary>
+  <p>Found during review: this repo tracks plan status via each doc's own <code>Status:</code> header, not a tracked-plans table. This plan's "Files to Modify" originally (wrongly) assumed one existed &mdash; fixed.</p>
+  <textarea class="section-feedback" data-section="gotcha-readme" placeholder="Feedback..."></textarea>
+</details>
+
+<h2>Verification &amp; landing</h2>
+<div class="card">
+  <p><b>No VM handoff needed</b> &mdash; this is a docs + hooks + settings change, verified structurally on the Mac.</p>
+  <p><b>Expected:</b> settings.json stays valid JSON; <code>is-phi-free-machine.sh --explain</code> reports <code>PHI_FREE</code>&rarr;<code>ASSUME_PHI</code> in that order across Phase 2's two steps; a dry-run commit in a scratch medical-data-flavored repo is mechanically blocked pending <code>/phi-vet</code>; a post-edit grep of <code>claude_ops.md</code> finds no residual "no runtime environment" phrasing; the RadAWS symlink still resolves.</p>
+  <p><b>Stop (compliance-critical):</b> if <code>is-phi-free-machine.sh --explain</code> still reports <code>PHI_FREE</code> after Phase 2 step 2, STOP &mdash; the allowlist edit didn't take. Do not proceed to depend on phi-vet being active until fixed.</p>
+  <p><b>Landing spans four independent ceremonies</b> &mdash; a fresh implementer needs to know which class each edit belongs to:</p>
+  <ul class="tight">
+    <li><b>research-skills</b> (branch + PR): <code>feat/retire-planner-mac-phi-vm-split</code>, gated on Phil's read + approval (no VM gate needed). No second location to sync &mdash; the symlink means rad-eval sees it the instant it lands.</li>
+    <li><b>VISTA/code/CLAUDE.md + CLAUDE.vm.md</b>: ungated direct edits &mdash; not a git repo, no commit/branch/review trail. Manual copy to the actual VM afterward.</li>
+    <li><b>vista-pm</b>: its own ordinary <code>/commit-review</code> + push, independent of the research-skills branch's timing.</li>
+    <li><b>Stale-symlink repos</b> (contrastive-3d-onc, MerlinOnc, tte-pretraining): each its own commit + push.</li>
+    <li><b>rad-eval</b>: its own <code>/commit-review</code> (escalates to <code>/phi-vet</code> &mdash; trips medical-data detection), independent of research-skills.</li>
+    <li><b>~/.claude/settings.json</b>: not version-controlled &mdash; takes effect on save, no landing step.</li>
+  </ul>
+  <textarea class="section-feedback" data-section="verification-landing" placeholder="Feedback on verification / landing..."></textarea>
+</div>
+
+<h2>Open Questions</h2>
+<div id="oq-container"></div>
+
+<h2>Change since last review</h2>
+<div class="first-pass-banner" id="change-banner">First review &mdash; this is the first generated HTML for this plan. The change-since-last-review layer activates on the next regeneration.</div>
+
+<footer class="feedback-footer">
+  <textarea id="global-feedback" placeholder="Overall feedback on the plan..."></textarea>
+  <button id="copy-feedback-btn">Copy feedback (0 pending)</button>
+</footer>
+
+<script>
+const PLAN_STEM = "retire-planner-mac-phi-vm-split";
+const PLAN_PATH = "docs/plans/retire-planner-mac-phi-vm-split.md";
+const PLAN_BRANCH = "feat/retire-planner-mac-phi-vm-split";
+const PLAN_SHA = "cc4ac7abe1d616feb2f3800b6d7debed540e319bbaac1e4a4d95c330ac5a9582";
+const LS_PREFIX = "explain-plan::" + PLAN_STEM + "::";
+const LS_SHA_KEY = LS_PREFIX + "__sha";
+
+const OQS = [
+  {n: 1, title: "Delete vm-shell-guard.sh outright, or archive under hooks/archive/?",
+   body: "Recommend outright deletion — the legacy branch and git history already preserve it, and a live archive/ directory invites someone re-wiring it later without re-deriving whether the reasoning still applies."},
+  {n: 2, title: "dicom-annotations' PHI-copy-by-copy-paste-cells workflow — replaceable by the same Mac-side mount?",
+   body: "That repo sits outside VISTA/code/ and wasn't in scope for this pass. Flagged as a likely-real follow-on win, not resolved here."},
+  {n: 3, title: "Does rad_eval_mac_author_only_no_pytest.md (Mac = author only, VM = authoritative pytest gate) stay unchanged?",
+   body: "That memory's rationale is test-authoritativeness / environment parity, not PHI — probably untouched by this plan regardless, but worth a conscious answer."},
+  {n: 4, title: "Mac-side bucket mount execution (Phase 7) — Phil's own follow-up, or hand back to this session?",
+   body: "This plan documents the gcsfuse recipe but doesn't run it — real GCP credentials and a literal mount on Phil's own machine."},
+  {n: 5, title: "Where does “Claude Code for Education is high-risk-data compliant” actually come from?",
+   body: "Raised by /review-plan: no corroborating hit anywhere in the VISTA or rad-eval trees, unlike the GCP project ID. Worth naming a source — a Stanford Data Security Office confirmation, an IT ticket, a vendor agreement — for a future reader or compliance audit."},
+  {n: 6, title: "Is the RadAWS/code/research-skills symlink intentional, or should it be a real second clone?",
+   body: "Raised by /review-plan. If intentional, no action needed. If it should be a real clone (e.g. for toolchain isolation between the two labs), Phase 2's single-edit simplification would need to come back as a two-location edit."}
+];
+
+function renderOQs() {
+  const container = document.getElementById('oq-container');
+  OQS.forEach(oq => {
+    const div = document.createElement('div');
+    div.className = 'card oq-card';
+    div.setAttribute('data-oq', oq.n);
+    div.innerHTML = `
+      <div>
+        <b>OQ${oq.n}. ${oq.title}</b>
+        <p style="color:var(--muted); font-size:0.9em; margin:6px 0 8px;">${oq.body}</p>
+        <textarea class="section-feedback" data-section="oq-${oq.n}" placeholder="Notes on OQ${oq.n}..."></textarea>
+      </div>
+      <div>
+        <select data-oq-status="${oq.n}">
+          <option value="Pending">Pending</option>
+          <option value="Resolved">Resolved</option>
+          <option value="Deferred">Deferred</option>
+        </select>
+      </div>`;
+    container.appendChild(div);
+  });
+}
+renderOQs();
+
+// ---- localStorage persistence, keyed by plan-stem + section ----
+function restoreFeedback() {
+  const storedSha = localStorage.getItem(LS_SHA_KEY);
+  if (storedSha && storedSha !== PLAN_SHA) {
+    // Plan regenerated since last visit — clear stale feedback.
+    Object.keys(localStorage).filter(k => k.startsWith(LS_PREFIX)).forEach(k => localStorage.removeItem(k));
+  }
+  localStorage.setItem(LS_SHA_KEY, PLAN_SHA);
+
+  document.querySelectorAll('textarea.section-feedback').forEach(ta => {
+    const key = LS_PREFIX + ta.dataset.section;
+    const saved = localStorage.getItem(key);
+    if (saved) ta.value = saved;
+    ta.addEventListener('input', () => {
+      localStorage.setItem(key, ta.value);
+      updatePendingCount();
+    });
+  });
+  const globalKey = LS_PREFIX + "__global";
+  const savedGlobal = localStorage.getItem(globalKey);
+  if (savedGlobal) document.getElementById('global-feedback').value = savedGlobal;
+  document.getElementById('global-feedback').addEventListener('input', (e) => {
+    localStorage.setItem(globalKey, e.target.value);
+    updatePendingCount();
+  });
+
+  document.querySelectorAll('[data-oq-status]').forEach(sel => {
+    const key = LS_PREFIX + "__oqstatus_" + sel.dataset.oqStatus;
+    const saved = localStorage.getItem(key);
+    if (saved) sel.value = saved;
+    sel.addEventListener('change', () => {
+      localStorage.setItem(key, sel.value);
+      updatePendingCount();
+    });
+  });
+}
+
+function updatePendingCount() {
+  let n = 0;
+  document.querySelectorAll('textarea.section-feedback').forEach(ta => { if (ta.value.trim()) n++; });
+  if (document.getElementById('global-feedback').value.trim()) n++;
+  document.querySelectorAll('[data-oq-status]').forEach(sel => { if (sel.value !== 'Pending') n++; });
+  document.getElementById('copy-feedback-btn').textContent = `Copy feedback (${n} pending)`;
+}
+
+// ---- Copy-all-feedback-as-Claude-prompt ----
+function buildFeedbackPrompt() {
+  let out = `# Resume: apply explain-plan feedback\n`;
+  out += `Plan: ${PLAN_PATH} · branch: ${PLAN_BRANCH} · plan-sha: ${PLAN_SHA.slice(0,12)}\n`;
+  out += `→ If you're picking this up in a fresh session, read the plan doc above (plus any related docs / memory it points to) first. Then apply the feedback below.\n\n`;
+  out += `# Feedback on ${PLAN_STEM}\n\n`;
+
+  document.querySelectorAll('textarea.section-feedback').forEach(ta => {
+    if (ta.value.trim()) {
+      out += `## ${ta.dataset.section}\n${ta.value.trim()}\n\n`;
+    }
+  });
+  document.querySelectorAll('[data-oq-status]').forEach(sel => {
+    if (sel.value !== 'Pending') {
+      const n = sel.dataset.oqStatus;
+      const notesTa = document.querySelector(`textarea[data-section="oq-${n}"]`);
+      const notes = notesTa ? notesTa.value.trim() : '';
+      out += `## OQ${n}\nStatus: ${sel.value}\n${notes}\n\n`;
+    }
+  });
+  const global = document.getElementById('global-feedback').value.trim();
+  if (global) out += `## Overall\n${global}\n\n`;
+  return out;
+}
+
+document.getElementById('copy-feedback-btn').addEventListener('click', async () => {
+  const text = buildFeedbackPrompt();
+  try {
+    await navigator.clipboard.writeText(text);
+    const btn = document.getElementById('copy-feedback-btn');
+    const orig = btn.textContent;
+    btn.textContent = 'Copied!';
+    setTimeout(() => updatePendingCount(), 1200);
+  } catch (e) {
+    alert('Could not copy automatically — select and copy manually:\n\n' + text);
+  }
+});
+
+restoreFeedback();
+updatePendingCount();
+
+// ---- Mermaid + pan/zoom ----
+mermaid.initialize({ startOnLoad: false, theme: 'base', flowchart: { useMaxWidth: false } });
+mermaid.run({ querySelector: 'pre.mermaid' }).then(() => {
+  document.querySelectorAll('.diagram-wrap').forEach(wrap => {
+    const svg = wrap.querySelector('svg');
+    if (!svg) return;
+    svg.removeAttribute('style');
+    svg.style.width = '100%';
+    svg.style.height = '100%';
+    const inst = svgPanZoom(svg, { minZoom: 0.3, maxZoom: 8, fit: true, center: true, zoomScaleSensitivity: 0.4 });
+    wrap.querySelector('.btn-reset').addEventListener('click', () => { inst.reset(); });
+    wrap.querySelector('.btn-fullscreen').addEventListener('click', () => {
+      const container = wrap.querySelector('.mermaid-container');
+      container.classList.toggle('fullscreen');
+      setTimeout(() => { inst.resize(); inst.fit(); inst.center(); }, 60);
+    });
+  });
+});
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') {
+    document.querySelectorAll('.mermaid-container.fullscreen').forEach(c => c.classList.remove('fullscreen'));
+  }
+});
+</script>
+</body>
+</html>

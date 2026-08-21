@@ -277,6 +277,10 @@ recipe (Phase 5's README edit) but does not execute the mount. See Open Question
    from** — a Stanford Data Security Office confirmation, an IT ticket, a vendor agreement
    Phil has seen directly? Worth naming so a future reader (or a compliance audit) has
    something to point at besides this plan's own prose (raised by `/review-plan`).
+6. **Is the `RadAWS/code/research-skills` symlink intentional, or an accident that should be a
+   real second clone instead** — e.g. for genuine toolchain isolation between the two labs?
+   (raised by `/review-plan`) If intentional, no action; if it should be a real clone, Phase 2's
+   single-edit simplification would need to come back as a two-location edit.
 
 ## Verification & VM handoff
 

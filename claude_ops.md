@@ -30,22 +30,42 @@ This is the *simple single-machine default* — assumed by all VISTA repos. Repo
 
 ## Machine-Aware Operating Mode
 
-For repos where the executor / planner split is hostname-dependent (a project VM holds the GPU / high-throughput compute the local Mac lacks), this section overrides **Environment Constraints** above.
+Any machine running Claude Code — the Mac, a project VM, whichever — has **full parity**: plan,
+implement, verify, and commit, the same discipline everywhere. There is no "planner" role
+confined to one machine and an "executor" role confined to another; a session discovering that
+a plan assumption was wrong doesn't hand off to a different machine to decide what to do about
+it — it reconsiders, revises the approach, documents the revision, and keeps going, the same
+way Core Principle #2 already asks of any session facing a direction change.
 
-1. **At session start, run `hostname`** to determine which mode applies.
-2. **The repo declares its machine posture** — typically in `CLAUDE.md` or a dedicated registry like `docs/machines.md`. The registry names known hosts and assigns each one Executor or Planner role, plus PHI posture if relevant.
-3. **Executor mode** (a project VM with data, credentials, and a runtime):
-   - **Fetch before you survey or act.** The executor is always downstream of the planner's pushes, so your local refs — **`main` included** — lag `origin` by default. Run `git fetch origin` *before* finding a handoff doc / branch / SHA, checking one out, or concluding "not found" — a ref that was never fetched is invisible to a stale tree, so *fetch first*, don't improvise (see *Session Start → Fetch before you survey*). This is where the stale-checkout trap always fires.
-   - Run queries, scripts, and exploration as directed by plan docs.
-   - Commit results frequently.
-   - **The executor may be a *fleet* of capability classes, not one box** — a Claude-Code CPU box (the default / interactive one), a high-throughput CPU box (bulk preprocessing, parallel linear-probe / KNN), and a GPU box (training, embedding generation). Route each step to the class that fits; only the Claude-Code CPU class can run `/vm-handoff` readback itself, so work on the other two runs there but reads back on the Claude-Code CPU box (or the Mac reads results). The class taxonomy + routing live in the canonical spec, `references/verification-and-handoff-design.md` (§4); concrete class→host bindings are repo-local (below).
-   - **Classify findings, don't improvise.** A finding that's purely mechanical and leaves the design + success criteria unchanged is an *in-lane correction* (fix it, log it). A finding that contradicts a plan assumption, changes scope, or invalidates the approach is a *plan-level deviation* — STOP, document it, and hand back to the planner; **when uncertain, escalate**. Don't broad-plan or major-rewrite without confirmation. `/vm-handoff` formalizes this routing (its *Deviation workflow*: VM→Mac via a DEVIATION block in the handoff doc, re-plan, supersede with a new doc).
-4. **Planner mode** (typically the local Mac):
-   - Planning, template authoring, spec writing, doc review.
-   - May run light code / query BQ / inspect mounted data directly, gated by the same `phi-vet` discipline as commits; GPU and high-throughput work still routes to the executor fleet.
-5. **Unknown hostnames**: ask the user which mode applies rather than hard-refusing or assuming. After confirming, offer to register the hostname in the repo's machine registry so the next session doesn't re-prompt.
+The one real machine-dependent split left is **hardware capacity**: GPU training, embedding
+generation, and high-throughput batch (parallel linear-probe / KNN, bulk preprocessing) need
+hardware the Mac doesn't have, so those specific steps route to whichever box has it.
 
-Repo-specific bindings (concrete hostnames, package-manager rules, sibling-repo paths, PHI gate choice) live in the repo's `CLAUDE.md` or machine registry — not here. This section defines the *pattern*; each repo declares its *parameters*.
+1. **At session start, run `hostname`** to know which box you're on — mainly relevant for which
+   data mounts / GPU capacity are local. Repo-specific bindings (concrete hostnames,
+   package-manager rules, sibling-repo paths) live in the repo's `CLAUDE.md` or machine registry
+   (e.g. `docs/machines.md`), not here.
+2. **On any Claude-Code-capable machine**, do everything a plan calls for: run queries and
+   scripts, commit results frequently, and when a finding contradicts a plan assumption — revise
+   the approach inline and keep going. Escalate only when a call is genuinely
+   architecture-significant or you're actually uncertain (Communication Standards below already
+   asks this of every session, machine notwithstanding) — not because of which box you're on.
+3. **GPU / high-throughput compute with no Claude Code running there** (a bare GPU box, a
+   high-throughput CPU box driven by a script rather than interactively) is the one place a real
+   split remains — not an authority question, just a fact that no agent is present to make any
+   judgment call there:
+   - The deliverable is a **standalone runner script** (env setup — `uv sync` + any env exports
+     — plus the run, in one command) that gets copy-pasted onto that box and invoked directly.
+   - The script writes its output to the **shared bucket mount** (`su-vista-uscentral1`, mounted
+     on both the Mac and the Claude-Code-capable VMs — see `vista-pm/README.md`), not into a
+     rendered handoff doc. Whichever Claude-Code session needs the results reads them straight
+     off the mount.
+   - Give the script real Expected/Stop-style assertions (exit codes, files that must exist &
+     be non-empty, metric ranges) — since no agent is there to eyeball an ambiguous result, the
+     script itself has to know pass from fail.
+4. **Unknown hostnames**: ask the user which capacity class applies rather than hard-refusing or
+   assuming. After confirming, offer to register the hostname in the repo's machine registry so
+   the next session doesn't re-prompt.
 
 ---
 
@@ -62,7 +82,16 @@ If the local clone is behind by **any** commits, tell the user how far behind it
 
 ### Fetch before you survey — your local refs lag the other machine
 
-VISTA work is **cross-machine**: the planner Mac pushes (plans, handoff docs, `next.md` pointers, branches, SHAs) and the executor VM consumes them — so a receiver's local refs, **`main` included**, are stale by default. Before you survey git to *find* something another session produced (`git log` / `git ls-files` / a branch-or-file lookup), before you check out a named branch or SHA, and before you conclude *"not found"*, run `git fetch origin` **first**. A commit that was never fetched is invisible to a stale tree, so "can't find the branch / doc / SHA" means *fetch first* — never *it was never authored, so improvise a plausible substitute*. This bites hardest **VM-side** (the executor is always downstream of the Mac's pushes — see *Machine-Aware Operating Mode → Executor mode*); it's the operating-standard root of the resume-block `SYNC` line that `/vm-handoff` and `/wrapup` print. It's orthogonal to the shared-checkout check below: that guards against *local* clobbering, this against *stale remote* refs.
+VISTA work is **cross-machine**: any session on any machine — the Mac, a project VM, whichever
+— may have pushed (plans, `next.md` pointers, branches, SHAs) since you last synced, so your
+local refs, **`main` included**, are stale by default regardless of which box you're on. Before
+you survey git to *find* something another session produced (`git log` / `git ls-files` / a
+branch-or-file lookup), before you check out a named branch or SHA, and before you conclude
+*"not found"*, run `git fetch origin` **first**. A commit that was never fetched is invisible to
+a stale tree, so "can't find the branch / doc / SHA" means *fetch first* — never *it was never
+authored, so improvise a plausible substitute*. This is the operating-standard root of the
+resume-block `SYNC` line `/wrapup` prints. It's orthogonal to the shared-checkout check below:
+that guards against *local* clobbering, this against *stale remote* refs.
 
 ### Check for parallel work in the same checkout (before you touch anything)
 
@@ -100,14 +129,11 @@ Also cross-check `MEMORY.md` / `docs/next.md` for concurrently-active branches. 
 6. Ask: "Are there any points of ambiguity about this plan?" to surface underspecified requirements
 7. Iterate on the plan until solid, then exit plan mode
 
-**For VM-handoff-bound plans** (a Mac/VM-split repo where the work executes on the VM): co-design
-the plan's *Verification & VM handoff* section (see Plan Document Structure below) using the
-**Verification & VM-Handoff Design canonical spec** — `references/verification-and-handoff-design.md`
-in the research-skills repo (resolve its root by following this repo's `docs/claude_ops.md`
-symlink). It carries the archetype menu (*what to verify*), the expected-vs-unexpected envelope,
-and the batching discipline (*how many handoffs*). Tiered by the spec's complexity classifier:
-draft inline for a *simple* handoff; spawn a dedicated verification-design subagent for a *complex*
-one (keeps the planning context lean). `/review-plan` later audits this section against the same spec.
+**For plans with a step that needs GPU / high-throughput hardware**: name the standalone
+runner script that step needs as a deliverable in *Files to Modify*, and state its Expected/Stop
+criteria in the plan's *Verification* section (see Plan Document Structure below) — the same
+place any other step's success criteria live. There's no separate co-design pass for this; it's
+one more thing a thorough plan states plainly.
 
 ### Saving the Plan (after exiting plan mode)
 
@@ -147,32 +173,24 @@ How will we implement this?
 ## Open Questions
 - Any ambiguities to resolve?
 
-## Verification & VM handoff
-How will we know this works? Because this step needs compute the Mac doesn't have (GPU,
-high-throughput batch), state the success criteria *here* so they are reviewed **with the
-plan** (via `/review-plan`), not invented later at handoff time:
-- **What runs on the VM** — commands / scripts / tests, in order.
-- **Target machine** (per step / phase) — which **executor class** runs it: *Claude-Code CPU*
-  (default — smoke, structural readback, BQ/OMOP queries, moderate eval), *high-throughput CPU*
-  (bulk preprocessing, linear-probe / KNN parallelization, core-saturating batch), or *GPU*
-  (model training, embedding generation, GPU-only tests), grounded in the executor-fleet taxonomy
-  in the canonical spec (§4). When the run machine has **no Claude Code** (high-throughput CPU /
-  GPU), name the **readback** machine too — the Claude-Code CPU executor — since the run and the
-  Claude-driven readback split across boxes. **A non-Claude-Code run also needs a *standalone
-  runner script*** (env setup — `uv sync` + any env exports — plus the run in one command) as a
-  deliverable in *Files to Modify*, and plain operator run-instructions (branch to check out,
-  preconditions, the one command, where results land): that box runs a script it can invoke, not a
-  Claude-driven vm-status doc (canonical spec §4). Concrete class→host binding stays repo-local.
-- **Expected** (per step) — how the executor knows it worked: exit codes, files that must
-  exist & be non-empty, metric ranges, skip-logs.
+## Verification
+How will we know this works? State the success criteria *here* so they are reviewed **with the
+plan** (via `/review-plan`), not invented later:
+- **What runs, and where** — commands / scripts / tests, in order. Most work runs wherever the
+  session implementing it happens to be (Mac or a Claude-Code VM — no distinction). Only name a
+  specific machine for a step that genuinely needs GPU / high-throughput hardware.
+- **Expected** (per step) — how you'll know it worked: exit codes, files that must exist &
+  be non-empty, metric ranges, skip-logs.
 - **Stop** (per step) — the halt-and-report conditions: precondition / failure / decision-gate.
-- **Anticipated forks** — where you can predict the executor will hit a fork (a metric near a threshold, an optional path), pre-encode it as a **decision gate** ("if X → A, else B") so the executor resolves it inline instead of round-tripping back for a re-plan. Unanticipated findings that contradict the plan are *deviations* — `/vm-handoff`'s Deviation workflow routes those back here for revision.
-- **Handoff phasing** — for a *complex* handoff (cross-repo SHA ripple, more than one phase, decision gates, bank/un-bank of prior results, destructive writes, multi-target bundling, or more than one executor class — which forces a run-vs-readback split), decompose the VM work into phases so the number of expensive round-trips is *designed*, not accidental. Per phase: `Phase N — <name>` · purpose · machine (executor class; readback machine if it differs) · banked-from-prior (steps / SHA not re-run) · gates (class-2 forks resolved inline) · destructive? · stop/deviation routing · next-doc trigger. A *simple* single-phase handoff states its one phase inline. The batching rules (order cheap→expensive→destructive, bundle-by-SHA, bank-and-un-bank, decision-gates-over-round-trips) and the archetype menu / expected-vs-unexpected envelope live in the **Verification & VM-Handoff Design canonical spec** — `references/verification-and-handoff-design.md` in the research-skills repo (resolve its root by following this repo's `docs/claude_ops.md` symlink — or, if you are already inside research-skills, it is the repo root). `/vm-handoff` renders each phase into a runnable vm-status doc.
-
-`/vm-handoff` later renders this section into a runnable `docs/vm-status/<date>-<sha>.md`
-handoff doc and tracks the VM's results back into it. It should be **deriving** the
-criteria from this section, not authoring fresh ones — if this section is thin, the plan
-isn't handoff-ready (see `/review-plan`'s handoff-readiness lens).
+- **Anticipated forks** — where you can predict a fork (a metric near a threshold, an optional
+  path), pre-encode it as a **decision gate** ("if X → A, else B") so it resolves inline instead
+  of costing a pause to re-decide. A finding that contradicts a plan assumption isn't a
+  hand-off — reconsider inline, revise the approach, document the revision, keep going.
+- **If a step needs GPU / high-throughput hardware with no Claude Code running there**: name the
+  **standalone runner script** as a deliverable in *Files to Modify* (env setup + the run, one
+  command), state where its output lands (the shared bucket mount, not a rendered doc), and give
+  it real Expected/Stop assertions of its own — no agent is present there to interpret an
+  ambiguous result.
 
 ## Landing & cleanup
 How this work reaches `main` and how its branch is retired — planned here so the merge and
@@ -180,8 +198,9 @@ the branch-deletion are *designed*, not improvised at the end. `/land` executes 
 should be **following** this section, not inventing the sequence.
 - **Branch** — the feature branch this lands on (`feat/…`), or "direct on main" for doc-only /
   minor-fix work (per Git Practices → Feature Branching).
-- **Landing gate** — what must hold before `/land` merges: review sign-off (`/read-plan`),
-  VM gate green, PHI-vetted. Name any sibling branch that must land first.
+- **Landing gate** — what must hold before `/land` merges: review sign-off (`/read-plan`), any
+  GPU/high-throughput step's standalone script actually run and its output checked, PHI-vetted.
+  Name any sibling branch that must land first.
 - **Merge sequence** — *single-branch plan:* one line ("`/land` at end → main, prune branch +
   worktree"). *Multi-branch / phased plan:* the order branches hit `main` and which rebases
   which (foundational/smaller first; big rename/refactor last, unless it's a prerequisite).
@@ -197,9 +216,18 @@ should be **following** this section, not inventing the sequence.
 - **Mark plan docs as completed** by adding `**Status: Completed** (date)` at the top.
 - **Update the plans README** (`docs/plans/README.md`) feature table with the new status.
 
-### VM-status docs are for smoke tests only — not for eval results
+### Standalone scripts for GPU / high-throughput work — read results from the mount, not a doc
 
-`docs/vm-status/<date>-<sha>.md` reports are for **smoke-test / verification handoffs** between sessions: aggregator runs needing structural readback, full test sweeps with expected reds to characterize, end-to-end pipeline validation. Use **`/vm-handoff`** to author and close these — it auto-detects planner vs executor by `hostname` (per Machine-Aware Operating Mode above), **renders** the runnable doc from the plan's *Verification & VM handoff* section (the Expected/Stop criteria already reviewed with the plan via `/review-plan` — it derives them, it doesn't invent them), and on the VM appends the run results back into the *same* doc so the round-trip is self-contained. Once a workstream has moved past smoke tests into producing eval results (linear-probe runs, KNN runs, cross-modality comparisons), don't propose vm-status docs — the user reads results directly from the auto-generated HTML at `<results-root>/<version>/<modality>/<dataset>/reports/<model>_<dataset>.html` plus the on-disk per-task / per-example parquets, and writes any narrative themselves. Backlog / next.md entries that *reference* such results with a one-line pointer are still fine.
+For the one class of work that still needs a specific box (GPU training, embedding generation,
+high-throughput batch), the deliverable is a **standalone runner script** — self-contained env
+setup + the run, in one command — copy-pasted onto that box and invoked directly, since no
+Claude Code session runs there interactively. The script writes its output to the shared bucket
+mount; any Claude-Code session (Mac or VM) reads the results straight off the mount afterward —
+no rendered handoff doc, no separate readback step. For eval results specifically (linear-probe
+runs, KNN runs, cross-modality comparisons), read from the auto-generated HTML at
+`<results-root>/<version>/<modality>/<dataset>/reports/<model>_<dataset>.html` plus the on-disk
+per-task / per-example parquets, and write any narrative yourself. Backlog / `next.md` entries
+that *reference* such results with a one-line pointer are still fine.
 
 ---
 
@@ -323,12 +351,11 @@ Document recurring patterns in the appropriate `docs/` file to help future sessi
 
 For non-trivial changes, use the research-skills review workflows instead of inline subagent prompts:
 
-- **`/review-plan <plan-path>`** — independent design audit of a plan doc (Codex CLI or fresh Claude subagent), then applies agreed feedback. Its always-on lenses include **handoff-readiness** — does the plan POINT AT / STATE DIRECTLY everything a fresh implementing agent needs (file paths, schema contracts, cross-stage surfaces, success criteria, out-of-scope, and for VM work the *Verification & VM handoff* Expected/Stop criteria). Run after substantial plan-doc work, before implementation.
-- **`/review-implementation <plan-path>`** — implementation audit of uncommitted code against the plan. Run after non-trivial implementation completes, before `/commit-review`. Only when the repo uses a planner/executor (Mac/VM) split **and** the plan requires a VM handoff does it route to `/vm-handoff` first (so the handoff doc lands in the same commit-review); otherwise it goes straight to `/commit-review`.
-- **`/review-tests <plan-path>`** — test-coverage audit of uncommitted code against the plan. Run after `/review-implementation` when the change introduces new branches / contracts / edge cases worth regression-protection. Same conditional `/vm-handoff`-before-`/commit-review` routing as `/review-implementation`.
+- **`/review-plan <plan-path>`** — independent design audit of a plan doc (Codex CLI or fresh Claude subagent), then applies agreed feedback. Its always-on lenses include **handoff-readiness** — does the plan POINT AT / STATE DIRECTLY everything a fresh implementing agent needs (file paths, schema contracts, cross-stage surfaces, success criteria, out-of-scope, and the *Verification* section's Expected/Stop criteria). Run after substantial plan-doc work, before implementation.
+- **`/review-implementation <plan-path>`** — implementation audit of uncommitted code against the plan. Run after non-trivial implementation completes, before `/commit-review`.
+- **`/review-tests <plan-path>`** — test-coverage audit of uncommitted code against the plan. Run after `/review-implementation` when the change introduces new branches / contracts / edge cases worth regression-protection.
 - **`/commit-review`** — commit workflow with appropriateness review (catches accidentally-leaked private content) before commit + push. Use this rather than running `git commit` inline.
 - **`/phi-vet`** — hard PHI gate for medical-data repos. `/commit-review` escalates to it automatically for repos that touch BigQuery / OMOP / NeuralFrame / DICOM / EHR / WSI / pathology bucket / vista_bench. Do not silently fall back to inline sweeps.
-- **`/vm-handoff`** — planner-Mac → executor-VM round-trip. On the Mac, renders the plan's *Verification & VM handoff* criteria into a runnable `docs/vm-status/<date>-<sha>.md`, gates the criteria for your sign-off (tiered by complexity), then offers `/commit-review` to land. Runs **before** the commit-review phase, not after: authored against the still-uncommitted implementation, so its `/commit-review` bundles the handoff doc **and** the code it documents into one PHI-vet + push instead of a second cycle. On the VM, appends the run results into the same doc and offers `/phi-vet` → `/commit-review`. Auto-detects mode by `hostname`.
 
 Skip the review skills for trivial changes (single-file fixes, doc tweaks, formatting). Each skill carries its own guidance on what it checks, when to skip, and how findings get applied.
 
@@ -345,9 +372,9 @@ Skip the review skills for trivial changes (single-file fixes, doc tweaks, forma
 
 ## Verification Approaches
 
-Always define how you'll verify changes work. For steps that need compute this machine doesn't have (GPU, high-throughput batch), verification means describing expected behavior for the user to confirm on the VM.
+Always define how you'll verify changes work — the same discipline regardless of which machine implements it. For a step that needs GPU / high-throughput hardware, verification means giving the standalone runner script real Expected/Stop assertions of its own, since no agent is present to eyeball an ambiguous result there.
 
-Capture that expected behavior as **Expected / Stop** success criteria in the plan's *Verification & VM handoff* section (see Plan Document Structure above), so it is reviewed with the plan. `/vm-handoff` operationalizes those criteria into a runnable `docs/vm-status/<date>-<sha>.md` handoff doc and records the VM's results back into the same doc — see that skill for the planner→executor round-trip.
+Capture expected behavior as **Expected / Stop** success criteria in the plan's *Verification* section (see Plan Document Structure above), so it is reviewed with the plan.
 
 Remember: Give Claude a way to verify its work. This is the single most important factor in output quality.
 

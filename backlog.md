@@ -13,13 +13,13 @@ The intended setup is a symlink: `~/.claude/commands → research-skills/command
 ## rad-eval has no per-repo plan-review-checklist
 
 Three repos have a `.claude/references/plan-review-checklist.md` (vista_bench, vista-eval,
-vista-ct); rad-eval does not. Until one is seeded, the generic archetype menu (and, once it
-lands, the canonical `references/verification-and-handoff-design.md` spec) carries more weight
-for rad-eval plan reviews than for the others. Worth a small followup plan to author a
-rad-eval checklist grounded in its extraction / seed-gate / equivalence verification patterns.
+vista-ct); rad-eval does not. Until one is seeded, `/review-plan`'s always-on lenses (cross-repo
+contracts, modularity-vs-YAGNI, handoff-readiness) run without repo-grounded specifics for
+rad-eval reviews. Worth a small followup plan to author a rad-eval checklist grounded in its
+extraction / seed-gate / equivalence verification patterns.
 
-Filed 2026-07-08 while scoping the verification-and-handoff-design agent (moved out of that
-plan's open questions so the plan doesn't carry a stale cross-repo reference).
+Filed 2026-07-08 while scoping the (now-retired) verification-and-handoff-design agent (moved
+out of that plan's open questions so the plan doesn't carry a stale cross-repo reference).
 
 ## VM-side plan/HTML viewing has no bridge to the Mac's browser
 

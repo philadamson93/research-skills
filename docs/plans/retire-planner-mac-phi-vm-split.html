@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<meta name="plan-sha256" content="38029c324ec9ec9774d091601ac4b6850b9cfa5a0917a306a7bf8847a00e0f5f">
+<meta name="plan-sha256" content="286639a33c0bac4830d75a0d3d6a700416375cc0c0745fc267309ff3964c3060">
 <title>Plan: Retire the planner-Mac / PHI-VM split</title>
 <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/svg-pan-zoom@3.6.1/dist/svg-pan-zoom.min.js"></script>
@@ -99,20 +99,20 @@
 <h1>Retire the planner-Mac / PHI-VM split as the VISTA default</h1>
 
 <div class="card header-card">
-  <div><div class="field-label">Status</div><div class="field-value"><span class="chip chip-draft">Draft</span> (revised post-review + explain-plan feedback)</div></div>
+  <div><div class="field-label">Status</div><div class="field-value"><span class="chip chip-draft">Draft</span> (OQ7 resolved &mdash; unblocked)</div></div>
   <div><div class="field-label">Owner</div><div class="field-value">Phil Adamson</div></div>
   <div><div class="field-label">Branch</div><div class="field-value"><code>feat/retire-planner-mac-phi-vm-split</code></div></div>
   <div><div class="field-label">Source doc</div><div class="field-value"><a href="retire-planner-mac-phi-vm-split.md">retire-planner-mac-phi-vm-split.md</a></div></div>
-  <div><div class="field-label">Plan SHA-256</div><div class="field-value"><code id="sha-display">38029c324ec9</code>&hellip;</div></div>
-  <div><div class="field-label">Generated</div><div class="field-value">2026-08-21 (round 2)</div></div>
+  <div><div class="field-label">Plan SHA-256</div><div class="field-value"><code id="sha-display">286639a33c0b</code>&hellip;</div></div>
+  <div><div class="field-label">Generated</div><div class="field-value">2026-08-24 (round 3)</div></div>
 </div>
 
 <div class="card">
-<b>TL;DR.</b> Phil's Stanford Claude Code for Education account is now approved for high-risk data on both his Mac and his VMs, so the old "planner Mac has no PHI clearance, VM does" split no longer holds. This plan retires that split across one shared repo (<code>research-skills</code>) plus five downstream repos. <b>One open question now gates the whole design</b>: Stanford's own Claude Code page distinguishes "high-risk data" (direct Claude Code is fine) from literal "PHI" (requires routing through the Stanford AI API Gateway) &mdash; whether VISTA's data is the former or the latter is unresolved (Open Question 7). The Mac-side bucket mount test has been moved to Phase 0, test-first, and is held pending that same answer.
+<b>TL;DR.</b> Phil's Stanford Claude Code for Education account is now approved for high-risk data on both his Mac and his VMs, so the old "planner Mac has no PHI clearance, VM does" split no longer holds. This plan retires that split across one shared repo (<code>research-skills</code>) plus five downstream repos. Stanford's own Claude Code page distinguishes "high-risk data" (direct Claude Code is fine) from literal "PHI" (requires the Stanford AI API Gateway) &mdash; <b>Phil confirmed <code>som-nero-plevriti-deidbdf</code> is the former, scoped to that project specifically</b> (Open Question 7, now resolved). The Mac-side bucket mount (Phase 0) is unblocked; a live pre-flight (ADC auth + bucket listing) already passed on this Mac.
 </div>
 
-<div class="card" style="border-color:var(--danger); border-width:2px;">
-  <b style="color:var(--danger);">⚠ Most consequential open item: Open Question 7.</b> Stanford IT's Claude Code page says PHI requires the Stanford AI API Gateway, separate from direct Claude Code use. This plan assumes direct use is enough everywhere &mdash; that assumption needs confirming before Phase 0 touches real bucket content or Phase 1 lands as written. See the Open Questions section below.
+<div class="card" style="border-color:var(--ok); border-width:2px;">
+  <b style="color:var(--ok);">✓ Open Question 7 resolved.</b> Direct Claude Code use is confirmed fine for <code>som-nero-plevriti-deidbdf</code> &mdash; PHI-scrubbed, high-risk, not PHI, scoped to this project only (not a blanket statement about other GCP projects Phil touches). One tension flagged, not re-litigated: rad-eval's <code>dispatcher.py</code> pins the same project ID but its own comment says agent prompts "carry PHI" &mdash; see the Gotchas section. rad-eval's stricter gate stays as-is regardless, per the earlier decision.
 </div>
 
 <h2>Review history</h2>
@@ -131,6 +131,13 @@
     <td><span class="chip chip-changed">Pivot</span></td>
     <td>Resolved 5 of 6 open questions; moved bucket mount to Phase 0 (test-first, was a deferred Phase 7); cited a real compliance source that surfaced a sharper question (Stanford AI API Gateway vs. direct Claude Code) than the one it answered; raised a new VM-side HTML-viewing design gap.</td>
     <td>Yes &mdash; see Open Question 7, now the plan's most consequential open item</td>
+  </tr>
+  <tr>
+    <td>3</td>
+    <td>Phil, via explain-plan HTML feedback</td>
+    <td><span class="chip chip-yes">Resolved</span></td>
+    <td>OQ7 resolved: direct Claude Code confirmed fine for <code>som-nero-plevriti-deidbdf</code> specifically. Claude live-checked ADC auth + bucket listing on this Mac and verified (via the GCS JSON API, not assumed) that the bucket actually resolves to the approved project &mdash; the CLI's default project happened to be a different, unrelated one.</td>
+    <td>Yes &mdash; Phase 0 unblocked, pre-flight results recorded</td>
   </tr>
 </table>
 
@@ -199,10 +206,10 @@ flowchart LR
   k1["Knob: Mac PHI posture<br/>allowlist entry"]
   k2["Knob: SSH boundary<br/>vm-shell-guard.sh"]
   k3["Knob: rad-eval Mac posture<br/>machines.md table"]
-  k4["Knob: Stanford AI API Gateway<br/>PHI vs high risk routing, Open Question 7"]
+  k4["Knob: Stanford AI API Gateway<br/>PHI vs high risk routing, resolved by OQ7"]
 
   subgraph p0["Phase 0"]
-    bucketMount2["Mac gcsfuse mount<br/>su-vista-uscentral1, held on k4"]
+    bucketMount2["Mac gcsfuse mount<br/>su-vista-uscentral1, pre-flight passed"]
   end
 
   subgraph p1["Phase 1"]
@@ -246,7 +253,7 @@ flowchart LR
     commitGate["git commit gate, phi-vet-gate.sh"]
   end
 
-  k4 -.->|gates| bucketMount2
+  k4 -.->|resolved, cleared| bucketMount2
   k1 --> settingsHook
   k1 --> allowlist
   allowlist --> guardsh
@@ -266,16 +273,16 @@ flowchart LR
   subgraph legend["Color legend"]
     lgKnob["Knob, decision point, magenta"]
     lgChange["THIS PR changes, cyan"]
-    lgHeld["Held pending Open Question 7, amber dashed"]
+    lgCleared["Resolved and cleared, green"]
   end
 
   class k1,k2,k3,k4,lgKnob knob
   class opsEnv,opsHard,opsMachine,opsVerify,settingsHook,allowlist,guardsh,hooksReadme,guardplan,vmhandoff,phivet,reviewtests,landmd,vclaude2,vvm2,vpmreadme,staleFiles,radmach2,futureSessions,commitGate,lgChange changed
-  class bucketMount2,lgHeld held
+  class bucketMount2,lgCleared cleared
 
   classDef knob fill:#701a75,stroke:#e879f9,stroke-width:3px,color:#fff
   classDef changed fill:#0e7490,stroke:#06b6d4,stroke-width:2px,color:#fff
-  classDef held fill:#78350f,stroke:#f59e0b,stroke-width:3px,color:#fff,stroke-dasharray: 2 2
+  classDef cleared fill:#14532d,stroke:#22c55e,stroke-width:3px,color:#fff
 </pre>
   </div>
 </div>
@@ -288,7 +295,7 @@ flowchart LR
 <pre class="mermaid">
 flowchart TD
   startNode(["Plan reviewed once, revised twice<br/>2 findings rounds applied"])
-  ph0["Phase 0<br/>Mac bucket mount, test first<br/>PENDING, held on Open Question 7"]
+  ph0["Phase 0<br/>Mac bucket mount, test first<br/>PRE-FLIGHT PASSED, fuse install pending"]
   ph1["Phase 1<br/>claude_ops.md rewrite<br/>PENDING"]
   ph2a["Phase 2 step 1<br/>wire phi-vet-gate.sh<br/>PENDING"]
   ph2b["Phase 2 step 2<br/>remove Mac from allowlist<br/>PENDING"]
@@ -340,15 +347,18 @@ flowchart TD
 
 <h2>Steps</h2>
 
-<details data-section="phase-0" data-changed="new">
-  <summary>Phase 0 &mdash; Mac-side bucket mount, test first <span class="chip chip-pending">PENDING</span> <span class="chip chip-new">new</span></summary>
-  <p class="change-note">✦ New — moved up from a deferred Phase 7 per Phil's feedback ("move this to phase 0 to test it here").</p>
-  <p>Test this before anything else in the plan &mdash; it's the foundational capability everything else assumes works. Recipe: <code>brew install --cask macfuse</code> + <code>gcsfuse --implicit-dirs su-vista-uscentral1 &lt;mount-point&gt;</code>, same bucket the VMs already mount. BigQuery access from the Mac already works today via <code>gcloud auth application-default login</code>.</p>
+<details data-section="phase-0" data-changed="changed" open>
+  <summary>Phase 0 &mdash; Mac-side bucket mount, test first <span class="chip chip-yes">PRE-FLIGHT PASSED</span> <span class="chip chip-changed">changed</span></summary>
+  <p class="change-note">● Changed — Open Question 7 resolved, unblocked, and a live pre-flight actually run.</p>
   <div class="resp">
-    <div class="resp-label">Claude &mdash; re: your egress question</div>
-    Reads FROM a GCS bucket TO a client <i>outside</i> Google Cloud (your Mac, over the internet) bill as network egress; writes/uploads don't. A VM in the same region as the bucket reads for free; your Mac over home/office internet pays per-GB egress past GCS's small free tier. Practical guidance: fine for light, exploratory reads (browsing structure, small config/text files); keep bulk data pulls (large parquets, imaging volumes) on the VM as today &mdash; a cost/bandwidth reason on top of the compute-capacity reason already in Phase 1. Also flagging: macOS needs a one-time GUI approval for the <code>macfuse</code> kernel extension (System Settings &rarr; Privacy &amp; Security) that a headless session can't click through &mdash; you'll need to run the install step yourself.
+    <div class="resp-label">Claude &mdash; live pre-flight results, this session</div>
+    <code>gcloud auth application-default print-access-token</code> &mdash; succeeded, ADC already works on this Mac.<br/>
+    <code>gcloud storage ls gs://su-vista-uscentral1/</code> &mdash; succeeded: <code>chaudhari_lab/</code>, <code>plevritis_lab/</code>, <code>tmp/</code>, <code>vistabench/</code>.<br/>
+    <b>Verified, not assumed:</b> the CLI's default gcloud project on this Mac is <code>som-rit-phi-oncology-dev</code> &mdash; a different, unrelated project. Bucket access doesn't depend on that default, but I checked anyway: resolving the bucket's project number (<code>261743353465</code>) via the GCS JSON API confirms it's <code>som-nero-plevriti-deidbdf</code> exactly, the approved project. <i>Side note, not a blocker:</i> because the CLI default is a different project, any future command that omits an explicit <code>--project</code> flag risks targeting the wrong one &mdash; worth always pinning <code>--project=som-nero-plevriti-deidbdf</code> explicitly.<br/>
+    <code>gcsfuse</code>/<code>macfuse</code> &mdash; not installed. macOS needs a one-time GUI approval for the kernel extension that a headless session can't click through &mdash; that install step is still yours to run.
   </div>
-  <p><b>Held pending Open Question 7</b> &mdash; don't run this against real bucket content until the Stanford AI API Gateway question is resolved. Testing the mount mechanism itself (auth, gcsfuse install) doesn't require touching PHI-adjacent content; listing/reading real directories does.</p>
+  <p>Recipe once you're ready: <code>brew install --cask macfuse</code> + <code>gcsfuse --implicit-dirs su-vista-uscentral1 &lt;mount-point&gt;</code>, same bucket the VMs already mount.</p>
+  <p><b>Egress:</b> reads FROM the bucket TO a client outside GCP (your Mac) bill as network egress; writes/uploads don't. A same-region VM reads for free. Fine for light/exploratory Mac reads; keep bulk data pulls on the VM.</p>
   <textarea class="section-feedback" data-section="phase-0" placeholder="Feedback on Phase 0..."></textarea>
 </details>
 
@@ -395,9 +405,8 @@ flowchart TD
   <textarea class="section-feedback" data-section="phase-6" placeholder="Feedback on Phase 6..."></textarea>
 </details>
 
-<details data-section="phase-7" data-changed="changed" open>
-  <summary>Phase 7 &mdash; VM-side plan/HTML viewing design <span class="chip chip-deferred">NOT YET SCOPED</span> <span class="chip chip-changed">changed</span></summary>
-  <p class="change-note">● Changed — this slot used to be the deferred bucket-mount phase (now Phase 0); repurposed for a new design question from your Overall feedback.</p>
+<details data-section="phase-7">
+  <summary>Phase 7 &mdash; VM-side plan/HTML viewing design <span class="chip chip-deferred">NOT YET SCOPED</span></summary>
   <div class="resp">
     <div class="resp-label">Claude &mdash; re: your "seamless file opening" question</div>
     Your instinct in OQ3 is the right shape: since most work will likely stay VM-side (that's where your <code>uv</code> environments live), but the VM is typically headless with no browser, the fix is the same bucket-mount bridge this whole plan is built around &mdash; not a new SSH path.
@@ -423,16 +432,22 @@ flowchart TD
   <textarea class="section-feedback" data-section="gotcha-ordering" placeholder="Feedback..."></textarea>
 </details>
 
-<details data-section="gotcha-gateway" data-changed="new">
-  <summary>"High-risk data" and "PHI" are NOT the same approval tier <span class="chip chip-new">new</span></summary>
-  <p class="change-note">✦ New — surfaced by OQ5's own citation.</p>
-  <p>Stanford's Claude Code page draws a real line: direct Claude Code use covers low/moderate/high-risk data, but literal PHI needs the Stanford AI API Gateway. This plan was written assuming direct use is enough everywhere &mdash; that's now an open question (7), not a settled fact.</p>
+<details data-section="gotcha-gateway" data-changed="changed">
+  <summary>"High-risk data" and "PHI" are NOT the same approval tier <span class="chip chip-changed">changed</span></summary>
+  <p class="change-note">● Changed — surfaced by OQ5's citation, resolved by OQ7.</p>
+  <p>Stanford's Claude Code page draws a real line: direct Claude Code use covers low/moderate/high-risk data, but literal PHI needs the Stanford AI API Gateway. Resolved: <code>som-nero-plevriti-deidbdf</code> is confirmed the former, scoped to this project specifically &mdash; not a blanket clearance for any GCP project Phil touches.</p>
   <textarea class="section-feedback" data-section="gotcha-gateway" placeholder="Feedback..."></textarea>
 </details>
 
-<details data-section="gotcha-egress" data-changed="new">
-  <summary>Mac reads from the bucket cost egress; VM reads don't <span class="chip chip-new">new</span></summary>
-  <p class="change-note">✦ New — from your egress question on OQ4.</p>
+<details data-section="gotcha-radeval-tension" data-changed="new">
+  <summary>rad-eval's own code says the same project "carries PHI" <span class="chip chip-new">new</span></summary>
+  <p class="change-note">✦ New — noticed while resolving OQ7.</p>
+  <p>rad-eval's <code>dispatcher.py</code> pins <code>PHI_VERTEX_PROJECTS = frozenset({"som-nero-plevriti-deidbdf"})</code> and its own <code>require_vertex_phi_env()</code> comment says the block exists "because the agent's prompts carry PHI" &mdash; the exact same project Phil just confirmed is high-risk, non-PHI. Plausible reconciliations: rad-eval's optimizer-loop agent may pull raw report text or other inputs beyond the already-scrubbed fields this plan describes, or the Vertex-only gate is simply more conservative than the data strictly requires. Flagged, not re-litigated &mdash; this plan's "leave rad-eval's dispatcher gate as-is" decision stands regardless.</p>
+  <textarea class="section-feedback" data-section="gotcha-radeval-tension" placeholder="Feedback..."></textarea>
+</details>
+
+<details data-section="gotcha-egress">
+  <summary>Mac reads from the bucket cost egress; VM reads don't</summary>
   <p>A same-region VM reads from GCS for free; a Mac over the internet pays per-GB egress past the free tier. Uploads/writes aren't billed this way. Keep bulk reads on the VM; the Mac mount is for light/exploratory access.</p>
   <textarea class="section-feedback" data-section="gotcha-egress" placeholder="Feedback..."></textarea>
 </details>
@@ -467,29 +482,20 @@ flowchart TD
 const PLAN_STEM = "retire-planner-mac-phi-vm-split";
 const PLAN_PATH = "docs/plans/retire-planner-mac-phi-vm-split.md";
 const PLAN_BRANCH = "feat/retire-planner-mac-phi-vm-split";
-const PLAN_SHA = "38029c324ec9ec9774d091601ac4b6850b9cfa5a0917a306a7bf8847a00e0f5f";
+const PLAN_SHA = "286639a33c0bac4830d75a0d3d6a700416375cc0c0745fc267309ff3964c3060";
 const LS_PREFIX = "explain-plan::" + PLAN_STEM + "::";
 const LS_SHA_KEY = LS_PREFIX + "__sha";
 
 const CHANGES = {
   round: "diff",
-  baseline: "prior plan version at SHA cc4ac7abe1d6 (this HTML's first generation)",
+  baseline: "prior plan version at SHA 38029c324ec9 (round 2, explain-plan feedback applied)",
   sections: {
-    "goal":        { s: "changed", note: "Added a note that the Stanford AI API Gateway question (OQ7) gates Phase 0 execution and possibly Phase 1's framing." },
-    "background":  { s: "changed", note: "Replaced the uncited-compliance-claim caveat with a real citation that surfaced a sharper open question; added Phil's VM-execution-reality context." },
-    "phase-0":     { s: "new",     note: "Bucket mount moved up from a deferred Phase 7 to Phase 0, test-first, per Phil's feedback." },
-    "phase-7":     { s: "changed", note: "Repurposed from 'Mac-side bucket mount, deferred' to a new VM-side plan/HTML-viewing design question." },
-    "gotcha-gateway": { s: "new", note: "New gotcha surfaced by OQ5's citation." },
-    "gotcha-egress":  { s: "new", note: "New gotcha from the egress cost question." }
+    "phase-0":     { s: "changed", note: "OQ7 resolved, unblocked; live pre-flight actually run (ADC auth + bucket listing passed, bucket-to-project ownership verified via the GCS JSON API)." },
+    "gotcha-gateway": { s: "changed", note: "Resolved by OQ7 — direct Claude Code confirmed fine for som-nero-plevriti-deidbdf specifically." },
+    "gotcha-radeval-tension": { s: "new", note: "New — rad-eval's dispatcher.py says the same project 'carries PHI', flagged not re-litigated." }
   },
   oqs: {
-    1: { s: "resolved", note: "Delete outright, confirmed." },
-    2: { s: "resolved", note: "Not pursuing — dicom-annotations isn't active." },
-    3: { s: "resolved", note: "Stays unchanged, confirmed independently of PHI." },
-    4: { s: "changed",  note: "Egress cost answered; the actual test itself is now held pending OQ7." },
-    5: { s: "changed",  note: "Source now cited, but it raised OQ7 rather than fully closing this one." },
-    6: { s: "resolved", note: "Confirmed intentional convenience symlink." },
-    7: { s: "new",      note: "The most consequential open item — surfaced by OQ5's own citation." }
+    7: { s: "resolved", note: "Direct Claude Code confirmed fine, scoped to som-nero-plevriti-deidbdf specifically." }
   }
 };
 
@@ -506,8 +512,8 @@ const OQS = [
    body: "Phil cited https://uit.stanford.edu/service/claude — a real source. But it distinguishes 'high-risk data' from literal 'PHI' in a way this plan hadn't accounted for. See OQ7.", status: "Resolved", critical: false},
   {n: 6, title: "Is the RadAWS/code/research-skills symlink intentional?",
    body: "RESOLVED — Phil: yes, deliberate convenience, not an accident. No action needed.", status: "Resolved", critical: false},
-  {n: 7, title: "[MOST CONSEQUENTIAL] Does VISTA's data need the Stanford AI API Gateway, or is direct Claude Code use enough?",
-   body: "Stanford's own page: \"Claude Code is approved for low, moderate, and high-risk data. PHI use requires routing through the Stanford AI API Gateway.\" High-risk and literal PHI are handled differently. /phi-vet's own threat catalog (person_id, DICOM UIDs, accession numbers, clinical dates, free-text report excerpts) treats som-nero-plevriti-deidbdf as carrying real PHI-level risk — worth reconciling against \"de-identified\" in the project's own name. Gates Phase 0's actual mount-and-read test, and potentially Phase 1's Environment Constraints rewrite.", status: "Pending", critical: true}
+  {n: 7, title: "Does VISTA's data need the Stanford AI API Gateway, or is direct Claude Code use enough?",
+   body: "RESOLVED — Phil: direct Claude Code is fine. som-nero-plevriti-deidbdf is PHI-scrubbed, not PHI — high-risk, non-PHI, specifically inside the deid project, NOT a blanket statement about any other GCP project. Unblocks Phase 0's actual execution and confirms Phase 1 as designed. One tension flagged, not re-litigated: rad-eval's dispatcher.py pins the same project ID but its own comment says agent prompts \"carry PHI\" — see the new gotcha below. rad-eval's stricter gate stays as-is regardless (decided earlier, independent of this resolution).", status: "Resolved", critical: false}
 ];
 
 function renderOQs() {

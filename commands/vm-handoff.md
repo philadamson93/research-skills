@@ -8,8 +8,8 @@ description: Author and close the planner-Mac → executor-VM handoff round-trip
 ## The principle
 
 VISTA work is split across machines: the **planner Mac** authors plans, configs, and
-scripts but **cannot run code** (no runtime, GPU, data, or credentials); the **executor
-side** holds the runtime + data mounts + credentials and runs everything. That executor side
+scripts but lacks **GPU / high-throughput capacity**; the **executor
+side** holds that compute and runs everything GPU-bound or throughput-heavy. That executor side
 is not one box — it's a small **fleet of capability classes** (a Claude-Code CPU box, a
 high-throughput CPU box, a GPU box; see *Which machine* below), and part of the handoff is
 naming which class the work targets. Every non-trivial change therefore crosses a machine
@@ -33,7 +33,7 @@ Machine-Aware Operating Mode. It consumes that posture and does the handoff.
 PLANNER MAC
   plan mode → docs/plans/X.md  (incl. "Verification & VM handoff": Expected/Stop)
   /review-plan X            ── audits design + success criteria + handoff-readiness (fresh-agent implementability)
-  …implement (author configs/scripts — can't run them on the Mac)…
+  …implement (author configs/scripts — GPU/high-throughput runs still need the executor fleet)…
   /review-implementation X · /review-tests X   ── structural audits; route here only if VM-repo + plan needs a handoff
   /vm-handoff  ───────────▶ RENDER the plan's criteria into docs/vm-status/<date>-<sha>.md
        │                    (implementation is still UNCOMMITTED at this point)
@@ -58,7 +58,7 @@ on the rendered vm-status doc. The only things this skill uniquely adds are the
 Run `hostname` first and resolve the machine's role from the repo's machine posture (its
 `CLAUDE.md` / machine registry, per `claude_ops.md` Machine-Aware Operating Mode):
 
-- **Planner (the Mac, no runtime)** → **Author mode** (render the handoff doc).
+- **Planner (the Mac; no GPU/high-throughput capacity)** → **Author mode** (render the handoff doc).
 - **Executor (the Claude-Code CPU box with data + credentials)** → **Readback mode** (append
   results). This is the only executor class that can run this skill — the readback append is
   Claude-driven, so the high-throughput CPU and GPU boxes (no Claude Code) never invoke it;
@@ -209,7 +209,7 @@ Reference: docs/claude_ops.md
 **Status: Handoff to VM** (<date>)
 **Branch:** `<branch>` (<pinned SHA, or "commit+push first, SHA set at commit time">)
 **Locator:** REPO `<repo>` · BRANCH `<branch>` — **`git fetch` first** (even on `main`; or WORKTREE `<path>`) · this doc `docs/vm-status/<name>.md`. Reach it: `git fetch origin && git checkout <branch> && git pull --ff-only` (shared / dirty checkout, or non-ff → `git worktree add ../<repo>-<slug> <sha>`). <— the coordinates a receiver needs to find this doc *and* the code before they have either (see *Finding a handoff*).
-**Machine posture:** authored on the planner Mac (no runtime). Everything below has **never executed** — run it on the **<executor class>** box (`<vm-host>`, holds <data it needs>). <If that class has no Claude Code: "Run there; read results back on the Claude-Code CPU box `<readback-host>`.">
+**Machine posture:** authored on the planner Mac. Everything below has **not yet executed** on the target executor class — run it on the **<executor class>** box (`<vm-host>`, holds <data it needs>). <If that class has no Claude Code: "Run there; read results back on the Claude-Code CPU box `<readback-host>`.">
 **Target machine:** <executor class per step/phase — e.g. "Steps 0–2 Claude-Code CPU; Step 3 GPU (train), readback on Claude-Code CPU"> <— from the plan's Target machine field
 **Plans:** [`<plan-stem>.md`](../plans/<plan-stem>.md#verification--vm-handoff) <— criteria source of truth
 **Prior handoffs:** [`<date>-<sha>.md`](./<date>-<sha>.md) (omit if first)

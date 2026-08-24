@@ -109,7 +109,7 @@ Out of scope:
 - Bugs, design critiques, code quality (those are /review-implementation territory).
 - Tests for code unchanged by this diff.
 - Style nits in existing tests.
-- Gaps that fundamentally require infra unavailable in this checkout (BigQuery, GPU, PHI-mounted paths). Flag explicitly with the constraint; do not synthesize a fake test.
+- Gaps that fundamentally require compute unavailable in this checkout (GPU, high-throughput batch). Flag explicitly with the constraint; do not synthesize a fake test.
 - Items already raised in the prior implementation-feedback file.
 
 Write feedback to <output-path> with this structure:
@@ -262,7 +262,7 @@ Do not auto-invoke `/commit-review` or `/vm-handoff`. The user decides when to c
 - **Don't proxy inline Claude as the reviewer.** This skill exists *because* self-review isn't independent. If `codex` isn't available and the user declines the Claude-subagent fallback, surface and stop — don't fall back to the current session.
 - **Don't write the feedback file yourself.** The reviewer writes it.
 - **Don't commit.** This skill stops at "ready to commit"; `/commit-review` owns the commit step.
-- **Don't synthesize tests for infra-blocked gaps** (BigQuery, GPU, PHI mounts). Flag the constraint and stop — a fake test is worse than no test.
+- **Don't synthesize tests for compute-blocked gaps** (GPU, high-throughput batch). Flag the constraint and stop — a fake test is worse than no test.
 - **Don't suppress test failures from the run gate.** A failing stub is information; surface it.
 - **Don't skip the boundary-case section.** That's where the highest-leverage gaps usually live (off-by-one, exact-window, empty-collection).
 - **Don't re-flag items already adjudicated** in the prior implementation-feedback file. Read it first.

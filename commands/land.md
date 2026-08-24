@@ -18,7 +18,7 @@ The missing bookend. `/next` opens a session and surveys worktrees; `/wrapup` cl
 
 ## Machine posture (read first)
 
-Merging is a git operation, not repo code — `git merge` / `git push` / `gh pr` are fine on the **planner Mac**. Do **not** run repo tests/linters/python as part of landing (per `claude_ops.md` → Machine-Aware Operating Mode; the VM is the executor). If the branch's correctness still depends on an unrun VM gate, that's a **Phase 1 blocker**, not something `/land` resolves — surface it and stop. Pushing `main` is the one outward-facing act here; it lives behind the Phase 3 gate and is never silent.
+Merging is a git operation, not repo code — `git merge` / `git push` / `gh pr` are fine on the **planner Mac**. Repo tests/linters/python that need GPU or high-throughput compute still don't belong here (per `claude_ops.md` → Machine-Aware Operating Mode; the VM fleet has that capacity, the Mac doesn't) — don't run those as part of landing. If the branch's correctness still depends on an unrun VM gate, that's a **Phase 1 blocker**, not something `/land` resolves — surface it and stop. Pushing `main` is the one outward-facing act here; it lives behind the Phase 3 gate and is never silent.
 
 ## Phase 0 — Enumerate + refresh (do this FIRST)
 

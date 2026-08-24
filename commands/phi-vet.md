@@ -10,7 +10,7 @@ This skill exists because PHI leakage from BigQuery output, materialized DataFra
 
 ## Step 0 — Machine gate (fail-closed PHI-FREE allowlist)
 
-phi-vet only does real work on machines that may hold PHI. PHI lives on the data-bearing machine (the GCP / VM executor); planner-only machines (e.g. a local laptop with no BigQuery credentials or data mounts) have nothing to scan. Before anything else, run the shared machine check that the `phi-vet-gate.sh` hook uses — single source of truth, so the skill and the hook never disagree:
+phi-vet only does real work on machines that may hold PHI. That's the default assumption for any machine — a Mac with Claude Code for Education, BQ credentials, and a mounted bucket is not PHI-free just because it's a laptop. PHI-free is a narrow, explicit exemption: only a machine with genuinely no data mount and no BigQuery credentials at all, and listed as such in the allowlist, has nothing to scan. Before anything else, run the shared machine check that the `phi-vet-gate.sh` hook uses — single source of truth, so the skill and the hook never disagree:
 
 ```bash
 # Locate the shared check inside whichever research-skills clone this skill came

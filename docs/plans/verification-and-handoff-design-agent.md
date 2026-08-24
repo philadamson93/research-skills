@@ -1,5 +1,11 @@
 Reference: docs/claude_ops.md
 
+> Superseded — the vm-status-doc handoff mechanism this plan built (`commands/vm-handoff.md`,
+> `references/verification-and-handoff-design.md`) was retired by
+> `executor-mac-parity-remove-deviation-handback.md` (2026-08-24): Claude-Code-capable machines
+> (Mac and VM alike) now have full parity, so there's no more render/readback doc to design
+> around. Full history preserved on `legacy/vm-handoff-doc-system-2026-08`.
+
 # Verification & VM-Handoff Design agent
 
 ## Goal

@@ -32,28 +32,24 @@ alike — see below) and the VISTA/rad-eval-specific files layered on top:
   gate in `dispatcher.py` (Chaudhari Lab's separate BAA arrangement) is untouched — confirmed
   with Phil to leave as-is. rad-eval's *separate* `docs/machines.md` PHI-posture registry
   **does** change (confirmed with Phil after `/review-plan` surfaced it — see Phase 6).
-- **Open as of this revision**: whether direct Claude Code use on VISTA data needs to route
-  through the Stanford AI API Gateway for literal PHI, versus being covered directly as
-  "high-risk" data — see Background's citation and Open Question 7. This gates Phase 0's actual
-  execution (not just its documentation) and, if the answer is "Gateway required," Phase 1's
-  Environment Constraints framing too.
+- **Resolved as of this revision**: direct Claude Code use is confirmed fine for
+  `som-nero-plevriti-deidbdf` specifically — Phil confirmed it's high-risk, PHI-scrubbed data,
+  not PHI, and that classification doesn't extend to any other GCP project. See Background's
+  citation and Open Question 7.
 
 ## Background — grounding facts
 
 - **GCP project**: `som-nero-plevriti-deidbdf` (confirmed — "Stanford Oncology de-identified
   BigQuery domain" per `vista-pm/docs/onboarding/glossary.md`, independently corroborated by
   rad-eval's `dispatcher.py` hard-coding the same project ID in its own BAA allowlist).
-- **Compliance source, now cited — but with a nuance that needs resolving (Open Question 7).**
-  Phil pointed to Stanford IT's own page, <https://uit.stanford.edu/service/claude>: *"Claude
-  Code is approved for low, moderate, and high-risk data. PHI use requires routing through the
-  Stanford AI API Gateway."* This confirms Claude Code's high-risk-data approval generally, but
-  it draws a line this plan doesn't yet account for: **"high-risk" classification and literal
-  PHI are treated differently** — high-risk data is fine via direct Claude Code (subscription
-  auth, no gateway), but PHI specifically requires routing through a Stanford-run gateway this
-  plan never mentions. Whether VISTA's `som-nero-plevriti-deidbdf` data is "de-identified
-  high-risk" (this plan's direct-Mac-execution design holds) or contains literal PHI (the
-  gateway would be required instead) is unresolved — see Open Question 7, which is the most
-  consequential open item in this plan.
+- **Compliance source, cited and resolved.** Phil pointed to Stanford IT's own page,
+  <https://uit.stanford.edu/service/claude>: *"Claude Code is approved for low, moderate, and
+  high-risk data. PHI use requires routing through the Stanford AI API Gateway."* This draws a
+  line between "high-risk" classification and literal PHI — high-risk data is fine via direct
+  Claude Code, PHI specifically needs the gateway. Phil confirmed (Open Question 7):
+  `som-nero-plevriti-deidbdf` is PHI-scrubbed, not PHI — high-risk, non-PHI, *specifically
+  inside the deid project* (not a blanket statement extending to any other GCP project). Direct
+  Claude Code use is confirmed fine; no gateway needed for this plan's scope.
 - **`RadAWS/code/research-skills` is a symlink to `VISTA/code/research-skills`, not a second
   clone** (`readlink`/`realpath` confirm it — corrects my first draft's "two clones kept in
   sync by git pull"). One physical checkout, one `claude_ops.md`, one `hooks/` directory, one
@@ -111,10 +107,14 @@ compute-capacity reason already in Phase 1.
 (System Settings → Privacy & Security) that a headless/background session can't click through —
 Phil runs the install step himself; a session can prepare and verify the commands.
 
-**Held pending Open Question 7.** Do not run this against real bucket content until the
-Stanford AI API Gateway question below is resolved — testing the mount mechanism itself (auth,
-gcsfuse install) doesn't require touching PHI-adjacent content, but listing or reading real
-directories under `su-vista-uscentral1` does.
+**Unblocked (Open Question 7 resolved):** direct Claude Code use against this project's data is
+confirmed fine — `som-nero-plevriti-deidbdf` is high-risk, not PHI. Cleared to actually run this
+test, not just document it. Live-checked during this pass: `gcloud` + Application Default
+Credentials already work on this Mac (`gcloud auth application-default print-access-token`
+succeeds); `gcsfuse`/`macfuse` are not yet installed — macOS requires a one-time GUI approval
+for the `macfuse` kernel extension that a headless session can't click through, so that
+installation step is still Phil's to run. A lighter pre-flight (`gcloud storage ls
+gs://su-vista-uscentral1/`, no fuse mount needed) can validate IAM access in the meantime.
 
 ### Phase 1 — `claude_ops.md` rewrite (research-skills)
 
@@ -322,19 +322,21 @@ once Phase 0's mount is actually working.
 6. ~~Is the `RadAWS/code/research-skills` symlink intentional?~~ **Resolved (Phil): yes, it's a
    deliberate convenience, not an accident.** No action needed; Phase 2's single-edit
    simplification stands as written.
-7. **[MOST CONSEQUENTIAL — new, from OQ5's citation] Does VISTA's data need the Stanford AI API
-   Gateway, or is direct Claude Code use enough?** The cited page draws a line this plan hasn't
-   addressed: *"Claude Code is approved for low, moderate, and high-risk data. PHI use requires
-   routing through the Stanford AI API Gateway."* "High-risk" and literal "PHI" are handled
-   differently — high-risk data is fine via direct Claude Code (what this plan assumes
-   throughout); PHI specifically needs gateway routing, a mechanism this plan never mentions.
-   Is `som-nero-plevriti-deidbdf` de-identified-enough to count as "high-risk" rather than
-   literal PHI? `/phi-vet`'s own threat catalog (`person_id`, DICOM UIDs, accession numbers,
-   clinical dates, free-text report excerpts) treats this data as carrying real PHI-level risk
-   — worth reconciling against "de-identified" in the project's own name before trusting the
-   direct-execution design. **This gates**: Phase 0's actual mount-and-read test (not just
-   writing the recipe), and potentially Phase 1's Environment Constraints rewrite if the answer
-   is "gateway required" rather than "direct Claude Code is fine."
+7. ~~Does VISTA's data need the Stanford AI API Gateway, or is direct Claude Code use enough?~~
+   **RESOLVED (Phil): direct Claude Code is fine.** `som-nero-plevriti-deidbdf` is PHI-scrubbed,
+   not PHI — classified high-risk, non-PHI, *specifically inside the deid project* (not a
+   blanket statement about any other GCP project Phil touches). This unblocks Phase 0's actual
+   execution and confirms Phase 1's Environment Constraints rewrite as designed.
+   - **One tension worth naming, not re-litigating**: rad-eval's `dispatcher.py` pins the exact
+     same project ID (`PHI_VERTEX_PROJECTS = frozenset({"som-nero-plevriti-deidbdf"})`) and its
+     `require_vertex_phi_env()` gate's own comment says the block exists "because the agent's
+     prompts carry PHI." Same project, opposite characterization. Plausible reconciliations:
+     rad-eval's optimizer-loop agent may pull raw report text or other inputs beyond the
+     already-scrubbed fields this plan is describing, or the Vertex-only gate is simply a more
+     conservative choice than the data strictly requires. Either way, this plan's "leave
+     rad-eval's dispatcher gate as-is" decision (confirmed earlier, unaffected by this OQ's
+     resolution) stands regardless — flagging only so a future reader doesn't read the two
+     documents side by side and assume one of them is simply wrong.
 
 ## Verification & VM handoff
 

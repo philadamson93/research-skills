@@ -1,0 +1,16 @@
+# Plans
+
+Tracks every plan doc in `docs/plans/` — status, review sign-off, and a one-line description.
+Bootstrapped 2026-08-24 (`/wrapup`); before this, plan status lived only in each doc's own
+`Status:` header (still the source of truth for implementation status — this table adds the
+cross-doc `Reviewed` column that header convention didn't carry).
+
+**Reviewed** column values: `Yes` (user reviewed the current content, via `/read-plan` or an
+approved SHA-in-sync `/explain-plan` HTML), `No` (never reviewed), `Stale` (was `Yes`, plan
+substantively edited since).
+
+| Plan | Status | Reviewed | Description |
+|---|---|---|---|
+| [`retire-planner-mac-phi-vm-split.md`](retire-planner-mac-phi-vm-split.md) | Draft | Yes | Retire the planner-Mac/PHI-VM split now that Claude Code for Education covers both machines; approved by Phil 2026-08-24 via `/explain-plan` HTML feedback. |
+| [`verification-and-handoff-design-agent.md`](verification-and-handoff-design-agent.md) | Completed | Yes | Verification & VM-Handoff Design capability — canonical spec now at `references/verification-and-handoff-design.md`, landed `fcf2e83`. |
+| [`vm-shell-guard-hook.md`](vm-shell-guard-hook.md) | Completed — pending superseded banner | Yes | PreToolUse hook enforcing the (now-retired) "no remote shell into a VM" boundary. Landed `7768dbe`. Will be marked superseded once `retire-planner-mac-phi-vm-split.md` Phase 3 deletes the hook. |

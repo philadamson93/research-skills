@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<meta name="plan-sha256" content="286639a33c0bac4830d75a0d3d6a700416375cc0c0745fc267309ff3964c3060">
+<meta name="plan-sha256" content="da549507e817717c63c1b6fed8558a5a8e4581588e99808a683ba858271a3822">
 <title>Plan: Retire the planner-Mac / PHI-VM split</title>
 <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/svg-pan-zoom@3.6.1/dist/svg-pan-zoom.min.js"></script>
@@ -99,12 +99,12 @@
 <h1>Retire the planner-Mac / PHI-VM split as the VISTA default</h1>
 
 <div class="card header-card">
-  <div><div class="field-label">Status</div><div class="field-value"><span class="chip chip-draft">Draft</span> (OQ7 resolved &mdash; unblocked)</div></div>
+  <div><div class="field-label">Status</div><div class="field-value"><span class="chip chip-yes">Reviewed: Yes</span> &mdash; approved, ready to implement</div></div>
   <div><div class="field-label">Owner</div><div class="field-value">Phil Adamson</div></div>
   <div><div class="field-label">Branch</div><div class="field-value"><code>feat/retire-planner-mac-phi-vm-split</code></div></div>
   <div><div class="field-label">Source doc</div><div class="field-value"><a href="retire-planner-mac-phi-vm-split.md">retire-planner-mac-phi-vm-split.md</a></div></div>
-  <div><div class="field-label">Plan SHA-256</div><div class="field-value"><code id="sha-display">286639a33c0b</code>&hellip;</div></div>
-  <div><div class="field-label">Generated</div><div class="field-value">2026-08-24 (round 3)</div></div>
+  <div><div class="field-label">Plan SHA-256</div><div class="field-value"><code id="sha-display">da549507e817</code>&hellip;</div></div>
+  <div><div class="field-label">Generated</div><div class="field-value">2026-08-24 (round 4 &mdash; wrapup cleanup)</div></div>
 </div>
 
 <div class="card">
@@ -458,7 +458,7 @@ flowchart TD
   <p><b>Stop (compliance-critical):</b> if <code>is-phi-free-machine.sh --explain</code> still reports <code>PHI_FREE</code> after Phase 2 step 2, STOP.</p>
   <p><b>Landing spans four independent ceremonies:</b></p>
   <ul class="tight">
-    <li><b>research-skills</b> (branch + PR): <code>feat/retire-planner-mac-phi-vm-split</code>, gated on Phil's read + approval.</li>
+    <li><b>research-skills</b> (branch + PR): <code>feat/retire-planner-mac-phi-vm-split</code> &mdash; <b>approved</b>, recorded in <a href="README.md">docs/plans/README.md</a>. Cleared to implement.</li>
     <li><b>VISTA/code/CLAUDE.md + CLAUDE.vm.md</b>: ungated direct edits, not a git repo.</li>
     <li><b>vista-pm</b>: its own <code>/commit-review</code> + push.</li>
     <li><b>Stale-symlink repos</b>: each its own commit + push.</li>
@@ -482,20 +482,18 @@ flowchart TD
 const PLAN_STEM = "retire-planner-mac-phi-vm-split";
 const PLAN_PATH = "docs/plans/retire-planner-mac-phi-vm-split.md";
 const PLAN_BRANCH = "feat/retire-planner-mac-phi-vm-split";
-const PLAN_SHA = "286639a33c0bac4830d75a0d3d6a700416375cc0c0745fc267309ff3964c3060";
+const PLAN_SHA = "da549507e817717c63c1b6fed8558a5a8e4581588e99808a683ba858271a3822";
 const LS_PREFIX = "explain-plan::" + PLAN_STEM + "::";
 const LS_SHA_KEY = LS_PREFIX + "__sha";
 
 const CHANGES = {
   round: "diff",
-  baseline: "prior plan version at SHA 38029c324ec9 (round 2, explain-plan feedback applied)",
+  baseline: "prior plan version at SHA 286639a33c0b (round 3, OQ7 resolution + pre-flight)",
   sections: {
-    "phase-0":     { s: "changed", note: "OQ7 resolved, unblocked; live pre-flight actually run (ADC auth + bucket listing passed, bucket-to-project ownership verified via the GCS JSON API)." },
-    "gotcha-gateway": { s: "changed", note: "Resolved by OQ7 — direct Claude Code confirmed fine for som-nero-plevriti-deidbdf specifically." },
-    "gotcha-radeval-tension": { s: "new", note: "New — rad-eval's dispatcher.py says the same project 'carries PHI', flagged not re-litigated." }
+    "verification-landing": { s: "changed", note: "/wrapup cleanup: bootstrapped docs/plans/README.md (didn't exist before) and recorded this plan's approval there instead of leaving a stale 'no README exists' note." }
   },
   oqs: {
-    7: { s: "resolved", note: "Direct Claude Code confirmed fine, scoped to som-nero-plevriti-deidbdf specifically." }
+    4: { s: "changed", note: "Tightened — mostly resolved (pre-flight passed), only the manual macfuse install remains open. Was stale (still said 'held pending OQ7' after OQ7 resolved)." }
   }
 };
 
@@ -507,7 +505,7 @@ const OQS = [
   {n: 3, title: "Does rad_eval_mac_author_only_no_pytest.md stay unchanged?",
    body: "RESOLVED — Phil: yes, it stays. Code execution is largely VM-side across his repos generally, independent of PHI.", status: "Resolved", critical: false},
   {n: 4, title: "Mac-side bucket mount execution (Phase 0) — who runs it, egress cost?",
-   body: "Phil: needs to actually be tested, not just documented. Egress cost answered inline in Phase 0 (Mac reads cost egress, VM reads don't, writes are free). The test itself is held pending OQ7.", status: "Pending", critical: false},
+   body: "Mostly resolved: egress cost answered in Phase 0; a live pre-flight (ADC auth + bucket listing) already passed this session. Still open: the actual gcsfuse/macfuse mount, which needs a one-time GUI kernel-extension approval only Phil can click through.", status: "Pending", critical: false},
   {n: 5, title: "Where does the compliance claim actually come from?",
    body: "Phil cited https://uit.stanford.edu/service/claude — a real source. But it distinguishes 'high-risk data' from literal 'PHI' in a way this plan hadn't accounted for. See OQ7.", status: "Resolved", critical: false},
   {n: 6, title: "Is the RadAWS/code/research-skills symlink intentional?",

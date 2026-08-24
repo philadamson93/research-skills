@@ -325,9 +325,10 @@ once Phase 0's mount is actually working.
 3. ~~Does `rad_eval_mac_author_only_no_pytest.md` stay unchanged?~~ **Resolved (Phil): yes, it
    stays.** Confirmed independently of PHI — code execution is largely VM-side across Phil's
    repos generally (see Background's new bullet), so this memory's reasoning holds regardless.
-4. **Mac-side bucket mount execution (Phase 0).** Phil confirmed: needs to actually be tested
-   (not just documented) — "assume it will work but" — and asked about egress cost, now answered
-   in Phase 0. Still open: the test itself is **held pending Open Question 7** below.
+4. **Mostly resolved: Mac-side bucket mount execution (Phase 0).** Egress cost answered in
+   Phase 0; a live pre-flight (ADC auth + bucket listing, run this session) passed. Still open:
+   the actual `gcsfuse`/`macfuse` mount, which needs a one-time GUI kernel-extension approval
+   only Phil can click through.
 5. ~~Where does the compliance claim come from?~~ **Partially resolved (Phil): cited
    <https://uit.stanford.edu/service/claude>.** This names a real source — good — but reading it
    surfaced a sharper question than the one it answered. See Open Question 7.
@@ -381,9 +382,10 @@ not via a VM handoff.
   the allowlist edit didn't take (wrong file, wrong machine-name match) — do not proceed to
   depend on phi-vet being active until this is fixed.
 
-This plan has already been through one `/review-plan` pass (fresh Claude Code subagent, Revise
-→ findings applied above). Recommend Phil's own `/read-plan` before implementing — this is the
-"larger skill rewrite" `claude_ops.md`'s own Git Practices section says should get review first.
+This plan has been through one `/review-plan` pass (fresh Claude Code subagent, Revise →
+findings applied above) and two rounds of `/explain-plan` HTML feedback. **Approved by Phil,
+2026-08-24** (recorded in `docs/plans/README.md`'s Reviewed column, since this repo has no
+per-doc Reviewed field) — cleared to implement.
 
 ## Landing & cleanup
 
@@ -410,6 +412,5 @@ class each edit belongs to, not just "Files to Modify":
   effect immediately on save, no landing step.
 
 **Cleanup on land** (research-skills branch specifically): prune this worktree + branch; mark
-this plan doc `Status: Completed`. (research-skills has no `docs/plans/README.md` — found
-during `/review-plan`, this repo tracks plan status via each doc's own `Status:` header
-instead, per the precedent in `docs/plans/vm-shell-guard-hook.md`. No README table to update.)
+this plan doc `Status: Completed`; update its row in `docs/plans/README.md` (bootstrapped
+2026-08-24) to match.

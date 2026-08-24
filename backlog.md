@@ -4,17 +4,11 @@ Known issues and deferred work for the skill repo itself. Per the same pointer-s
 
 ## Runtime cache vs canonical drift
 
-The intended setup is a symlink: `~/.claude/commands → research-skills/commands` (per README "One-shot setup on a fresh VM"). On some machines (e.g., the laptop where this entry was filed, 2026-05-12), `~/.claude/commands/` is instead a *separate git repo* with its own history that has drifted from canonical — wrapup Step 6 + 7 lived in runtime but not canonical until a manual sync. Symptoms:
+**Resolved on this Mac (`BDS-H2DLP0QFM4`), verified 2026-08-24**: `ls -la ~/.claude/` confirms `commands -> /Users/philadamson/Documents/Stanford/VISTA/code/research-skills/commands` is a proper symlink (Resolution A from the original filing). Not re-checked on Phil's other machines (VMs) — if this recurs elsewhere, the options below still apply.
 
-- `git -C ~/.claude/commands status --short` shows files marked as untracked or deleted that are actually tracked in canonical.
-- New skill versions edited in `~/.claude/commands/` don't propagate to GitHub unless manually `cp`'d to canonical and committed there.
+The intended setup is a symlink: `~/.claude/commands → research-skills/commands` (per README "One-shot setup on a fresh VM"). Originally filed 2026-05-12 after finding `~/.claude/commands/` was instead a *separate git repo* with its own history, drifted from canonical.
 
-**Resolution options when picking this up:**
-- (A) Convert `~/.claude/commands/` to a symlink per the README setup, after backing up any local-only files. Requires reconciling pre-existing drift first.
-- (B) Keep two separate repos but automate sync (a pre-session hook that rsyncs canonical → runtime).
-- (C) Document the manual `cp`-and-commit ritual in `wrapup`'s Step 6 (already partially done — the post-2026-05-12 wrapup spec calls out "sync direction matters" and the `cp` recipe).
-
-Filed 2026-05-12 during `/wrapup` after discovering the laptop's runtime cache had Step 6 + 7 but canonical didn't.
+**If it recurs**: (A) convert to a symlink per the README setup, reconciling drift first; (B) keep two repos but automate sync (a pre-session hook rsyncing canonical → runtime); (C) document the manual `cp`-and-commit ritual in `wrapup` Step 7 (already does — "sync direction matters" + the `cp` recipe).
 
 ## rad-eval has no per-repo plan-review-checklist
 
@@ -26,5 +20,17 @@ rad-eval checklist grounded in its extraction / seed-gate / equivalence verifica
 
 Filed 2026-07-08 while scoping the verification-and-handoff-design agent (moved out of that
 plan's open questions so the plan doesn't carry a stale cross-repo reference).
+
+## VM-side plan/HTML viewing has no bridge to the Mac's browser
+
+Once execution moves VM-side more (per the PHI-posture retirement, see below), `/explain-plan`
+and `/read-plan` output authored on the VM has no way to reach a browser — the VM is typically
+headless. Proposed direction (Phase 7 of
+[`retire-planner-mac-phi-vm-split.md`](retire-planner-mac-phi-vm-split.md#phase-7)): write
+generated HTML to a bucket-mounted scratch path instead of requiring a commit+push+pull
+round-trip. Needs its own follow-up plan once that plan's Phase 0 (Mac-side bucket mount) is
+actually working — not scoped yet.
+
+Filed 2026-08-24, surfaced via `/explain-plan` feedback on the PHI-posture retirement plan.
 
 ## (Future entries — add as encountered)

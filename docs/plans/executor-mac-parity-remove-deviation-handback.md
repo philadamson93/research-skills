@@ -2,7 +2,9 @@ Reference: claude_ops.md
 
 # Executor/Mac parity — retire the vm-handoff doc mechanism entirely
 
-**Status: Draft** (2026-08-24)
+**Status: Completed** (2026-08-24) — landed to `main` `1743127` (ff), branch + worktree pruned.
+Directed live in conversation (`Reviewed: No` in `docs/plans/README.md` reflects that no
+separate `/read-plan`/`/explain-plan` pass happened) rather than as a normally-authored plan.
 
 ## Goal
 

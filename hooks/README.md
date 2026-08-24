@@ -7,7 +7,6 @@ Claude Code **hooks** that compose with the slash-command skills in `../commands
 | Hook | Lifecycle | Purpose |
 |---|---|---|
 | [`phi-vet-gate.sh`](phi-vet-gate.sh) | `PreToolUse` (Bash) | Hard-gates `git commit` in medical-data research repos until [`/phi-vet`](../commands/phi-vet.md) has signed off on the current staged tree. Forces both a PHI scan **and** explicit per-doc read-acknowledgement **from the human user** (Claude having read the file during the scan does NOT count — the user's own eyes on every staged doc are the load-bearing check) before any commit lands. Self-gates by machine via [`lib/is-phi-free-machine.sh`](#machine-gate--fail-closed-phi-free-allowlist) — inert on PHI-free machines. |
-| [`vm-shell-guard.sh`](vm-shell-guard.sh) | `PreToolUse` (Bash) | Enforces the `claude_ops.md` hard rule *"Never Open a Remote Shell Into a VM (PHI)"*. Blocks Bash commands that open a remote shell into — or pull data from — a project VM (`ssh`, `gcloud [alpha\|beta] compute ssh`, IAP SSH tunnels, `gcloud compute scp`, `scp`/`rsync` over ssh) while allowing cloud control-plane calls (`gcloud compute instances list`/`describe`) and local ssh key setup (`ssh-keygen`, …). Reuses the shared [machine gate](#machine-gate--fail-closed-phi-free-allowlist) **inverted** — active on planner (PHI-FREE) machines, inert on the PHI VMs (so VM-side / fleet ssh is untouched). |
 
 The companion script [`lib/is-phi-free-machine.sh`](lib/is-phi-free-machine.sh) is not a hook itself — it's the shared machine check that *both* the hook above and the [`/phi-vet`](../commands/phi-vet.md) skill consult so they never disagree about where PHI tooling is active. See [Machine gate](#machine-gate--fail-closed-phi-free-allowlist).
 
@@ -91,103 +90,9 @@ echo '{"tool_name":"Bash","tool_input":{"command":"ls -la"}}' | "$HOOK"; echo "e
 
 ---
 
-## vm-shell-guard.sh — installation
-
-Blocks a local/planner Claude from opening a remote shell into — or pulling data from — a project VM. This is the mechanical enforcement of `claude_ops.md` → *"Hard Boundary: Never Open a Remote Shell Into a VM (PHI)"*: the VMs hold PHI, and a shell opened from a local Claude pulls VM output into this session's transcript, which lives *outside* the PHI boundary.
-
-**Safe to install on every machine.** Like `phi-vet-gate.sh` it self-gates via the shared [machine gate](#machine-gate--fail-closed-phi-free-allowlist) — but **inverted**: it is active on **planner (PHI-FREE)** machines (where the reach-into-VM risk lives) and inert on the PHI VMs (so VM-side / fleet-orchestration ssh is untouched). It depends on `jq` on `$PATH`.
-
-**No companion skill.** Unlike `phi-vet-gate.sh` (which gates the `/phi-vet` *skill*), this hook has nothing to execute — the remedy is a human action (run the command yourself, or do the work in an executor Claude session *on* the VM). The block reason carries that remedy inline.
-
-### Step 1 — Verify the script
-
-```bash
-ls -l ~/code/research-skills/hooks/vm-shell-guard.sh
-chmod +x ~/code/research-skills/hooks/vm-shell-guard.sh  # if not already executable
-```
-
-### Step 2 — Register the hook in `~/.claude/settings.json`
-
-Append it to the existing `PreToolUse` → `Bash` matcher array (a matcher can hold many hooks; they fire in order — this one runs alongside `phi-vet-gate.sh`):
-
-```json
-{
-  "hooks": {
-    "PreToolUse": [
-      {
-        "matcher": "Bash",
-        "hooks": [
-          { "type": "command", "command": "/Users/YOUR_USERNAME/code/research-skills/hooks/phi-vet-gate.sh" },
-          { "type": "command", "command": "/Users/YOUR_USERNAME/code/research-skills/hooks/vm-shell-guard.sh" }
-        ]
-      }
-    ]
-  }
-}
-```
-
-Use the absolute path (Claude Code does **not** expand `~` in hook command paths).
-
-### Step 3 — Register this planner (REQUIRED — the gate is fail-open here)
-
-This hook reuses the **same** `phi-free-machines.local` allowlist as `phi-vet` — one "I am a planner" registration *both* silences `phi-vet`'s commit gate AND arms this guard. But note the fail-open seam: **an unregistered planner reads as `ASSUME_PHI` and the guard is INERT there** (opposite of `phi-vet`, which stays *on* when unsure). So registration is a **required** install step, not optional — do not consider this hook installed until:
-
-```bash
-hooks/lib/is-phi-free-machine.sh --explain   # must print: PHI_FREE
-```
-
-If it prints `ASSUME_PHI` on a planner box, register it (per the [Machine gate](#machine-gate--fail-closed-phi-free-allowlist) section: `cp phi-free-machines.example phi-free-machines.local` then add this host's stable name) and re-check until it prints `PHI_FREE`. Only then is the guard actually protecting this machine. (On a PHI VM, `ASSUME_PHI` is correct — the guard is meant to be inert there.)
-
-### Step 4 — Verify with the test matrix
-
-The hook is easy to exercise without touching any VM (research-skills allows local execution and is non-PHI):
-
-```bash
-HOOK=~/code/research-skills/hooks/vm-shell-guard.sh
-blk() { echo "$1" | jq -R '{tool_name:"Bash",tool_input:{command:.}}' | "$HOOK"; echo "  <exit $?>"; }
-
-# --- must BLOCK (each prints a {"decision":"block",…} JSON) ---
-blk 'ssh phil-vm'
-blk 'gcloud compute ssh phil-vm --zone us-central1-a'
-blk 'gcloud alpha compute ssh phil-vm'
-blk 'gcloud compute start-iap-tunnel phil-vm 22 --local-host-port=localhost:2222'
-blk 'gcloud compute scp phil-vm:/mnt/data/x.csv .'
-blk 'scp phil-vm:/mnt/data/x.csv .'
-blk 'rsync -avz phil-vm:/mnt/data/ ./local/'
-blk 'timeout 30 gcloud compute ssh phil-vm'   # wrapped
-blk 'echo hi && ssh phil-vm'                   # chained
-
-# --- must ALLOW (each prints nothing) ---
-blk 'gcloud compute instances list'            # control-plane
-blk 'gcloud compute instances describe phil-vm --zone us-central1-a'
-blk 'git push origin main'                      # git-over-ssh to GitHub, not a VM shell
-blk 'ssh-keygen -t ed25519 -f ./id'             # local key setup
-blk 'rsync -a /local/src /local/dst'            # local-only rsync
-blk 'echo "connect via ssh to the box"'         # ssh only inside a string arg
-```
-
-On a **PHI-FREE** machine every BLOCK line emits block-JSON and every ALLOW line is silent. On a **PHI VM** the hook is inert (all silent) — verify there, or by temporarily pointing at an empty `phi-free-machines.local`.
-
-### Known limitations (documented, non-adversarial scope)
-
-The hook matches the command string with lightweight regex, not a shell lexer, and is a tripwire for a *well-intentioned* session — not an evasion-proof control. Out of scope by design (the reflex it catches fires on plain `ssh vm` / `gcloud compute ssh vm`, which ARE caught):
-
-- **Inline shell-string wrappers** — `bash -c "ssh vm"`, `eval "ssh vm"`, `xargs ssh`, or `bash script.sh` where the script contains ssh: the verb lives inside a string/file the hook can't see.
-- **Non-ssh remote-shell clients not in team use** — `mosh`, `autossh`.
-- **Bracketed IPv6 remotes** — `scp '[2001:db8::1]:/x' .` (VMs are reached by name / gcloud, not raw IPv6).
-- **A quoted scp/rsync remote spec** — `scp 'vm:/path' .` — is stripped together with its quotes.
-
-If any of these becomes a real path in day-to-day use, extend the matcher; until then they are acceptable gaps for a non-adversarial guard.
-
-### Uninstallation
-
-Remove the corresponding entry from your `~/.claude/settings.json`. The script remains in this repo; restoring the hook is just re-adding the JSON.
-
----
-
 ## Machine gate — fail-closed PHI-FREE allowlist
 
-PHI lives only on the data-bearing machine (the GCP / VM executor). A planner-only machine — e.g. a local laptop with no BigQuery credentials or data mounts — has no PHI to leak, so the gate there is pure friction. The hook therefore consults [`lib/is-phi-free-machine.sh`](lib/is-phi-free-machine.sh) **before anything else** and exits silently (allow) if this machine is on the PHI-FREE allowlist.
+PHI-free is a narrow, explicit exemption — a machine with no data mount and no BigQuery credentials at all — not the default state of a VISTA/rad-eval planner Mac. Claude Code for Education covers Phil's Mac and his project VMs alike, so code execution and data access are allowed on both, gated by the same `phi-vet` discipline. The gate below stays *fail-closed*: active everywhere except the specific machines listed on the allowlist. The hook consults [`lib/is-phi-free-machine.sh`](lib/is-phi-free-machine.sh) **before anything else** and exits silently (allow) if this machine is on the PHI-FREE allowlist.
 
 The same script is the [`/phi-vet`](../commands/phi-vet.md) skill's Step 0 check, so the skill and the hook always agree about where PHI tooling is live.
 
@@ -212,7 +117,7 @@ A fresh clone has no `.local` file, so every machine is treated as PHI-bearing (
 
 ### Exempting a machine
 
-On the machine you want to exempt (a planner-only laptop with no PHI), copy the template and add this host's **stable** identifier:
+On a machine that genuinely has no data mount and no BigQuery credentials at all, copy the template and add this host's **stable** identifier:
 
 ```bash
 cd hooks/lib

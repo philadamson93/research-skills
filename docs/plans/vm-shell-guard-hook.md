@@ -3,6 +3,7 @@ Reference: claude_ops.md
 # VM-Shell-Guard — PreToolUse hook enforcing the "no remote shell into a VM" PHI boundary
 
 **Status: Completed** (2026-07-15) — landed to `main` `7768dbe` (ff); branch pruned. Reviewed: Codex + Phil-approved.
+> Superseded — `hooks/vm-shell-guard.sh` deleted by `retire-planner-mac-phi-vm-split.md` (2026-08-24).
 **Prior status: Implemented + Codex-reviewed — locally verified** (2026-07-15)
 Hook `hooks/vm-shell-guard.sh` built on branch `feat/vm-shell-guard-hook`, then hardened
 per an independent Codex review (read-only). Verified **39/39** block/allow cases pass —

@@ -20,32 +20,17 @@ This document defines how Claude Code should operate across all VISTA repos. Ref
 
 ## Environment Constraints
 
-- **No code execution on this machine.** All training, evaluation, and pipeline runs happen on a separate VM. This machine cannot run Python, tests, formatters, linters, or any code.
-- **Do not run `ruff`, `black`, `isort`, `mypy`, `pytest`, or similar tools.** They are not installed or configured correctly on this machine. Verification is structural code review only.
-- **Data paths are VM-specific.** Paths like `/mnt/su-vista/...` reference the VM filesystem, not this machine.
+- **Code execution is allowed on this machine**, gated by the same `phi-vet` discipline that already governs commits — not blocked outright. Claude Code for Education covers Phil's Mac and his project VMs alike, so "no PHI clearance here" is no longer a reason to refuse.
+- **GPU training and high-throughput batch still run on the VM fleet** — a capacity constraint, not a compliance one. This machine typically lacks that hardware; `ruff`, `black`, `isort`, `mypy`, `pytest`, and similar tools may still not be installed/configured for a given repo's env here (check the repo's own `uv` env / machine registry), but that's a per-repo setup question, not a blanket prohibition.
+- **Data paths may be VM-specific or locally mounted**, depending on the repo. Paths like `/mnt/su-vista/...` reference the VM filesystem; check the repo's machine registry (Machine-Aware Operating Mode below) before assuming a path isn't reachable from here.
 
-This is the *simple single-machine default* — assumed by all VISTA repos. Repos where execution depends on which machine you're on should declare so explicitly and override this rule via the Machine-Aware Operating Mode section below.
-
----
-
-## Hard Boundary: Never Open a Remote Shell Into a VM (PHI)
-
-**A local / planner Claude session must NEVER open a remote shell into a project VM** — no `ssh`, no `gcloud compute ssh`, no IAP / SSH tunnel, no remote command execution of any kind against a VM. This is a **hard rule in every mode**. It is *not* the overridable "no code execution" default above, and it is *not* relaxed by Machine-Aware Operating Mode — it holds even where a repo otherwise splits planner / executor roles.
-
-**Why — this is a PHI boundary, not a convenience rule.** The VMs hold PHI. A shell opened from a local Claude pulls VM state — directory listings, file contents, query results, anything a remote command prints — back into this Claude's context and transcript, which live *outside* the PHI boundary. That is a PHI exposure / exfiltration risk **regardless of intent**: a read-only `ls` / `du` / `cat` is exactly as forbidden as anything else, because the output still crosses the boundary.
-
-**Do this instead:**
-- VM-side work runs in a Claude session **on** the VM (executor mode, per Machine-Aware Operating Mode below) — never by reaching *in* from the local machine.
-- When something must be inspected or run on the VM, hand the user the exact command to run themselves; they decide what (PHI-free) output to paste back.
-- Cloud **control-plane** calls that never enter the VM (e.g. `gcloud compute instances list` / `describe` for machine type, zone, disk size) are acceptable — the line is: *opening a shell or executing a command inside the VM is forbidden; querying cloud resource metadata about the VM is not.*
-
-A PreToolUse hook enforces this mechanically on planner machines — [`hooks/vm-shell-guard.sh`](hooks/vm-shell-guard.sh) (wire-up in [`hooks/README.md`](hooks/README.md)) — blocking `ssh` / `gcloud compute ssh` / IAP SSH tunnels / `gcloud compute scp` / `scp` / `rsync` into a VM while leaving cloud control-plane calls (`gcloud compute instances list` / `describe`) untouched. It reuses the same PHI-FREE machine allowlist as `phi-vet` (active on planner boxes, inert on the PHI VMs). The hook is a **backstop, not the source of the obligation** — the rule stands regardless, and holds on machines where the hook is inert.
+This is the *simple single-machine default* — assumed by all VISTA repos. Repos where execution depends on which machine you're on (GPU/throughput routing, not PHI) should declare so explicitly and override this rule via the Machine-Aware Operating Mode section below.
 
 ---
 
 ## Machine-Aware Operating Mode
 
-For repos where the executor / planner split is hostname-dependent (a project VM holds the runtime + credentials, the local Mac is planner-only), this section overrides **Environment Constraints** above.
+For repos where the executor / planner split is hostname-dependent (a project VM holds the GPU / high-throughput compute the local Mac lacks), this section overrides **Environment Constraints** above.
 
 1. **At session start, run `hostname`** to determine which mode applies.
 2. **The repo declares its machine posture** — typically in `CLAUDE.md` or a dedicated registry like `docs/machines.md`. The registry names known hosts and assigns each one Executor or Planner role, plus PHI posture if relevant.
@@ -57,7 +42,7 @@ For repos where the executor / planner split is hostname-dependent (a project VM
    - **Classify findings, don't improvise.** A finding that's purely mechanical and leaves the design + success criteria unchanged is an *in-lane correction* (fix it, log it). A finding that contradicts a plan assumption, changes scope, or invalidates the approach is a *plan-level deviation* — STOP, document it, and hand back to the planner; **when uncertain, escalate**. Don't broad-plan or major-rewrite without confirmation. `/vm-handoff` formalizes this routing (its *Deviation workflow*: VM→Mac via a DEVIATION block in the handoff doc, re-plan, supersede with a new doc).
 4. **Planner mode** (typically the local Mac):
    - Planning, template authoring, spec writing, doc review.
-   - Do not run code or query data — credentials and data paths usually aren't here.
+   - May run light code / query BQ / inspect mounted data directly, gated by the same `phi-vet` discipline as commits; GPU and high-throughput work still routes to the executor fleet.
 5. **Unknown hostnames**: ask the user which mode applies rather than hard-refusing or assuming. After confirming, offer to register the hostname in the repo's machine registry so the next session doesn't re-prompt.
 
 Repo-specific bindings (concrete hostnames, package-manager rules, sibling-repo paths, PHI gate choice) live in the repo's `CLAUDE.md` or machine registry — not here. This section defines the *pattern*; each repo declares its *parameters*.
@@ -163,9 +148,9 @@ How will we implement this?
 - Any ambiguities to resolve?
 
 ## Verification & VM handoff
-How will we know this works? Because execution happens on the VM, state the success
-criteria *here* so they are reviewed **with the plan** (via `/review-plan`), not invented
-later at handoff time:
+How will we know this works? Because this step needs compute the Mac doesn't have (GPU,
+high-throughput batch), state the success criteria *here* so they are reviewed **with the
+plan** (via `/review-plan`), not invented later at handoff time:
 - **What runs on the VM** — commands / scripts / tests, in order.
 - **Target machine** (per step / phase) — which **executor class** runs it: *Claude-Code CPU*
   (default — smoke, structural readback, BQ/OMOP queries, moderate eval), *high-throughput CPU*
@@ -347,7 +332,7 @@ For non-trivial changes, use the research-skills review workflows instead of inl
 
 Skip the review skills for trivial changes (single-file fixes, doc tweaks, formatting). Each skill carries its own guidance on what it checks, when to skip, and how findings get applied.
 
-**All spawned subagents must be instructed not to run code.** This machine has no runtime environment — no Python, no GPU, no data. Include "Do NOT run any code" in every subagent prompt.
+**Spawned subagents may run code on this machine**, gated by the same `phi-vet` discipline as the main session — this is no longer a blanket prohibition. GPU-bound subagent work (training, embedding generation, high-throughput batch) still doesn't belong here; route it to the VM fleet instead.
 
 ---
 
@@ -360,7 +345,7 @@ Skip the review skills for trivial changes (single-file fixes, doc tweaks, forma
 
 ## Verification Approaches
 
-Always define how you'll verify changes work. Since code cannot run on this machine, verification means describing expected behavior for the user to confirm on the VM.
+Always define how you'll verify changes work. For steps that need compute this machine doesn't have (GPU, high-throughput batch), verification means describing expected behavior for the user to confirm on the VM.
 
 Capture that expected behavior as **Expected / Stop** success criteria in the plan's *Verification & VM handoff* section (see Plan Document Structure above), so it is reviewed with the plan. `/vm-handoff` operationalizes those criteria into a runnable `docs/vm-status/<date>-<sha>.md` handoff doc and records the VM's results back into the same doc — see that skill for the planner→executor round-trip.
 

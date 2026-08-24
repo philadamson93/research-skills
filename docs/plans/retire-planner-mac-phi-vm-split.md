@@ -109,12 +109,24 @@ Phil runs the install step himself; a session can prepare and verify the command
 
 **Unblocked (Open Question 7 resolved):** direct Claude Code use against this project's data is
 confirmed fine — `som-nero-plevriti-deidbdf` is high-risk, not PHI. Cleared to actually run this
-test, not just document it. Live-checked during this pass: `gcloud` + Application Default
-Credentials already work on this Mac (`gcloud auth application-default print-access-token`
-succeeds); `gcsfuse`/`macfuse` are not yet installed — macOS requires a one-time GUI approval
-for the `macfuse` kernel extension that a headless session can't click through, so that
-installation step is still Phil's to run. A lighter pre-flight (`gcloud storage ls
-gs://su-vista-uscentral1/`, no fuse mount needed) can validate IAM access in the meantime.
+test, not just document it.
+
+**Pre-flight, actually run this pass** (no fuse mount needed for this part):
+- `gcloud auth application-default print-access-token` — succeeds; ADC already works on this Mac.
+- `gcloud storage ls gs://su-vista-uscentral1/` — succeeds, lists 4 top-level prefixes
+  (`chaudhari_lab/`, `plevritis_lab/`, `tmp/`, `vistabench/`).
+- **Verified the bucket is actually in the approved project** (worth checking explicitly, not
+  assuming): the CLI's *default* gcloud project on this Mac is `som-rit-phi-oncology-dev` — a
+  different project, unrelated to this plan — but bucket access doesn't depend on the CLI
+  default; resolving the bucket's project number (`261743353465`) via the GCS JSON API confirms
+  it's `som-nero-plevriti-deidbdf` exactly, the project Phil approved. **Side note, not a
+  blocker**: because the CLI default project is a different one, any future command that omits
+  an explicit `--project` flag risks targeting the wrong project by default — worth always
+  pinning `--project=som-nero-plevriti-deidbdf` explicitly, consistent with
+  `vista-pm/docs/onboarding/bigquery.md`'s existing "project ID is pinned in config, not
+  hardcoded per-call" convention.
+- **Still Phil's to run**: `gcsfuse`/`macfuse` aren't installed — macOS requires a one-time GUI
+  approval for the `macfuse` kernel extension that a headless session can't click through.
 
 ### Phase 1 — `claude_ops.md` rewrite (research-skills)
 

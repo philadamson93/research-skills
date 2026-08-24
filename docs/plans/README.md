@@ -11,6 +11,6 @@ substantively edited since).
 
 | Plan | Status | Reviewed | Description |
 |---|---|---|---|
-| [`retire-planner-mac-phi-vm-split.md`](retire-planner-mac-phi-vm-split.md) | Draft | Yes | Retire the planner-Mac/PHI-VM split now that Claude Code for Education covers both machines; approved by Phil 2026-08-24 via `/explain-plan` HTML feedback. |
+| [`retire-planner-mac-phi-vm-split.md`](retire-planner-mac-phi-vm-split.md) | Completed | Yes | Retire the planner-Mac/PHI-VM split now that Claude Code for Education covers both machines; landed `main` `bc4ea6e` (ff) 2026-08-24. tte-pretraining's symlink skipped (premise didn't hold); Phase 0's gcsfuse mount still owed. |
 | [`verification-and-handoff-design-agent.md`](verification-and-handoff-design-agent.md) | Completed | Yes | Verification & VM-Handoff Design capability — canonical spec now at `references/verification-and-handoff-design.md`, landed `fcf2e83`. |
-| [`vm-shell-guard-hook.md`](vm-shell-guard-hook.md) | Completed — superseded | Yes | PreToolUse hook enforcing the (now-retired) "no remote shell into a VM" boundary. Landed `7768dbe`; hook deleted and superseded banner added by `retire-planner-mac-phi-vm-split.md` Phase 3 on `feat/retire-planner-mac-phi-vm-split` — reflects on `main` once that branch lands. |
+| [`vm-shell-guard-hook.md`](vm-shell-guard-hook.md) | Completed — superseded | Yes | PreToolUse hook enforcing the (now-retired) "no remote shell into a VM" boundary. Landed `7768dbe`; hook deleted and superseded banner added by `retire-planner-mac-phi-vm-split.md` Phase 3, landed `main` `bc4ea6e`. |

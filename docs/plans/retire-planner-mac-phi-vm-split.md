@@ -2,14 +2,15 @@ Reference: claude_ops.md
 
 # Retire the planner-Mac / PHI-VM split as the VISTA default
 
-**Status: Implemented, pending land** (2026-08-24, was Draft as of 2026-08-21) — Phases 1, 3, 4
-committed on this branch (Codex-reviewed,
+**Status: Completed** (2026-08-24) — landed to `main` `bc4ea6e` (ff), branch + worktree pruned.
+Phases 1/3/4 landed via this branch (Codex-reviewed,
 `docs/plans/reviews/retire-planner-mac-phi-vm-split-implementation-feedback.md`); Phase 5
 (VISTA/code files, vista-pm, contrastive-3d-onc, MerlinOnc) and Phase 6 (rad-eval
-`docs/machines.md`) landed directly in their own repos. Phase 2 step 1 (settings.json wiring) and
-Phase 0's pre-flight are done; **Phase 2 step 2 (removing this Mac from the PHI-free allowlist)
-is still Phil's to run.** tte-pretraining's symlink is skipped (its "stale copy" premise didn't
-hold — see Open Questions). This branch itself awaits Phil's landing approval.
+`docs/machines.md`) landed directly in their own repos. Phase 2 (settings.json wiring + allowlist
+removal) and Phase 0's pre-flight are done — Phil ran both remaining machine-local steps himself.
+**Still open**: `tte-pretraining`'s symlink was skipped (its "stale copy" premise didn't hold —
+see Open Questions #8); Phase 0's actual `gcsfuse`/`macfuse` mount still needs Phil to click
+through the one-time GUI kernel-extension approval.
 **Prior state preserved on `legacy/planner-mac-phi-vm-split-2026-08`** (branched from `main` `30cf092`, before any of this plan's edits) — the full old posture (Hard Boundary section, vm-shell-guard.sh, its install docs) lives there if anyone needs the original rationale later.
 **Reviewed by**: fresh Claude Code subagent (`docs/plans/reviews/retire-planner-mac-phi-vm-split-feedback-claude.md`), verdict Revise — findings applied below; two genuine design forks it surfaced were re-confirmed with Phil.
 

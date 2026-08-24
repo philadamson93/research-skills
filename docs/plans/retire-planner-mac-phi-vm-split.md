@@ -2,7 +2,14 @@ Reference: claude_ops.md
 
 # Retire the planner-Mac / PHI-VM split as the VISTA default
 
-**Status: Draft** (2026-08-21, revised post `/review-plan`)
+**Status: Implemented, pending land** (2026-08-24, was Draft as of 2026-08-21) — Phases 1, 3, 4
+committed on this branch (Codex-reviewed,
+`docs/plans/reviews/retire-planner-mac-phi-vm-split-implementation-feedback.md`); Phase 5
+(VISTA/code files, vista-pm, contrastive-3d-onc, MerlinOnc) and Phase 6 (rad-eval
+`docs/machines.md`) landed directly in their own repos. Phase 2 step 1 (settings.json wiring) and
+Phase 0's pre-flight are done; **Phase 2 step 2 (removing this Mac from the PHI-free allowlist)
+is still Phil's to run.** tte-pretraining's symlink is skipped (its "stale copy" premise didn't
+hold — see Open Questions). This branch itself awaits Phil's landing approval.
 **Prior state preserved on `legacy/planner-mac-phi-vm-split-2026-08`** (branched from `main` `30cf092`, before any of this plan's edits) — the full old posture (Hard Boundary section, vm-shell-guard.sh, its install docs) lives there if anyone needs the original rationale later.
 **Reviewed by**: fresh Claude Code subagent (`docs/plans/reviews/retire-planner-mac-phi-vm-split-feedback-claude.md`), verdict Revise — findings applied below; two genuine design forks it surfaced were re-confirmed with Phil.
 
@@ -350,6 +357,19 @@ once Phase 0's mount is actually working.
      rad-eval's dispatcher gate as-is" decision (confirmed earlier, unaffected by this OQ's
      resolution) stands regardless — flagging only so a future reader doesn't read the two
      documents side by side and assume one of them is simply wrong.
+8. **New during implementation: the "stale `claude_ops.md` copies" premise (Background, Phase 5)
+   didn't hold for 2 of the 3 named repos.** `contrastive-3d-onc/docs/claude_ops.md` really was
+   a tracked stale file — deleted + symlinked as planned. `MerlinOnc/docs/claude_ops.md` and
+   `tte-pretraining/docs/claude_ops.md` turned out to be **untracked, uncommitted files with no
+   git history on any branch** — not the committed drift the plan described (their primary
+   checkouts were also mid-flight on unrelated feature branches with substantial uncommitted
+   changes, so this was verified from a fresh worktree off `main`, not the live checkout).
+   **Resolution:** `MerlinOnc` — `docs/` already existed there with 5 other tracked doc files, so
+   adding the symlink was a small, clearly-consistent addition; done (main `0da3866`).
+   `tte-pretraining` — `docs/` doesn't exist at all on `main`; adding a symlink there means
+   creating a new top-level directory from scratch, a bigger call than "fix a stale copy" and one
+   this session didn't make unilaterally. **Not resolved — Phil's call**: add it anyway (creating
+   `docs/`), or skip since the repo never actually adopted the `claude_ops.md` convention.
 
 ## Verification & VM handoff
 

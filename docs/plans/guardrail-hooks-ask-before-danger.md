@@ -1,9 +1,11 @@
 Reference: docs/claude_ops.md (canonical: ~/code/research-skills/claude_ops.md)
 
-**Status: Implemented — revised after Codex `/review-plan`** (2026-08-26). All four hooks +
-shared lib + committed test suite exist on `feat/dangerous-ops-and-compact-hooks`; suite green
-(46/46). Codex verdict was *Blocked* on real false-negatives (heredoc-tail truncation, global
-`--help` exemption, contiguous-only gcloud matching) — all fixed and regression-tested. See
+**Status: Completed** (2026-08-26). Landed to `main` @955a0c7 via `/land` (ff-only); branch
+`feat/dangerous-ops-and-compact-hooks` pruned. All four hooks + shared lib + committed test
+suite are on `main`; suite green (46/46). Codex verdict was *Blocked* on real false-negatives
+(heredoc-tail truncation, global `--help` exemption, contiguous-only gcloud matching) — all
+fixed and regression-tested. `~/.claude/settings.json` wiring is machine-local (live on this
+VM; replicate on the Mac counterpart). See
 `docs/plans/reviews/guardrail-hooks-ask-before-danger-feedback.md`.
 
 # Guardrail hooks: ask-before-delete (/mnt), ask-before-provision, and post-compact rule re-injection

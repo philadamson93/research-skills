@@ -5,7 +5,7 @@ description: Merge a finished feature branch into main — the per-branch-close 
 
 # land
 
-The missing bookend. `/next` opens a session and surveys worktrees; `/wrapup` closes a *session* and lands the branch's latest commits. Neither closes a *branch* — the moment a feature is done and you integrate it into `main`. That moment is where sibling-branch coordination matters most (whichever of two branches touching the same files lands second eats a rebase) and where, historically, nobody runs the check because the merge-to-main *action* had no skill to attach it to. This is that skill.
+The missing bookend. `/next` opens a session and surveys worktrees; `/wrapup` closes a *session* and preserves its state (committing only at a milestone, via its opt-in commit gate). Neither closes a *branch* — the moment a feature is done and you integrate it into `main`. That moment is where sibling-branch coordination matters most (whichever of two branches touching the same files lands second eats a rebase) and where, historically, nobody runs the check because the merge-to-main *action* had no skill to attach it to. This is that skill.
 
 **Open with a one-line context header naming the repo and the branch being landed** — e.g. `vista-eval · feat/survival-eval-v1_6-runner → main` (add the worktree path when landing from a non-primary checkout). Phil launches sessions across ~50 repos and multiple worktrees of the same repo; stating *which branch is about to hit main* up front makes the whole operation unambiguous. Derive it from `git worktree list` + `git branch --show-current`, and repeat it in the Phase 4 summary so the landed state is self-documenting.
 
@@ -82,6 +82,6 @@ Bullet summary led by the `<repo> · <branch> → main` header: SHA/PR landed, b
 ## Composition
 
 - **`/vista-drift` Step 2b** — the canonical cross-branch conflict computation. `/land` runs its single-repo, single-branch slice; it does not re-implement the diff/intersect/classify. (If this reuse proves load-bearing, extract Step 2b's algorithm into a shared `references/cross-branch-conflict-survey.md` that both skills point at — a follow-up refactor, not a prerequisite.)
-- **`/wrapup`** — owns *session*-close doc/memory/tracker hygiene and the branch's own commit gate. `/land` reuses its Step 2 review-status semantics and Step 6 `in-flight.md` discipline rather than redefining them. Land a branch's final commits via `/wrapup` → `/commit-review` *before* `/land`.
+- **`/wrapup`** — owns *session*-close doc/memory/tracker hygiene and the branch's own **opt-in** commit gate (it doesn't commit by default — only at a milestone). `/land` reuses its Step 2 review-status semantics and Step 6 `in-flight.md` discipline rather than redefining them. Land a branch's final commits via `/wrapup` → `/commit-review` *before* `/land`.
 - **`/commit-review`** / **`/phi-vet`** — content-appropriateness and PHI gates at *commit* time. `/land` does not re-vet committed content; it routes back to these only if a branch reached `/land` without having passed them.
 - **`/next`** — the session-open counterpart. Its Phase 0 worktree-litter check is downstream of `/land` doing its Phase 4 prune: a `/land` that skips cleanup is what leaves the stale branches `/next` later has to reconcile.

@@ -269,7 +269,9 @@ Report the outcome in the Phase 7 hand-off: `HTML drift check: in sync` / `HTML 
 
 Offer next step in one line, naming the reviewer used, the concision pass result if it ran, and the HTML drift outcome if Phase 6.75 ran:
 
-> Plan revised against <Codex|fresh Claude> review (<n> findings applied; <m> open questions; concision pass <pre>→<post> lines, -X%; HTML <in sync | regenerated | stale per user>). Want to `/read-plan` it now (or `/explain-plan` if a sibling HTML exists and you prefer the visual review), run the *other* reviewer (`/review-plan <plan-path> --reviewer <other>`) for a second pass, or commit?
+> Plan revised against <Codex|fresh Claude> review (<n> findings applied; <m> open questions; concision pass <pre>→<post> lines, -X%; HTML <in sync | regenerated | stale per user>). Want to `/read-plan` it now (or `/explain-plan` if a sibling HTML exists and you prefer the visual review), or run the *other* reviewer (`/review-plan <plan-path> --reviewer <other>`) for a second pass?
+
+Don't offer to commit the plan here: a plan doc isn't committed while it's under iteration — it's committed only once approved via `/read-plan` sign-off (`claude_ops.md` → What Gets Committed). Route to `/read-plan`, not to a commit.
 
 Do not auto-invoke any of these. Suggesting the other reviewer is a useful prompt when the first review found mostly trivial gaps (a sign the plan was already strong) or when the user explicitly wants both perspectives — but it's just an offer; don't push.
 

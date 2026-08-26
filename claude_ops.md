@@ -46,8 +46,8 @@ hardware the Mac doesn't have, so those specific steps route to whichever box ha
    package-manager rules, sibling-repo paths) live in the repo's `CLAUDE.md` or machine registry
    (e.g. `docs/machines.md`), not here.
 2. **On any Claude-Code-capable machine**, do everything a plan calls for: run queries and
-   scripts, commit results frequently, and when a finding contradicts a plan assumption — revise
-   the approach inline and keep going. Escalate only when a call is genuinely
+   scripts, commit at landable milestones (see Git Practices → Commit Cadence), and when a
+   finding contradicts a plan assumption — revise the approach inline and keep going. Escalate only when a call is genuinely
    architecture-significant or you're actually uncertain (Communication Standards below already
    asks this of every session, machine notwithstanding) — not because of which box you're on.
 3. **GPU / high-throughput compute with no Claude Code running there** (a bare GPU box, a
@@ -140,7 +140,7 @@ one more thing a thorough plan states plainly.
 **Important: Plan mode limitation.** Claude Code's plan mode can only write to its internal plan file (`~/.claude/plans/`). It **cannot** write to `docs/plans/` in the repo. This creates a two-step process:
 
 1. **Exit plan mode** — this approves the *plan content*, not implementation
-2. **Immediately save to `docs/plans/`** — copy the plan to the repo with a descriptive filename (not `plan_01.md`). This ensures traceability and allows the user to review plans across sessions.
+2. **Immediately save to `docs/plans/`** — copy the plan to the repo with a descriptive filename (not `plan_01.md`) so it's on disk for review across sessions. **Do not commit it while it's under iteration** — commit the plan only once it's approved (`/read-plan` sign-off), so an iterated plan costs one PHI vet, not one per revision (see Git Practices → What Gets Committed).
 3. **Stop and confirm** — ask the user before starting implementation. Do not create task lists, write code, or make any changes beyond saving the plan doc.
 
 Exiting plan mode ≠ "start coding." Treat it as "plan content approved, now persist it."
@@ -298,10 +298,20 @@ Don't paper over the tension with a hedge ("I'll extract it if needed later"); n
   - Another for core logic changes
   - Another for documentation updates
 
-### Commit Frequency
+### Commit Cadence
 
-- Commit frequently to maintain clean revert points
-- Each commit should represent a coherent, working state
+A commit is a **landable-milestone event, not a cadence or a session boundary.** Commit when work reaches a durable, shareable state — an approved plan, a completed and verified implementation, results ready to hand off — or when the user explicitly asks. Running out of context / token budget mid-workflow is **not** a commit trigger: `/wrapup` preserves session state through its resume block plus auto-memory and the git-ignored `docs/session/` docs, none of which require a commit.
+
+Every commit in a medical-data repo passes the PHI gate (`/commit-review` → `/phi-vet`), including the user's per-doc read of any committed markdown. Committing on a cadence multiplies that human cost with no benefit, so commit at milestones and keep the committed surface small (see *What Gets Committed*).
+
+### What Gets Committed
+
+The committed surface is what the PHI gate must vet, and every committed markdown gets the user's read — so keep it small.
+
+- **Committed** (durable, shareable): code, **approved** plan docs, aggregate-metric narratives / README / `docs/` updates. These pass the full PHI gate.
+- **Not committed — git-ignored `docs/session/`**: readbacks, VM-verify writeups, scratch analyses, and other structured session docs. They stay as rich structured files for cross-session resume but never enter git, so no commit-time PHI gate fires on them. That is **not** license to relax authorship discipline: never write raw PHI (patient identifiers, sample rows, report text) into them in the first place — the standing rule that Claude never echoes PHI into any doc applies to git-ignored files exactly as to committed ones. Git-ignoring controls *commit* exposure, not what may be written. **Egress rule:** while a session doc stays local and git-ignored it needs no per-doc human PHI vet — but the moment its content **leaves the machine** (promoted into a committed doc, copied onto the shared mount, pasted into an external system), it crosses the same exposure boundary a commit does and gets a human PHI vet (`/phi-vet`) at that point, exactly as committed content is vetted. Add `docs/session/` to the repo's `.gitignore` if it isn't already; being git-ignored also keeps them safe from a parallel session's `git reset --hard`.
+- **Not committed until approved**: plan docs under iteration. Save to `docs/plans/` immediately so the file is on disk, but commit it only once approved (`/read-plan` sign-off) — one vet per plan, not one per revision.
+- **Not committed — mount only**: results data artifacts (parquets, HTML reports, metrics tables) live on the shared bucket mount, never git (see *Standalone scripts … read results from the mount*). What reaches git is the aggregate narrative that points at them.
 
 ---
 

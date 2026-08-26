@@ -1,10 +1,12 @@
-End-of-session cleanup. Do the eight steps below in order.
+End-of-session cleanup. Do the nine steps below in order.
 
-**Open with a one-line context header naming the repo and current branch** — e.g. `research-skills · main` (add the worktree path when you're in a non-primary checkout: `research-skills · feat/foo · .claude/worktrees/foo`). Phil launches sessions across ~50 repos and multiple worktrees of the same repo, so stating *where you are* up front makes it unambiguous which checkout the cleanup and commit gate act on. Derive it from `git worktree list` + `git branch --show-current`, and repeat it in the Step 8 summary so the landed state is self-documenting.
+**Open with a one-line context header naming the repo and current branch** — e.g. `research-skills · main` (add the worktree path when you're in a non-primary checkout: `research-skills · feat/foo · .claude/worktrees/foo`). Phil launches sessions across ~50 repos and multiple worktrees of the same repo, so stating *where you are* up front makes it unambiguous which checkout the cleanup and commit gate act on. Derive it from `git worktree list` + `git branch --show-current`, and repeat it in the Step 9 summary so the landed state is self-documenting.
 
 ## When to invoke
 
-Recommended cadence: invoke around **~200k tokens of context** (or earlier at a clean cutoff), land with the commit gate in Step 8, then start a fresh session with `/next`. Long sessions past that point get noticeably slower (cache misses on every turn, drift in long-tail context) and the marginal value of staying in-session keeps falling. The `MEMORY.md` + `next.md` updates this skill maintains are what make the cross-session handoff cheap — invest in them here so the next session starts fast.
+Recommended cadence: invoke around **~200k tokens of context** (or earlier at a clean cutoff), preserve session state, then start a fresh session with `/next`. Long sessions past that point get noticeably slower (cache misses on every turn, drift in long-tail context) and the marginal value of staying in-session keeps falling.
+
+`/wrapup` is **state-preservation first, commit second**. Its job is to leave the next session everything it needs to resume — `MEMORY.md`, `next.md`, `docs/session/` docs, and the resume block — none of which require a commit. Committing is **opt-in** at the Step 9 gate and defaults to *skip*: reserve it for work that reached a landable milestone (per `claude_ops.md` → Commit Cadence). Ending a session mid-workflow on a token budget is the common case, and it needs no commit — so no commit-time PHI gate fires — with the resume block plus the git-ignored `docs/session/` docs carrying the state forward. (Not committing is not license to relax authorship discipline: never write raw PHI into any doc, git-ignored ones included — see `claude_ops.md` → What Gets Committed.)
 
 ## Scope
 
@@ -44,7 +46,7 @@ If the project has a plan-tracking index (`docs/plans/README.md` or equivalent),
 - **No plan-tracking index exists, but `docs/plans/` (or equivalent) does**: bootstrap a `README.md` with `Plan | Status | Reviewed | Description` columns and populate `Reviewed: No` for all existing plan docs.
 - **No `docs/plans/` directory at all**: skip this step.
 
-Surface unreviewed plans (`No` or `Stale`) in the Step 8 summary so the next session can pick them up.
+Surface unreviewed plans (`No` or `Stale`) in the Step 9 summary so the next session can pick them up.
 
 ## Step 3 — Tracking-doc hygiene (`next.md` or equivalent)
 
@@ -90,7 +92,7 @@ Keep one cross-repo "in-flight work" index current so the next session can resum
 
 - **`<state>`** — read cheaply from this session's own git knowledge (no sweep): `pushed` (committed and on `origin/<branch>`), `⚠ UNPUSHED` (committed locally, not on origin — lost if the clone/worktree is gone), or `⚠ UNCOMMITTED` (dirty / draft not yet committed). Quick check: `git -C <wt> status -sb` plus whether an `origin/<branch>` ref exists.
 - **Order** newest-first within a repo; keep repos most-recently-touched first.
-- **Prune on landing**: if the branch merged to main or was abandoned this session, remove its entry (note the removal in the Step 8 summary).
+- **Prune on landing**: if the branch merged to main or was abandoned this session, remove its entry (note the removal in the Step 9 summary).
 - **Pointer style** (same contract as `next.md`): ≤3 lines per entry; substance lives in the plan doc / `next.md` it points at.
 
 **Editing mechanics**: the file is git-ignored — edit it in place. In a guarded background session where direct edits to a sibling checkout are blocked, write the updated file to scratch and `cp` it in (Bash isn't guarded). Never commit this file.
@@ -104,7 +106,7 @@ The user's global skills live in their own git repo, which is **a different repo
 
 **Detection:**
 1. Always check the runtime cache: `git -C ~/.claude/commands status --short` (and `git -C ~/.claude/skills status --short` if that path exists).
-2. Check the canonical repo if one exists. Look for `~/.claude/canonical-skills-repo` (a single-line file containing the absolute path to the canonical repo). If that pointer file doesn't exist, fall back to scanning common locations (`find ~/Documents -maxdepth 4 -type d \( -name 'research-skills' -o -name 'claude-skills' \) 2>/dev/null | head -5`) and surface a candidate via `AskUserQuestion` if exactly one match is found. If zero or many, skip and surface in Step 8 summary as "no canonical skills repo detected."
+2. Check the canonical repo if one exists. Look for `~/.claude/canonical-skills-repo` (a single-line file containing the absolute path to the canonical repo). If that pointer file doesn't exist, fall back to scanning common locations (`find ~/Documents -maxdepth 4 -type d \( -name 'research-skills' -o -name 'claude-skills' \) 2>/dev/null | head -5`) and surface a candidate via `AskUserQuestion` if exactly one match is found. If zero or many, skip and surface in Step 9 summary as "no canonical skills repo detected."
 3. If the output is empty in all candidate paths, **skip this step silently** — nothing to sync.
 
 **Sync direction matters.** Edits often happen in the runtime cache (because that's what Claude Code is reading from), but the canonical repo is the source of truth that gets pushed to GitHub. Before committing, copy your session edits from the runtime cache → canonical:
@@ -123,18 +125,35 @@ Raise an `AskUserQuestion` with three options:
 
 1. **"Commit and push global skills" (Recommended)** — commit your session changes and push to the configured remote in one action.
 2. **"Commit only (no push)"** — create the commit locally; defer the push.
-3. **"Skip"** — leave global-skills changes uncommitted; flag in the Step 8 summary as needing attention.
+3. **"Skip"** — leave global-skills changes uncommitted; flag in the Step 9 summary as needing attention.
 
 Based on the answer:
 
 - *Commit and push* / *Commit only*: stage only the files you touched (`git -C <repo> add <file1> <file2>`; do **not** use `git -C <repo> add -A`), then commit with a short single-line thematic message describing what changed (e.g., `review-plan: fold in the handoff-readiness lens`). No AI attribution lines, matching the project commit-message convention. Push only if the option chosen requires it.
-- *Skip*: do nothing; surface in Step 8 summary.
+- *Skip*: do nothing; surface in Step 9 summary.
 
 The `-C <path>` form keeps the project's cwd intact; do not `cd` into the skills repo.
 
-**Why a separate gate from Step 8:** two independent repos, two independent push targets. The user might want to push the project but defer the skills sync, or vice versa. One gate per repo.
+**Why a separate gate from Step 9:** two independent repos, two independent push targets. The user might want to push the project but defer the skills sync, or vice versa. One gate per repo.
 
-## Step 8 — Summary + commit gate
+## Step 8 — Write the session state doc (`docs/session/`)
+
+The resume loop's **write side**. Because commit is opt-in and most sessions close uncommitted (Step 9 gate), the `docs/session/` state doc — not a commit — is what carries this session's substance to the next one. The resume block below points at it, and `/next` (Phase 1 + Phase 4) reads it to resume; if this step doesn't write it, that pointer dangles and the loop never closes.
+
+For each in-flight task advanced this session, write (or update) a state doc at `docs/session/<task-slug>-readback.md` — `mkdir -p docs/session` first if the dir is absent. Match `<task-slug>` to the resume block's DOC / OPEN lines so the pointer resolves. Capture the substance a fresh session needs to resume without re-deriving it from git:
+
+- **Where things stand** — what was done this session and the current state of the work.
+- **What's next** — the recommended first concrete action, plus the remaining steps.
+- **Open questions / blockers** — anything unresolved or waiting on the user.
+- **Key coordinates** — branch / worktree, relevant file paths, the plan-doc pointer, and any verification run + its result.
+
+**Authorship discipline applies unchanged**: never write raw PHI (patient identifiers, sample rows, report text) into the state doc. Git-ignoring controls *commit* exposure, not what may be written — the standing rule that Claude never echoes PHI into any doc applies to git-ignored files exactly as to committed ones (`claude_ops.md` → What Gets Committed).
+
+**Mechanics**: `docs/session/` is git-ignored — edit it in place; never stage or commit it. In a guarded background session where direct edits to a sibling checkout are blocked, write to scratch and `cp` it in (Bash isn't guarded).
+
+**Skip** only for sessions that advanced no resumable work (pure doc-tweak, vista-pm-only) — the same sessions that skip the resume block.
+
+## Step 9 — Summary + commit gate (opt-in)
 
 **Summarize as bullet points** (not a paragraph). Lead with the `<repo> · <branch>` context header (per the top-of-skill note), then use these headings; omit any that are empty:
 
@@ -144,39 +163,50 @@ The `-C <path>` form keeps the project's cwd intact; do not `cd` into the skills
 - **Next**: what comes after this session (1–3 bullets).
 - **Blocked on user**: things the next session can't unblock itself (1–3 bullets).
 
-**Then raise an `AskUserQuestion` at the commit gate** with three structured options:
+**Then raise an `AskUserQuestion` at the commit gate** with three structured options. Commit is **opt-in** — the default is to skip it and let the resume block + `docs/session/` docs carry state forward. Only offer commit as the recommended choice when this session's changes reached a **landable milestone** (per `claude_ops.md` → Commit Cadence): an approved plan, a completed and verified implementation, or results ready to hand off. For the common mid-workflow / budget-out close, skip.
 
-1. **"Commit and push" (Recommended)** — commit the cleanup changes and push to the tracking remote in one action.
-2. **"Commit only (no push)"** — create the commit locally; defer the push.
-3. **"Skip commit"** — don't commit; leave changes uncommitted.
+1. **"Skip commit" (Recommended for a mid-workflow close)** — don't commit; leave changes in the working tree. State is preserved by `MEMORY.md`, `next.md`, `docs/session/`, and the resume block. Nothing is staged, so no commit-time PHI gate fires.
+2. **"Commit and push"** — commit the changes and push to the tracking remote in one action. Choose this when the work is a landable milestone.
+3. **"Commit only (no push)"** — create the commit locally; defer the push.
 
-Inline free-text yes/no is the wrong shape here — the answer space is enumerable; structured choices are clearer and faster. This single gate replaces what would otherwise be two asks (commit gate here + push gate inside `commit-review`).
+Recommend the option that matches the session's state (Skip for mid-workflow, Commit for a milestone), and put it first. Inline free-text yes/no is the wrong shape here — the answer space is enumerable; structured choices are clearer and faster. This single gate replaces what would otherwise be two asks (commit gate here + push gate inside `commit-review`).
 
 **Based on the user's answer**:
+- *Skip commit*: end the wrapup flow without invoking commit-review.
 - *Commit and push*: invoke `commit-review` with `args: "push-authorized"`. Signals that the push decision has already been gated, so commit-review skips its own main-push prompt.
 - *Commit only*: invoke `commit-review` with `args: "no-push"`. Commit-review commits and skips the push step entirely.
-- *Skip commit*: end the wrapup flow without invoking commit-review.
 
-Do not auto-commit. Do not run `git commit` inline — always go through `commit-review`, which handles the appropriateness review and project commit conventions in one step.
+Do not auto-commit. Do not run `git commit` inline — always go through `commit-review`, which handles the appropriateness review and project commit conventions in one step. `docs/session/` is git-ignored, so readbacks and session docs there are never staged for a commit regardless of the choice above.
 
 ### Resume block — print last, always
 
-After the commit gate resolves (whether or not you committed), the **final output** is a copy-paste **resume block** — the coordinates Phil pastes into the next session (any machine — no distinction) to pick the work back up without re-deriving it from git. Print one block per in-flight branch/worktree you touched this session (reuse the Step 6 entries — usually just one):
+After the commit gate resolves (whether or not you committed), the **final output** is a copy-paste **resume block** — the coordinates the next session uses to pick the work back up without re-deriving it from git. Most sessions close **uncommitted** (commit is opt-in), so the block defaults to pointing at the working tree and `docs/session/` docs in this checkout; the pushed-SHA form applies only when this session committed at a milestone. Print one block per in-flight branch/worktree you touched this session (reuse the Step 6 entries — usually just one):
 
+**Uncommitted close (the common case):**
 ```
 Resume ▸ research-skills
   REPO   research-skills
   BRANCH feat/foo   [WORKTREE .claude/worktrees/foo]
-  DOC    docs/plans/foo.md   (plan)
-  SHA    <pushed short sha | ⚠ UNPUSHED | set-at-commit>
-  SYNC   git fetch origin && git checkout feat/foo && git pull --ff-only   # run FIRST, always — local branch is stale; verify: git rev-parse --short HEAD → <sha>
+  DOC    docs/plans/foo.md (plan) · docs/session/foo-readback.md (state)
+  STATE  ⚠ uncommitted — resume from the working tree in this checkout
+  OPEN   cd <checkout> && cat docs/session/foo-readback.md   # substance + what's next
 ```
 
-- **BRANCH / WORKTREE** — the branch the work landed on (`main` or a `feat/…`), plus `[WORKTREE <path>]` when you're in a non-primary checkout. The branch name is a coordinate, **not** a freshness signal — the next session still fetches first (see SYNC), `main` included.
-- **DOC** — the plan doc this session advanced. Omit the field entirely for a pure-hygiene session with no doc to resume from.
-- **SHA** — the pushed short SHA, or `⚠ UNPUSHED` / `set-at-commit` per the Step 6 state (so the honesty about what's actually on `origin` carries into the next session).
-- **SYNC — the runnable first action, always printed (`main` included).** The next session's checkout is stale relative to the pushed `<sha>`, so the block carries the exact sync command to run *before* surveying git. A `<sha>` pushed from this machine is absent from the next session's local `<branch>` until it fetches — so "can't find the branch / doc" there means *fetch first*, not *improvise*. Shared / dirty tree or non-ff → `git worktree add ../<repo>-<slug> <sha>` rather than `reset --hard`. `⚠ UNPUSHED` / `set-at-commit` → render it as `⚠ nothing on origin yet — push first`, since there's nothing to fetch.
-- Skip the resume block only for sessions that advanced no branch/worktree (pure doc-tweak or vista-pm-only sessions) — nothing to resume.
+**Committed-and-pushed close (milestone):**
+```
+Resume ▸ research-skills
+  REPO   research-skills
+  BRANCH feat/foo   [WORKTREE .claude/worktrees/foo]
+  DOC    docs/plans/foo.md (plan)
+  SHA    <pushed short sha>
+  SYNC   git fetch origin && git checkout feat/foo && git pull --ff-only   # run FIRST; verify: git rev-parse --short HEAD → <sha>
+```
+
+- **BRANCH / WORKTREE** — the branch/worktree the work sits on (`main` or a `feat/…`), plus `[WORKTREE <path>]` when you're in a non-primary checkout.
+- **DOC** — the plan doc this session advanced and/or the `docs/session/` doc carrying its substance and next steps. Omit for a pure-hygiene session with no doc to resume from.
+- **STATE / SHA** — *uncommitted close:* `STATE` states the work lives in the working tree of this checkout. *Milestone close:* `SHA` is the pushed short SHA.
+- **OPEN / SYNC — the runnable first action.** *Uncommitted close:* the files are already in this checkout, so the next session just opens it and reads the `docs/session/` doc — no fetch. *Milestone close:* the local branch is stale relative to the pushed `<sha>`, so fetch + checkout + pull **before** surveying git — "can't find the branch / doc" means *fetch first*, not *improvise*. Shared / dirty tree or non-ff → `git worktree add ../<repo>-<slug> <sha>` rather than `reset --hard`.
+- Skip the resume block only for sessions that advanced no work worth resuming (pure doc-tweak or vista-pm-only sessions).
 
 ---
 

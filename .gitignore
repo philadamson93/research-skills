@@ -1,6 +1,16 @@
 .DS_Store
 *.bak
 
+# Structured session docs (readbacks, VM-verify writeups, "what's next" state).
+# Never committed — they hold cross-session resume state, and being git-ignored
+# keeps them safe from a parallel session's `git reset --hard`. No commit-time PHI
+# gate fires on them because they never enter git — NOT license to relax authorship
+# discipline: never write raw PHI into them (git-ignoring controls commit exposure,
+# not what may be written). Egress rule: no per-doc vet while local/git-ignored, but
+# a human PHI vet is required the moment content leaves the machine (committed, copied
+# to the mount, pasted out). See claude_ops.md → Git Practices → What Gets Committed.
+docs/session/
+
 # Claude Code local worktrees / settings (machine-local plumbing)
 .claude/worktrees/
 .claude/settings.local.json

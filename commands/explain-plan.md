@@ -382,7 +382,7 @@ The change layer is **annotation, not plan content** — like the `.resp` respon
 6. **Verification pass** — see next section. Run this BEFORE opening so any drift fixes land before the user sees the file.
 7. **Deliver the file for review** — REQUIRED, not optional. Two cases:
    - **Local-display machine (Mac / any box with a browser):** open it — `open <output-path>` on macOS, `xdg-open <output-path>` on Linux, `start <output-path>` on Windows. Detect platform via `uname -s` if uncertain. The user invoked the skill to *review* the HTML; failing to open it forces an extra manual step.
-   - **Headless VM (no display — e.g. `phil-sllm-01`):** `open`/`xdg-open` has nothing to render to, so delivery instead means **copying the HTML to the shared bucket mount** where Phil can open it from his Mac. See *VM runs — deliver to the shared mount* below; that copy is an egress event and runs through the `/phi-vet` gate before it lands.
+   - **Headless VM (no display — e.g. `phil-sllm-01`):** `open`/`xdg-open` has nothing to render to, so delivery instead means **copying the HTML to the shared bucket mount** where Phil can open it from his Mac. See *VM runs — deliver to the shared mount* below; the shared bucket mount is inside the secure perimeter, so this copy does **not** need a `/phi-vet` gate.
    - The only exception (either case): if the user explicitly said "just generate, don't open/copy" in the invocation, skip delivery. Mention the path (local or mount) in the hand-off message regardless, so the user can re-open it manually.
 
 ## Verification pass (mandatory in v1)
@@ -403,7 +403,7 @@ After writing the HTML, run a drift-reconciliation step. The user explicitly ask
    - `INVENTED` — HTML content not in plan. Highest-priority class — list every instance.
 4. If `INVENTED` or `DRIFT` findings exist, offer to fix them in the HTML before handing off to the user.
 
-## VM runs — deliver to the shared mount (egress-gated)
+## VM runs — deliver to the shared mount
 
 On the headless Executor VM (`phil-sllm-01`) there is no display, so step 7's `open`/`xdg-open` can't render the HTML — and the VM's local disk (repo checkout, git worktree) is invisible to Phil's Mac. The **only** surface both machines share is the `/mnt/su-vista-uscentral1` gcsfuse bucket. So on the VM, *delivery* means copying the explainer there for Phil to open on the Mac.
 
@@ -414,11 +414,10 @@ On the headless Executor VM (`phil-sllm-01`) there is no display, so step 7's `o
 - `<stem>.md` (the source plan) → `plan-explainers/<stem>.md`
 - the feedback file, if one exists — `<plan-dir>/reviews/<stem>-*feedback*.md` → `plan-explainers/reviews/` (mkdir the `reviews/` subdir first).
 
-**Egress gate — this copy leaves the machine, so it runs `/phi-vet` first.** Per claude_ops.md → Git Practices → What Gets Committed (*egress rule*), the moment content crosses onto the shared mount it hits the same PHI-exposure boundary a commit does and needs a **human** PHI vet — Claude having read it does not count. Do NOT silently `cp` to the mount. The flow is:
-1. Generate + verify the HTML on VM-local disk first (no egress yet — that's fine, keep iterating locally as much as needed).
-2. When ready to deliver, run `/phi-vet` over the bundle (the `.html` + `.md` + feedback). Since the HTML is Claude-rendered from the plan and the `.md` *is* the plan, this vet is the plan-doc appropriateness read Phil would do anyway — it is not extra ceremony, it's the same read relocated to the egress point.
-3. Only after the vet passes, `cp` the bundle to the mount.
-4. Report the mount path and tell Phil to open it from the Mac (via that same bucket's mount point there). Mention the VM-local path too, so a later commit to the git home can find it.
+**No `/phi-vet` gate — the shared bucket mount is inside the secure perimeter.** The `su-vista-uscentral1` bucket is mounted only on the secured Mac and the secured VMs — all within the same IRB-covered environment — so copying onto it is intra-perimeter shared storage, not content *leaving* to an uncontrolled system. Writing the bundle there therefore does **not** trigger a human PHI vet (this is Phil's ruling, 2026-08-27; see claude_ops.md → Git Practices → What Gets Committed, *egress rule*). The standing authorship discipline still holds unchanged: never write raw PHI (patient identifiers, sample rows, report text) into the plan / HTML / feedback in the first place. The flow is:
+1. Generate + verify the HTML on VM-local disk first (keep iterating locally as much as needed).
+2. When ready to deliver, `cp` the bundle to the mount directly.
+3. Report the mount path and tell Phil to open it from the Mac (via that same bucket's mount point there). Mention the VM-local path too, so a later commit to the git home can find it.
 
 **Git home is unchanged.** The mount copy is an interim review surface, not the canonical location. The explainer's git home is still `docs/plans/<stem>.html` sibling to the plan, committed at `/read-plan` / `/explain-plan` approval (see *Completion* below). Re-delivering after edits re-copies the bundle (re-vet only if the content changed since the last vetted copy).
 

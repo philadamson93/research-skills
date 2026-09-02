@@ -330,13 +330,29 @@ Plans are reviewed **iteratively** — the reader has usually seen a prior versi
 
 ### Resolve the baseline (what "since last review" means)
 
+**"Since last time" means "since the version the reader last looked at" — the *previous generation*, not the last formal approval.** During a feedback loop (feedback → regenerate → feedback → regenerate…) the reader sees the HTML every round, so each regeneration is a "last time." The baseline must therefore advance on **every** regeneration, not only on approval — see *Baseline snapshot sidecar* below for the mechanism.
+
+> **The staleness trap this fixes.** Plans under iteration are *not committed each round* (`claude_ops.md` → one PHI vet per plan, not per revision), and approval anchors only advance on sign-off. So "diff against git HEAD" and "diff against the last-approved SHA" both freeze at the last approval — which can be 2–3 rounds back. Diffing against a frozen baseline makes "what changed since last time" *accumulate every round since approval* and re-show old deltas. Never use the approval anchor or git HEAD as the round-to-round baseline; that IS the bug. The approval SHA is a `--since` target for a returning reviewer ("what changed since I signed off"), nothing more.
+
 Pick the first that applies:
 
-1. **Explicit override** — `/explain-plan <path> --since <ref-or-sha>` names the baseline directly.
-2. **Recorded last-reviewed anchor** — the plan SHA (or commit) stamped at the *previous* approval (see *Completion*). This is the truest "since you last reviewed," and it differs from "since last generated" when the HTML was regenerated several times between the reader's reads — prefer it.
-3. **Prior generated HTML / git HEAD** — diff the current plan against the version recorded by the prior HTML, or against `git show HEAD:<path>` when the plan is committed. The good default for the common "review round N committed → feedback applied → regenerate" loop (working tree vs HEAD is exactly that round's deltas).
+1. **Explicit override** — `/explain-plan <path> --since <ref-or-sha>` names the baseline directly (e.g. the last-approved SHA, when a returning reviewer wants "since I signed off").
+2. **Per-generation baseline snapshot (default)** — the plan snapshot the *previous generation* wrote to the sidecar (see below). `diff(current plan, snapshot)` is exactly *this* round's edits — the correct "since you last looked." This advances every regeneration, so it never accumulates across rounds.
+3. **Prior generated HTML / git HEAD** — fallback only when no sidecar exists yet (first run after this mechanism was added, or the sidecar was cleaned). Diff the current plan against `git show HEAD:<path>` when the plan is committed. Use once, then the sidecar takes over next round.
 4. **Review-reconstructed** — no diffable prior version exists (e.g. the reviewed plan landed in a single commit), but the plan just went through review passes. Reconstruct the delta from the review artifacts (`docs/plans/reviews/<stem>-*.md` + the review-history table), attributing each change to its pass. Label the baseline honestly as *reconstructed from the review passes*, not a git diff.
-5. **First pass** — none of the above resolves. Render the "first review" banner; the layer lights up on the next iteration.
+5. **First pass** — none of the above resolves (no sidecar, no diffable prior). Render the "first review" banner; the layer lights up on the next iteration once the sidecar is seeded (below).
+
+### Baseline snapshot sidecar
+
+The change layer's baseline lives in a **gitignored sidecar** that captures the plan text as-of each generation, so the next generation can diff against *exactly what the reader last saw* — independent of git commits and approvals.
+
+- **Location**: `<plan-dir>/.explain-plan/<plan-stem>.baseline.md`. Create the `.explain-plan/` dir if absent and ensure it's gitignored (add `.explain-plan/` to the repo's `.gitignore` if not already covered — it's a review-scratch dir, never committed, and being git-ignored also shields it from a parallel session's `git reset --hard`).
+- **On every generation, in order:**
+  1. **Read** the sidecar if it exists → that's the baseline (resolution step 2). If absent, fall through to steps 3–5 above for *this* run only.
+  2. **Diff** the current plan against the baseline and author `CHANGES` **fresh** from that diff (see below). Never carry `CHANGES` notes forward from a prior generation — recompute every time against the resolved baseline.
+  3. **Advance** the sidecar: if the current plan text differs from the snapshot, overwrite the sidecar with the current plan content. **If the plan text is unchanged (annotation-only regen — e.g. a mermaid-syntax fix or `.resp` callout with no `.md` edit), leave the sidecar untouched** so the round's delta doesn't reset to empty. Comparing plan-text-to-snapshot (not SHA-to-SHA) is what makes annotation-only re-runs safe.
+- **Why not the SHA the HTML embeds?** The HTML stores only the plan *SHA*, not the text, so you can't reconstruct the prior plan to diff against. The sidecar holds the actual content — that's the whole point.
+- **On approval** the sidecar already holds the approved version (the last generation wrote it), so a fresh feedback round after approval diffs against the approved plan automatically — no special-casing needed. The approval SHA is recorded separately for the README row and as a `--since` target (see *Completion*).
 
 ### Compute the delta at section granularity
 
@@ -374,6 +390,7 @@ Fold these into the verification pass:
 - **UNVERIFIED_UNCHANGED** — a section is counted/styled `unchanged` on a path where the baseline can't confirm it. Downgrade to neutral.
 - **ORPHAN_CHANGE** — a `CHANGES.sections` / `CHANGES.oqs` key has no matching `data-section` / `#oq-N` in the HTML. Fix the key or drop the entry.
 - **UNSOURCED_DELTA** — a `new`/`changed` note asserts a change with no support in the baseline diff or the review artifacts. Re-check or remove it.
+- **STALE_BASELINE** — `CHANGES` spans more than one feedback round's worth of edits (the accumulation bug): the delta describes changes the reader already saw acknowledged in a prior round. Confirm the baseline resolved to the per-generation **sidecar** (`.explain-plan/<stem>.baseline.md`), not the last-approval SHA or `git HEAD`. If the sidecar wasn't advanced on the prior run — or the baseline fell back to an approval/HEAD anchor — the diff spans multiple rounds; re-resolve against the sidecar and rebuild `CHANGES`.
 
 ### SHA / drift discipline
 
@@ -511,7 +528,7 @@ Write every response in the plain voice (see *Writing voice*): answer the questi
    - Response-callout-only annotations deliberately leave the SHA untouched (see *SHA / drift discipline*), so an HTML carrying only `.resp` callouts is still in-sync and may promote.
 2. **Confirm the plan is settled** — no unaddressed feedback, no open questions left dangling. If something is open, surface it once before closing out: "Before I mark this Reviewed — OQ2 is still Pending. Resolve or defer?"
 3. **Mark the plan as Reviewed.** If the project has a plan-tracking index (`docs/plans/README.md` or equivalent with a `Reviewed` column), update this plan's row to `Reviewed: Yes` — the same step as `/read-plan` Phase 5, just reached via the visual path. Confirm inline: "Marked `<plan>` as Reviewed: Yes in `docs/plans/README.md` (HTML in-sync at `<sha-first-12>`)." If no such index exists, skip silently (don't bootstrap one mid-review — that's `/wrapup`'s job).
-4. **Stamp the reviewed version as the next baseline.** Record the just-approved plan SHA (or its committing git SHA) as the *last-reviewed anchor* for the change-since-last-review layer — a note on the plans-README row, a small sidecar, or simply relying on the `Reviewed: Yes` commit itself all work. The next `/explain-plan` then diffs against "what you last reviewed," not merely "what was last generated" (baseline resolution step 2). Skip if the project has no place to record it — the layer falls back to git HEAD / prior-HTML.
+4. **Record the approved SHA (for a returning reviewer, not the round-to-round baseline).** The change layer's baseline already advances every generation via the sidecar (see *Baseline snapshot sidecar*), so the next feedback round diffs against the approved plan automatically — you do **not** need to stamp an anchor to make "since last time" work. Do record the just-approved plan SHA (plans-README row note, or the `Reviewed: Yes` commit SHA) purely so a reviewer returning *after* the sign-off can run `/explain-plan <path> --since <approved-sha>` to see "what changed since I approved." Skip if the project has no place to record it — nothing round-to-round depends on it.
 5. Then offer the natural next steps in one line: commit the plan + HTML via `/commit-review`, run `/review-plan` (its handoff-readiness lens checks fresh-agent implementability), or start implementation.
 
 Like `/read-plan`, this is gated on an **explicit** approval signal — never infer it from a mid-loop "ok" or the user moving on, and never promote on a drifted HTML.
@@ -521,7 +538,7 @@ Like `/read-plan`, this is gated on an **explicit** approval signal — never in
 - Re-running on the same plan: regenerate HTML in place. Diff the old vs new HTML; if structure changed substantively, surface that as a "structure delta" note before handing off.
 - If the source plan's SHA-256 differs from the HTML's embedded SHA, the HTML is stale. Warn the user before they review it.
 - The HTML is meant to be committed alongside plan revisions; regenerate on every substantive plan edit.
-- **A re-run is the moment the change-since-last-review layer earns its keep** — resolve the baseline and author the `CHANGES` object on every regeneration, not just the first (see `## Change-since-last-review layer`). The "structure delta" note above is the coarse version; the change layer is the section-level, reader-facing form of the same idea.
+- **A re-run is the moment the change-since-last-review layer earns its keep** — resolve the baseline, author the `CHANGES` object **fresh**, and advance the baseline sidecar on every regeneration, not just the first (see `## Change-since-last-review layer` → *Baseline snapshot sidecar*). The baseline is the *previous generation's* plan snapshot, so each round's delta is that round's edits alone — it never accumulates across rounds. Recompute `CHANGES` from the diff every time; never carry prior-round notes forward. The "structure delta" note above is the coarse version; the change layer is the section-level, reader-facing form of the same idea.
 
 ## Iteration mode
 

@@ -66,7 +66,7 @@ Branch on reviewer. Both branches produce a feedback file at `<output-path>` mat
 Build the prompt; pipe via stdin:
 
 ```bash
-codex exec --full-auto - <<'PROMPT'
+codex exec -s workspace-write - <<'PROMPT'
 You are doing a read-only test-coverage audit. Scope: tests only. Identify code paths, branches, edge cases, and contracts added by this plan's uncommitted changes that are NOT exercised by any test. Do not edit any code (the implementer will apply your suggestions if agreed).
 
 Plan: <plan-path>
@@ -161,7 +161,14 @@ PROMPT
 
 Notes on flags:
 
-- `--full-auto` enables sandboxed auto-execution with read-only access to the working tree.
+- `-s workspace-write` selects the sandbox policy (`codex exec -s <read-only|workspace-write|danger-full-access>`).
+  **`workspace-write`, not `read-only`, is correct even for a read-only *audit***: the reviewer never edits
+  code, but it does have to write its own feedback file into `docs/plans/reviews/`.
+- **Verify the feedback FILE, never the exit code.** When the invocation is piped (`... | tail`), the shell
+  reports the *pipeline's* status, so a failed `codex` can still look like exit 0 while having written
+  nothing. Always confirm the output file exists and is non-empty before reading it.
+- Superseded flag: `--full-auto` was removed — on codex-cli 0.149.1 it fails immediately with
+  `error: unexpected argument '--full-auto' found`. Use `-s` as above.
 - `-C <repo-root>` if invoked from a subdir — Claude Code generally runs at repo root, so usually unnecessary.
 
 Stream Codex's output so the user sees progress. Codex will exit when the feedback file is written. Verify the output file exists and is non-empty before proceeding.

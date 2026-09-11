@@ -1,405 +1,350 @@
-# Claude Code Operating Standards
+# How Claude Code works on VISTA repos
 
-This document defines how Claude Code should operate across all VISTA repos. Reference this file at the start of every planning document.
-
----
-
-## Core Principles
-
-1. **Plan before you code.** Always enter Plan mode (Shift+Tab twice) before writing any code. Iterate on the plan until it's solid, then execute.
-
-2. **Re-enter plan mode when direction changes.** If you discover a new issue, architectural concern, or change in direction while implementing, pause and re-enter plan mode to get feedback before continuing.
-
-3. **A wrong fast answer is slower than a right slow answer.** Prioritize correctness over speed. Use thinking mode for complex tasks.
-
-4. **You don't trust; you instrument.** Always provide verification mechanisms. Feedback loops multiply output quality 2-3x.
-
-5. **YAGNI (You Aren't Gonna Need It).** Don't build for hypothetical futures. Implement what's needed now, nothing more.
+The standard for every VISTA repo. Read it at the start of each session. Plan docs open with
+the line `Reference: docs/claude_ops.md`.
 
 ---
 
-## Environment Constraints
+## How to write to me
 
-- **Code execution is allowed on this machine**, gated by the same `phi-vet` discipline that already governs commits — not blocked outright. Claude Code for Education covers Phil's Mac and his project VMs alike, so "no PHI clearance here" is no longer a reason to refuse.
-- **GPU training and high-throughput batch still run on the VM fleet** — a capacity constraint, not a compliance one. This machine typically lacks that hardware; `ruff`, `black`, `isort`, `mypy`, `pytest`, and similar tools may still not be installed/configured for a given repo's env here (check the repo's own `uv` env / machine registry), but that's a per-repo setup question, not a blanket prohibition.
-- **Data paths may be VM-specific or locally mounted**, depending on the repo. Paths like `/mnt/su-vista/...` reference the VM filesystem; check the repo's machine registry (Machine-Aware Operating Mode below) before assuming a path isn't reachable from here.
+Plain English, always — in chat, in questions, in plan docs, in commit messages. I read this in a
+terminal and usually don't have the code in front of me. Write the way you'd explain it across a
+desk to someone who knows the research cold and has never opened the repo.
 
-This is the *simple single-machine default* — assumed by all VISTA repos. Repos where execution depends on which machine you're on (GPU/throughput routing, not PHI) should declare so explicitly and override this rule via the Machine-Aware Operating Mode section below.
+**Do**
 
----
+- Short, concrete sentences. Say the thing, then stop.
+- Lead with the answer or the number. Reasoning after it, if at all.
+- Plain verbs: *use*, not *utilize* or *leverage*; *let*, not *enable*; *so*, not *in order to*;
+  *about*, not *approximately*.
+- Name the actual thing — the dataset, the table, the step, the number that moved — not "the
+  relevant artifact" or "this capability".
+- Put consequences in units I feel: minutes, dollars, "we'd re-run the embeddings", "the
+  leaderboard numbers move", "that's a day of work thrown away".
+- Gloss any term I haven't already used, in five words or less, the first time it appears.
+- Keep exact names and numbers. `path/to/file.py:42` and "8,538 rows" are precision, not jargon.
 
-## Machine-Aware Operating Mode
+**Don't**
 
-Any machine running Claude Code — the Mac, a project VM, whichever — has **full parity**: plan,
-implement, verify, and commit, the same discipline everywhere. There is no "planner" role
-confined to one machine and an "executor" role confined to another; a session discovering that
-a plan assumption was wrong doesn't hand off to a different machine to decide what to do about
-it — it reconsiders, revises the approach, documents the revision, and keeps going, the same
-way Core Principle #2 already asks of any session facing a direction change.
+- **IMPORTANT: no shorthand I'd have to look up.** Say what a thing does, not what it's called.
+  "Check the tests still pass now that main has moved" — not "gate green-gate freshness." If a
+  phrase only means something inside these docs, it doesn't belong in a message to me.
+- Don't make a code-level noun the subject of something I have to act on — no function names,
+  class names, flags, config keys, or schema fields as the subject. Say what it does in English
+  and put the identifier in parentheses after, if it genuinely helps.
+- No preamble or self-narration: drop "It's worth noting that", "I'll now", "Let's dive in".
+- No inflated diction: *robust, seamless, comprehensive, delve, holistic, leverage, utilize,
+  facilitate, myriad, plethora*.
+- No hedge-stacking ("it may be the case that this could potentially…"). Say it plainly or cut it.
+- No rule-of-three flourishes or stacked em-dashes where one clear clause does the job.
+- No filler affirmations ("Great question", "Certainly").
 
-The one real machine-dependent split left is **hardware capacity**: GPU training, embedding
-generation, and high-throughput batch (parallel linear-probe / KNN, bulk preprocessing) need
-hardware the Mac doesn't have, so those specific steps route to whichever box has it.
+**When you ask me something**
 
-1. **At session start, run `hostname`** to know which box you're on — mainly relevant for which
-   data mounts / GPU capacity are local. Repo-specific bindings (concrete hostnames,
-   package-manager rules, sibling-repo paths) live in the repo's `CLAUDE.md` or machine registry
-   (e.g. `docs/machines.md`), not here.
-2. **On any Claude-Code-capable machine**, do everything a plan calls for: run queries and
-   scripts, commit at landable milestones (see Git Practices → Commit Cadence), and when a
-   finding contradicts a plan assumption — revise the approach inline and keep going. Escalate only when a call is genuinely
-   architecture-significant or you're actually uncertain (Communication Standards below already
-   asks this of every session, machine notwithstanding) — not because of which box you're on.
-3. **GPU / high-throughput compute with no Claude Code running there** (a bare GPU box, a
-   high-throughput CPU box driven by a script rather than interactively) is the one place a real
-   split remains — not an authority question, just a fact that no agent is present to make any
-   judgment call there:
-   - The deliverable is a **standalone runner script** (env setup — `uv sync` + any env exports
-     — plus the run, in one command) that gets copy-pasted onto that box and invoked directly.
-   - The script writes its output to the **shared bucket mount** (`su-vista-uscentral1`, mounted
-     on both the Mac and the Claude-Code-capable VMs — see `vista-pm/README.md`), not into a
-     rendered handoff doc. Whichever Claude-Code session needs the results reads them straight
-     off the mount.
-   - Give the script real Expected/Stop-style assertions (exit codes, files that must exist &
-     be non-empty, metric ranges) — since no agent is there to eyeball an ambiguous result, the
-     script itself has to know pass from fail.
-4. **Unknown hostnames**: ask the user which capacity class applies rather than hard-refusing or
-   assuming. After confirming, offer to register the hostname in the repo's machine registry so
-   the next session doesn't re-prompt.
+- Describe what each choice leads to, not how it works inside. I usually can't see the code.
+- Any multiple-choice question goes through the `AskUserQuestion` tool, not inline prose.
+
+The test: read it back as if a person wrote it in a hurry but knew the material cold. If it sounds
+like a press release, cut it down. If I answer a question with "what does that mean?", that's a
+writing failure, not a misunderstanding.
 
 ---
 
-## Session Start
+## Start of a session
 
-**Always** check whether the global skills repo (canonical path: `~/code/research-skills`) is behind `origin/main` before starting work — fetch first so the check sees the true remote state, not a stale local view:
+- Run `hostname`. It tells you which data mounts and GPUs are local to you.
+- Check the shared skills repo is current:
 
-```bash
-git -C ~/code/research-skills fetch --quiet 2>/dev/null && \
-  git -C ~/code/research-skills log HEAD..origin/main --oneline 2>/dev/null | head
-```
+  ```bash
+  git -C ~/code/research-skills fetch --quiet 2>/dev/null && \
+    git -C ~/code/research-skills log HEAD..origin/main --oneline 2>/dev/null | head
+  ```
 
-If the local clone is behind by **any** commits, tell the user how far behind it is, show the unpulled commit subjects, and ask whether to `git -C ~/code/research-skills pull --ff-only` before starting — don't pull unprompted, but don't skip silently either. Mid-session skill-spec drift (a `/wrapup` or `/review-plan` invocation reading a different version than expected) is harder to reason about than a clean pull at the start, and even a single unpulled commit can change a skill's behavior. Only stay silent when the clone is already up to date (0 commits behind) or the path doesn't exist on this machine.
+  Behind by even one commit: tell me how far behind, list the commit subjects, and ask before
+  pulling `--ff-only`. Up to date, or the path doesn't exist here: say nothing.
 
-### Fetch before you survey — your local refs lag the other machine
+- **Fetch before you go looking for anything.** Another machine may have pushed plans, branches,
+  or commits since you last synced, so your local refs are stale by default — `main` included.
+  Run `git fetch origin` before you search for something another session made, before you check
+  out a named branch or commit, and before you tell me it doesn't exist. "Can't find the branch"
+  means fetch again. It never means "nobody wrote it, so I'll substitute something similar."
 
-VISTA work is **cross-machine**: any session on any machine — the Mac, a project VM, whichever
-— may have pushed (plans, `next.md` pointers, branches, SHAs) since you last synced, so your
-local refs, **`main` included**, are stale by default regardless of which box you're on. Before
-you survey git to *find* something another session produced (`git log` / `git ls-files` / a
-branch-or-file lookup), before you check out a named branch or SHA, and before you conclude
-*"not found"*, run `git fetch origin` **first**. A commit that was never fetched is invisible to
-a stale tree, so "can't find the branch / doc / SHA" means *fetch first* — never *it was never
-authored, so improvise a plausible substitute*. This is the operating-standard root of the
-resume-block `SYNC` line `/wrapup` prints. It's orthogonal to the shared-checkout check below:
-that guards against *local* clobbering, this against *stale remote* refs.
+- **Check whether another session is already working in this folder.** VISTA repos are shared
+  checkouts: several sessions may sit in the same directory, sharing one working tree and one
+  HEAD, so one session's branch switch or reset is instantly visible to the others.
 
-### Check for parallel work in the same checkout (before you touch anything)
+  ```bash
+  git -C <repo> status --short          # changes you didn't make?
+  git -C <repo> branch --show-current   # a branch you didn't check out?
+  git -C <repo> worktree list           # someone else's worktree already open?
+  ```
 
-VISTA repos are **shared single checkouts** — several Claude sessions (usually other agents, often on unrelated tasks) may `cd` into the *same* repo subfolder at once. They then share one working tree, one index, and one HEAD. A branch switch, `git reset`, `git stash`, or commit by any one session is immediately visible to — and can silently clobber — the others. This has already caused real data loss: a commit landed on a parallel session's branch, and the `git reset --hard` used to relocate it discarded three of that session's uncommitted docs. Because git had never staged those edits, no blob existed to restore — the loss was permanent.
-
-So **before beginning work in a repo, take stock of what else is in flight there:**
-
-```bash
-git -C <repo> status --short          # uncommitted work you didn't create?
-git -C <repo> branch --show-current   # is HEAD on an unexpected feature branch?
-git -C <repo> worktree list           # are sibling worktrees already active?
-```
-
-Also cross-check `MEMORY.md` / `docs/next.md` for concurrently-active branches. Read any of these as a sign a parallel session is live in this checkout:
-- tracked files modified, or untracked files present, that aren't yours;
-- HEAD sitting on a feature branch you didn't check out;
-- the user mentioning another agent or session working this repo.
-
-**When parallel work is present (or likely), isolate in your own git worktree before editing** — `EnterWorktree` (this project authorizes it for exactly this case) or `git worktree add`. A worktree gives you a private working dir + branch, so your branch switches, commits, stashes, and any destructive tree ops can't reach the other session's tree. When the checkout is clearly yours alone and no other worktrees are active, working in place is fine — just re-verify the branch at commit time (see Git Practices → Before Committing).
+  Also check `MEMORY.md` and `docs/next.md` for branches someone else is on, and treat me
+  mentioning another agent as the same signal. If anything looks live, make your own worktree
+  before editing (`EnterWorktree`, or `git worktree add`). In a shared tree a `reset`, a broad
+  `stash`, or a branch switch can destroy another session's uncommitted work. This has already
+  cost three unsaved documents permanently.
 
 ---
 
-## Planning Workflow
+## Planning
 
-### Starting a Task
+- Plan before writing code. Iterate until the plan is solid, then build.
+- Read the existing docs and code first. Find what already exists before proposing something new.
+- Say what you're building and why.
+- Ask me "is anything here ambiguous?" It catches requirements I left out.
+- A wrong fast answer costs more than a right slow one. Think it through.
+- Go back to planning when the direction changes: the approach won't work, a new constraint turns
+  up, the job is bigger than it looked, the design has a problem, or you're simply unsure.
 
-1. Enter Plan mode before any implementation
-2. **Read relevant documentation first.** Search `docs/` and the codebase for existing patterns, utilities, and context before proposing solutions. Understand what exists before suggesting changes.
-3. Draft the plan in plan mode's internal file (the only file plan mode allows writing to)
-4. Begin the plan document with:
-   ```
-   Reference: docs/claude_ops.md
-   ```
-5. Articulate both *what* you're building and *why*
-6. Ask: "Are there any points of ambiguity about this plan?" to surface underspecified requirements
-7. Iterate on the plan until solid, then exit plan mode
+### Saving a plan
 
-**For plans with a step that needs GPU / high-throughput hardware**: name the standalone
-runner script that step needs as a deliverable in *Files to Modify*, and state its Expected/Stop
-criteria in the plan's *Verification* section (see Plan Document Structure below) — the same
-place any other step's success criteria live. There's no separate co-design pass for this; it's
-one more thing a thorough plan states plainly.
+Plan mode can only write to its own scratch file, never to `docs/plans/`. So:
 
-### Saving the Plan (after exiting plan mode)
+1. Exit plan mode. That approves the plan's content, not the implementation.
+2. Save it to `docs/plans/` with a name that says what it is, not `plan_01.md`.
+3. Stop and ask me before building. No task lists, no code, no edits.
+4. Don't commit a plan while it's still changing. Commit once I've signed off, so it costs one
+   PHI review instead of one per draft.
 
-**Important: Plan mode limitation.** Claude Code's plan mode can only write to its internal plan file (`~/.claude/plans/`). It **cannot** write to `docs/plans/` in the repo. This creates a two-step process:
-
-1. **Exit plan mode** — this approves the *plan content*, not implementation
-2. **Immediately save to `docs/plans/`** — copy the plan to the repo with a descriptive filename (not `plan_01.md`) so it's on disk for review across sessions. **Do not commit it while it's under iteration** — commit the plan only once it's approved (`/read-plan` sign-off), so an iterated plan costs one PHI vet, not one per revision (see Git Practices → What Gets Committed).
-3. **Stop and confirm** — ask the user before starting implementation. Do not create task lists, write code, or make any changes beyond saving the plan doc.
-
-Exiting plan mode ≠ "start coding." Treat it as "plan content approved, now persist it."
-
-### When to Re-enter Plan Mode
-
-- Discovering the current approach won't work
-- Uncovering a new requirement or constraint
-- Realizing the scope is larger than expected
-- Finding an architectural issue that affects the design
-- Any time you're uncertain whether to proceed
-
-### Plan Document Structure
+### What a plan contains
 
 ```markdown
 Reference: docs/claude_ops.md
 
-# [Descriptive Task Title]
+# [What this is]
 
 ## Goal
-What are we building and why?
+What we're building, and why.
 
 ## Approach
-How will we implement this?
+How.
 
 ## Files to Modify
-- path/to/file.py - description of changes
-  (for new files, name the target directory; flag any new dir — see Code Quality Standards → File & Directory Placement)
+Each path and what changes there. For a new file, name the directory it goes in, and flag
+any directory that doesn't exist yet.
 
 ## Open Questions
-- Any ambiguities to resolve?
+What's still ambiguous.
 
 ## Verification
-How will we know this works? State the success criteria *here* so they are reviewed **with the
-plan** (via `/review-plan`), not invented later:
-- **What runs, and where** — commands / scripts / tests, in order. Most work runs wherever the
-  session implementing it happens to be (Mac or a Claude-Code VM — no distinction). Only name a
-  specific machine for a step that genuinely needs GPU / high-throughput hardware.
-- **Expected** (per step) — how you'll know it worked: exit codes, files that must exist &
-  be non-empty, metric ranges, skip-logs.
-- **Stop** (per step) — the halt-and-report conditions: precondition / failure / decision-gate.
-- **Anticipated forks** — where you can predict a fork (a metric near a threshold, an optional
-  path), pre-encode it as a **decision gate** ("if X → A, else B") so it resolves inline instead
-  of costing a pause to re-decide. A finding that contradicts a plan assumption isn't a
-  hand-off — reconsider inline, revise the approach, document the revision, keep going.
-- **If a step needs GPU / high-throughput hardware with no Claude Code running there**: name the
-  **standalone runner script** as a deliverable in *Files to Modify* (env setup + the run, one
-  command), state where its output lands (the shared bucket mount, not a rendered doc), and give
-  it real Expected/Stop assertions of its own — no agent is present there to interpret an
-  ambiguous result.
+How we'll know it worked:
+- What runs, in order, and where. Name a specific machine only when the step needs a GPU or
+  heavy parallel compute.
+- Per step, what a good result looks like: exit code, a file that must exist and be non-empty,
+  a number inside a stated range.
+- Per step, what should make you stop and come back to me.
+- Any fork you can see coming — a number near a threshold, an optional path — decided in
+  advance ("above 0.8 do A, otherwise B") so it resolves while you work instead of costing a
+  pause. A finding that contradicts the plan is not a handoff: rethink it, write down what
+  changed, keep going.
+- If a step needs hardware with no Claude Code on it, name its script under *Files to Modify*
+  and give that script its own success criteria here.
 
 ## Landing & cleanup
-How this work reaches `main` and how its branch is retired — planned here so the merge and
-the branch-deletion are *designed*, not improvised at the end. `/land` executes this: it
-should be **following** this section, not inventing the sequence.
-- **Branch** — the feature branch this lands on (`feat/…`), or "direct on main" for doc-only /
-  minor-fix work (per Git Practices → Feature Branching).
-- **Landing gate** — what must hold before `/land` merges: review sign-off (`/read-plan`), any
-  GPU/high-throughput step's standalone script actually run and its output checked, PHI-vetted.
-  Name any sibling branch that must land first.
-- **Merge sequence** — *single-branch plan:* one line ("`/land` at end → main, prune branch +
-  worktree"). *Multi-branch / phased plan:* the order branches hit `main` and which rebases
-  which (foundational/smaller first; big rename/refactor last, unless it's a prerequisite).
-- **Cleanup on land** — `/land` Phase 4 prunes the branch (local + remote) + worktree, marks
-  the plan `Status: Completed`, prunes the `next.md` / in-flight entries. Name anything extra
-  to retire (scratch dirs, temp tables, parallel-branch notes owed to siblings).
+- The branch this lands on, or "straight on main" for docs and small fixes.
+- What must be true before it merges: reviewed, any GPU step actually run and checked,
+  PHI-reviewed. Name any other branch that has to land first.
+- Merge order when several branches are involved: small and foundational first, big renames
+  last unless something depends on them.
+- What gets retired afterward: the branch, its worktree, the plan's status line, the tracker
+  entry, and anything extra like scratch directories or temporary tables.
 ```
 
-### After Completing a Plan
+### When a plan is finished
 
-- **Land the branch via `/land`** (branch-based work) — merge to `main` and prune the branch + worktree + `next.md` / in-flight entries, following the plan's *Landing & cleanup* section. Don't merge or delete branches ad hoc — `/land` is the mechanism, and its Phase 4 performs the three updates below; for doc-only / direct-on-main work (no branch to land) do them inline.
-- **Update all affected documentation** when a plan is implemented. Fix stale paths, CLI examples, import references, and cross-links in `docs/`.
-- **Mark plan docs as completed** by adding `**Status: Completed** (date)` at the top.
-- **Update the plans README** (`docs/plans/README.md`) feature table with the new status.
-
-### Standalone scripts for GPU / high-throughput work — read results from the mount, not a doc
-
-For the one class of work that still needs a specific box (GPU training, embedding generation,
-high-throughput batch), the deliverable is a **standalone runner script** — self-contained env
-setup + the run, in one command — copy-pasted onto that box and invoked directly, since no
-Claude Code session runs there interactively. The script writes its output to the shared bucket
-mount; any Claude-Code session (Mac or VM) reads the results straight off the mount afterward —
-no rendered handoff doc, no separate readback step. For eval results specifically (linear-probe
-runs, KNN runs, cross-modality comparisons), read from the auto-generated HTML at
-`<results-root>/<version>/<modality>/<dataset>/reports/<model>_<dataset>.html` plus the on-disk
-per-task / per-example parquets, and write any narrative yourself. Backlog / `next.md` entries
-that *reference* such results with a one-line pointer are still fine.
+- Land branch work with `/land`, following the plan's landing section. Don't merge or delete
+  branches by hand. For work that went straight on `main`, do the three steps below yourself.
+- Fix the documentation the change invalidated: stale paths, command examples, imports, links.
+- Mark the plan `**Status: Completed** (date)`.
+- Update the table in `docs/plans/README.md`.
 
 ---
 
-## Code Quality Standards
+## Writing code
 
-### Re-use Over Duplication
-
-- Always check for existing utilities before writing new code
-- Extend existing classes/functions rather than creating parallel implementations
-- Prioritize modularity and clean code over expediency
-
-### Simplicity
-
-- Write the simplest code that solves the problem
-- Avoid unnecessary abstractions
-- Don't add features that aren't explicitly requested
-
-### File & Directory Placement
-
-Where a file *lives* is a design decision, not an afterthought. Decide it deliberately at plan time and make it visible in the plan's `## Files to Modify` — don't default to dropping everything at the repo root.
-
-- Place new files in a coherent, discoverable hierarchy; extend the directory structure that already exists rather than accreting a flat dir of unrelated files.
-- Adding a second or third file around a new concern is the signal to give it its own directory. Name that directory in the plan and say why in one line.
-- This is a plan-time habit, not a retrospective one. `/wrapup` Step 1 is the safety net that catches a dir that drifted into a flat dump — but getting placement right up front is cheaper than moving files later and fixing every inbound reference.
-
-### YAGNI vs Modularity — Raise Genuinely Uncertain Cases
-
-YAGNI (Principle #5) and modularity / re-use pull in opposite directions: YAGNI says don't build seams for hypothetical futures; modularity says factor seams so the next caller doesn't duplicate. Use best judgement on the obvious cases (one-off script → inline it; third caller landing in the same module → extract). **When the call is genuinely uncertain — reasonable engineers would disagree — raise it as an `AskUserQuestion` rather than committing silently.** Two right moments to ask:
-
-- **During exploration, before writing the plan doc** — if the shape of the abstraction hinges on a design call you can't make alone, ask before drafting, so the plan opens on the chosen branch instead of relitigating it.
-- **While writing the plan doc** — surface the fork in `## Open Questions` and / or via `AskUserQuestion` so the user decides before the plan locks in a direction.
-
-Don't paper over the tension with a hedge ("I'll extract it if needed later"); name it and resolve it.
+- Look for an existing utility before writing a new one. Extend what's there rather than building
+  a second version alongside it.
+- Write the simplest thing that works. No abstraction you don't need yet, no feature I didn't ask
+  for, nothing built for a future that may not arrive.
+- Decide where a file lives while planning, and put that in *Files to Modify*. Don't default to
+  the repo root. When a second or third file appears around one concern, give it a directory and
+  say why in one line.
+- Re-use and "don't build it until you need it" pull against each other. Judge the clear cases
+  yourself: a one-off script stays inline, the third caller in one module earns an extracted
+  function. When it's a genuine coin flip, ask me with `AskUserQuestion` — before drafting if the
+  plan's shape depends on it, otherwise in the plan's *Open Questions*. Don't paper it over with
+  "I'll extract it later if needed."
 
 ---
 
-## Git Practices
+## Checking your work
 
-### Before Committing
+Give yourself something that tells you pass from fail. This matters more than anything else here.
 
-- **Always check and report the current branch.** Before any commit, verify which branch you're on and tell the user. Never assume you're on the expected branch.
-- **Re-verify the branch the *instant* before you commit — not just at task start.** In a shared checkout a parallel session can switch HEAD out from under you between when you began and when you commit. Run `git branch --show-current` immediately before `git commit` / `/commit-review` and confirm it's the branch you mean to land on.
-- Confirm with the user if the branch seems unexpected for the task.
-- **Prefer non-destructive recovery over `git reset --hard` in a shared checkout.** Operations like `git reset --hard`, a broad `git stash`, or `git checkout -- .` act on the *whole* tree — including another session's uncommitted edits — and edits git never staged have no blob to restore, so the loss is permanent. If you commit to the wrong branch, move the work with `git cherry-pick` / `git reset --soft` / a branch-ref move instead. If you truly must reset, snapshot the *full* working tree first (`git stash -u` of everything, or a filesystem copy) — not just the files you happened to notice in an earlier `status`.
-
-### Feature Branching
-
-- **Major changes should be made in a new feature branch**, not directly on main.
-- Documentation updates and minor bug fixes can go directly on main.
-- **Simple, additive new files** — a new training config, a new one-off script, a new
-  fixture — can also go directly on main. The test is additive-and-isolated: the change
-  only adds a file (or a self-contained new entry in a registry-style file, e.g. one new
-  dataset-config dict key) that nothing else yet references, so it can't break an existing
-  path. Reserve feature branches for changes that touch or depend on existing shared
-  code/behavior.
-- **`research-skills` itself**: a simple fix already discussed and approved in
-  conversation (a skill wording tweak, a doc correction, a small hook adjustment) can skip
-  the branch + `/land` ceremony entirely and go straight on `main` — this repo is Phil's
-  own tooling, iterated on directly across many sessions. Reserve a branch here for a
-  larger skill rewrite or anything that still needs review before landing.
-
-### Commit Messages
-
-- **No AI attribution.** Never include "Co-Authored-By: Claude" or similar
-- **One sentence per commit.** Keep messages concise and descriptive
-- **Thematic separation.** Split changes into separate commits by theme:
-  - One commit for config changes
-  - Another for core logic changes
-  - Another for documentation updates
-
-### Commit Cadence
-
-A commit is a **landable-milestone event, not a cadence or a session boundary.** Commit when work reaches a durable, shareable state — an approved plan, a completed and verified implementation, results ready to hand off — or when the user explicitly asks. Running out of context / token budget mid-workflow is **not** a commit trigger: `/wrapup` preserves session state through its resume block plus auto-memory and the git-ignored `docs/session/` docs, none of which require a commit.
-
-Every commit in a medical-data repo passes the PHI gate (`/commit-review` → `/phi-vet`), including the user's per-doc read of any committed markdown. Committing on a cadence multiplies that human cost with no benefit, so commit at milestones and keep the committed surface small (see *What Gets Committed*).
-
-### What Gets Committed
-
-The committed surface is what the PHI gate must vet, and every committed markdown gets the user's read — so keep it small.
-
-- **Committed** (durable, shareable): code, **approved** plan docs, aggregate-metric narratives / README / `docs/` updates. These pass the full PHI gate.
-- **Not committed — git-ignored `docs/session/`**: readbacks, VM-verify writeups, scratch analyses, and other structured session docs. They stay as rich structured files for cross-session resume but never enter git, so no commit-time PHI gate fires on them. That is **not** license to relax authorship discipline: never write raw PHI (patient identifiers, sample rows, report text) into them in the first place — the standing rule that Claude never echoes PHI into any doc applies to git-ignored files exactly as to committed ones. Git-ignoring controls *commit* exposure, not what may be written. **Egress rule:** while a session doc stays local and git-ignored it needs no per-doc human PHI vet — but the moment its content **leaves the secure perimeter** (promoted into a committed doc, pasted into an external system), it crosses the same exposure boundary a commit does and gets a human PHI vet (`/phi-vet`) at that point, exactly as committed content is vetted. **The shared bucket mount (`su-vista-uscentral1`) is inside the secure perimeter** — mounted only on the secured Mac and the secured VMs, all within the same IRB-covered environment — so copying content onto it is intra-perimeter shared storage, not egress, and does **not** trigger a human PHI vet (Phil's ruling, 2026-08-27). This does not relax authorship discipline: never write raw PHI (patient identifiers, sample rows, report text) into any doc in the first place, mount-bound or not. Add `docs/session/` to the repo's `.gitignore` if it isn't already; being git-ignored also keeps them safe from a parallel session's `git reset --hard`.
-- **Not committed until approved**: plan docs under iteration. Save to `docs/plans/` immediately so the file is on disk, but commit it only once approved (`/read-plan` sign-off) — one vet per plan, not one per revision.
-- **Not committed — mount only**: results data artifacts (parquets, HTML reports, metrics tables) live on the shared bucket mount, never git (see *Standalone scripts … read results from the mount*). What reaches git is the aggregate narrative that points at them.
+- Every plan states how we'll know it worked in its *Verification* section, so I review those criteria alongside it.
+- Show evidence, not assurances: the command you ran and what it printed, the test output, the
+  file that appeared.
+- A check that cannot fail proves nothing. Work out the expected answer independently of the thing
+  you're testing.
+- Run the checks yourself and bring me the results. Don't leave assertions for me to run.
 
 ---
 
-## Communication Standards
+## Which machine to run on
 
-### Ask Clarifying Questions For:
+Every machine running Claude Code does the whole job: plan, build, check, commit. There is no
+machine that only plans and another that only executes. A session that finds its plan was wrong
+revises it where it stands.
 
-- Functional requirements (what to build, how it should behave)
-- Ambiguous specifications
-- Decisions that significantly affect architecture
-- Anything where assumptions could lead to wasted work
-- **Fallback vs exception behavior**: Don't assume fallbacks are preferred — they can mask upstream errors. Ask the user explicitly.
-- **Testing plans**: Brainstorm which aspects are testable, critical to test, and what can be mocked vs needs integration testing. Get user input before writing tests.
+The one real difference between machines is hardware. GPU training, embedding generation, and
+heavy parallel batch work (linear probes, KNN, bulk preprocessing) need hardware the Mac doesn't
+have, so those steps run on whichever box has it.
 
-### Use Your Judgement For:
+- Actual hostnames, package-manager rules, and sibling repo paths live in that repo's
+  `CLAUDE.md` or `docs/machines.md`, not here.
+- Unfamiliar hostname: ask me what that machine can do rather than guessing, then offer to record
+  it in the repo so the next session doesn't ask again.
+- Running code is allowed on every machine, under the same PHI review that governs commits.
+  Claude Code for Education covers the Mac and the project VMs alike.
+- A repo may not have `ruff`, `black`, `isort`, `mypy`, or `pytest` installed in its environment
+  on this machine. Check the repo's own `uv` environment. That's a setup question, not a ban.
+- Data paths may be local or specific to one VM. Confirm a path exists before reading or writing.
 
-- Implementation details (variable names, code patterns)
-- Internal structure decisions
-- Standard refactoring choices
-- Obvious bug fixes
+**When a step needs hardware that has no Claude Code session on it**, the deliverable is one
+script I can paste onto that box and run. Nobody is watching it, so it has to judge itself.
 
-### Document Non-Obvious Decisions
-
-If you make a choice that isn't obvious, note it briefly in:
-- Code comments (sparingly)
-- Commit messages
-- The planning document
-
----
-
-## Institutional Memory
-
-### When Claude Makes Mistakes
-
-Add learnings to `CLAUDE.md` so they don't repeat. Examples:
-- "Don't modify X without also updating Y"
-- "Always run Z before committing changes to W"
-- "The config parameter `foo` must be set when using feature `bar`"
-
-### When Patterns Emerge
-
-Document recurring patterns in the appropriate `docs/` file to help future sessions.
+- Self-contained: environment setup (`uv sync`, any exports) and the run, in a single command.
+- It writes results to the shared bucket mount (`su-vista-uscentral1`, mounted on the Mac and on
+  the Claude-capable VMs), not into a document. Whichever session needs the numbers reads them
+  off the mount.
+- It checks its own results: exit codes, files that must exist and be non-empty, numbers in range.
+- Read the results off the mount and write the narrative yourself. For eval runs that means the
+  generated HTML at `<results-root>/<version>/<modality>/<dataset>/reports/<model>_<dataset>.html`
+  plus the per-task and per-example parquet files. A one-line pointer to results in a backlog or
+  `next.md` entry is fine.
 
 ---
 
-## Pre-Commit Review
+## Git
 
-For non-trivial changes, use the research-skills review workflows instead of inline subagent prompts:
+### Before you commit
 
-- **`/review-plan <plan-path>`** — independent design audit of a plan doc (Codex CLI or fresh Claude subagent), then applies agreed feedback. Its always-on lenses include **handoff-readiness** — does the plan POINT AT / STATE DIRECTLY everything a fresh implementing agent needs (file paths, schema contracts, cross-stage surfaces, success criteria, out-of-scope, and the *Verification* section's Expected/Stop criteria). Run after substantial plan-doc work, before implementation.
-- **`/review-implementation <plan-path>`** — implementation audit of uncommitted code against the plan. Run after non-trivial implementation completes, before `/commit-review`.
-- **`/review-tests <plan-path>`** — test-coverage audit of uncommitted code against the plan. Run after `/review-implementation` when the change introduces new branches / contracts / edge cases worth regression-protection.
-- **`/commit-review`** — commit workflow with appropriateness review (catches accidentally-leaked private content) before commit + push. Use this rather than running `git commit` inline.
-- **`/phi-vet`** — hard PHI gate for medical-data repos. `/commit-review` escalates to it automatically for repos that touch BigQuery / OMOP / NeuralFrame / DICOM / EHR / WSI / pathology bucket / vista_bench. Do not silently fall back to inline sweeps.
+- Report which branch you're on. Never assume it's the one you started on.
+- Check the branch again in the moment before committing. In a shared checkout another session can
+  move HEAD underneath you between starting and committing.
+- Tell me if the branch looks wrong for this work.
+- Avoid `git reset --hard`, broad `git stash`, and `git checkout -- .` in a shared checkout. They
+  act on the whole tree, including another session's uncommitted edits, and work git never staged
+  has no saved copy to restore. Move a misplaced commit with `cherry-pick`, `reset --soft`, or by
+  moving the branch pointer. If you truly must reset, snapshot the entire tree first, not just the
+  files you happened to notice earlier.
 
-Skip the review skills for trivial changes (single-file fixes, doc tweaks, formatting). Each skill carries its own guidance on what it checks, when to skip, and how findings get applied.
+### Branches
 
-**Spawned subagents may run code on this machine**, gated by the same `phi-vet` discipline as the main session — this is no longer a blanket prohibition. GPU-bound subagent work (training, embedding generation, high-throughput batch) still doesn't belong here; route it to the VM fleet instead.
+- Big changes get a feature branch. Documentation updates and small fixes go straight on `main`.
+- A purely additive file can also go straight on `main`: a new config, a one-off script, a
+  fixture, one new key in a registry-style dictionary. The test is that it only adds something
+  nothing else references yet, so it can't break an existing path.
+- In `research-skills` itself, a small fix we already discussed — skill wording, a doc correction,
+  a hook tweak — goes straight on `main`. Branch here only for a large rewrite or something that
+  needs review before it lands.
+
+### Messages
+
+- No AI attribution lines.
+- One sentence.
+- Split by theme: config in one commit, logic in another, documentation in a third.
+
+### When to commit
+
+- Commit when the work reaches a state worth sharing: an approved plan, a finished and verified
+  change, results ready to use. Or when I ask.
+- Running low on context is not a reason to commit. `/wrapup` preserves the session without one.
+- Every commit in a medical-data repo goes through the PHI review, including my own read of each
+  committed markdown file. Committing on a timer multiplies that cost for no benefit.
 
 ---
 
-## Context Management
+## What gets committed
 
-- **Fresh sessions for fresh tasks.** Start new sessions when switching to unrelated work
-- **Match rigor to stakes.** Prototypes allow looser constraints; production changes require thorough planning and review
+Everything committed passes the PHI review, and I personally read every committed markdown file.
+Keep that surface small.
+
+- **Commit**: code, approved plans, README and `docs/` updates, write-ups of aggregate numbers.
+- **Don't commit**: session notes, verification write-ups, scratch analyses. These live in
+  `docs/session/`, which is git-ignored — add it to the repo's `.gitignore` if it isn't already.
+  Being ignored also protects them from another session's `reset --hard`.
+- **Don't commit yet**: a plan still being revised. Save it to `docs/plans/` immediately, commit
+  it after sign-off.
+- **Never commit**: results data — parquet files, HTML reports, metrics tables. Those live on the
+  mount. What reaches git is the summary that points at them.
+
+### PHI rules that don't bend
+
+- Never write a patient identifier, a sample row, or report text into any file, committed or not.
+  Git-ignoring controls what gets published, not what may be written.
+- A git-ignored session note needs no PHI review from me while it stays local. The moment its
+  content leaves the secure environment — promoted into a committed doc, pasted into an outside
+  system — it needs one, exactly like a commit does.
+- The shared bucket mount is inside the secure environment. It's mounted only on the secured Mac
+  and the secured VMs, all under the same IRB, so copying onto it is not publishing and needs no
+  PHI review (your ruling, 2026-08-27).
 
 ---
 
-## Verification Approaches
+## Reviews before committing
 
-Always define how you'll verify changes work — the same discipline regardless of which machine implements it. For a step that needs GPU / high-throughput hardware, verification means giving the standalone runner script real Expected/Stop assertions of its own, since no agent is present to eyeball an ambiguous result there.
+Use these skills instead of writing review prompts inline. Each one describes itself when you
+invoke it, so the short version:
 
-Capture expected behavior as **Expected / Stop** success criteria in the plan's *Verification* section (see Plan Document Structure above), so it is reviewed with the plan.
+- `/review-plan <plan>` — design review of a plan, before building.
+- `/review-implementation <plan>` — uncommitted code against the plan, before `/commit-review`.
+- `/review-tests <plan>` — test coverage of uncommitted code, when the change adds new behavior
+  worth protecting against regressions.
+- `/commit-review` — the commit path. Use this instead of running `git commit` yourself.
+- `/phi-vet` — the PHI review. `/commit-review` calls it automatically in repos touching BigQuery,
+  OMOP, NeuralFrame, DICOM, EHR, WSI, the pathology bucket, or vista_bench. Never quietly
+  substitute an inline scan.
 
-Remember: Give Claude a way to verify its work. This is the single most important factor in output quality.
+Skip all of these for trivial changes: one-file fixes, doc tweaks, formatting.
+
+Subagents may run code here, under the same PHI rules as the main session. GPU work still goes to
+the machines that have GPUs.
 
 ---
 
-## Skill Composition
+## Skills
 
-Slash commands (skills) are a design layer above bespoke code, and the way they're authored, invoked, and composed is itself a discipline:
+- Expensive skills — multi-agent workflows, large parallel searches, anything that burns a lot of
+  context — are never started off a keyword alone. Describe the choice in one sentence and offer
+  it through `AskUserQuestion` next to the cheaper options. Spending that budget is my call. Cheap
+  skills like `/read-plan` and `/next` run on a direct request.
+- Skills can point at each other. Where two overlap, reference the canonical one instead of
+  copying its text, so they don't drift apart.
+- Handing work to a subagent: don't pour this session's context into the prompt. Point it at the
+  skill or doc it needs and give it just enough to know what to read.
+- Building a multi-step workflow: write the skill in markdown first, then the code it calls. The
+  instinct is to write a one-off Python script that solves today's problem and then rots. The
+  markdown captures the goal, the resources, the success criteria, and when not to use it. Skip
+  this layering for small tasks.
+- When I do the same multi-step thing by hand twice, offer to turn it into a slash command.
 
-- **Invocation discipline.** Expensive skills — multi-agent workflows, large parallel-search passes, anything that spends significant context budget — must never be auto-invoked from trigger cues alone. When a candidate situation surfaces, summarize the fork in one sentence and offer the skill via `AskUserQuestion` alongside lighter-weight alternatives. The user owns the decision to spend that budget. Cheap skills (e.g. `/read-plan`, `/next`) can be invoked on direct user signal without confirmation.
+---
 
-- **Skills can reference other skills.** A skill's markdown file is not a self-contained island. When two skills overlap on a procedure, point at the canonical one (e.g. "see `/commit-review` for the appropriateness review step") rather than duplicating the body. The same modularity discipline that applies to code applies to prose: it keeps drift down and lets each skill stay focused on what it uniquely contributes.
+## Standing rules
 
-- **Need-to-know context delivery for subagents.** When the main session delegates to a subagent, do not pour the full context of the main session into the subagent prompt. Point the subagent at the relevant sub-skill or sub-doc and give it just enough to know what to read. The main session does not need to hold the subagent's full procedure in context — the subagent does, on demand, while it is running.
-
-- **Markdown-first when building larger workflows.** When asked to build out a multi-step workflow, default to writing a skill (markdown) FIRST and only then writing code that the skill will invoke. The default bias is toward bespoke single-purpose Python scripts that solve the immediate task and then rot — markdown skills capture intention, goals, resources, success criteria, and the "when to invoke / when to skip" gates that one-off code drops on the floor. Code still gets written; it is downstream of the skill that frames it. Many small coding tasks will not benefit from this layering — apply it when the workflow has multiple steps, multiple invocation modes, or will be re-run across sessions.
-
-- **Surfacing new skill opportunities.** When the user repeatedly performs the same multi-step workflow (commit + push, cross-repo status checks, deploy verification, etc.), surface the option to extract it as a slash command in `~/.claude/commands/`. Keep the suggestion lightweight — only when the pattern has clearly appeared 2+ times — and follow the markdown-first principle above when authoring it.
+- Ask me about: what to build and how it should behave, anything ambiguous, decisions that shape
+  the architecture, anything where a wrong assumption wastes work, whether a failure should fall
+  back or raise (don't assume a fallback — it can hide a real error upstream), and what's worth
+  testing before you write tests.
+- Decide yourself: variable names, code patterns, internal structure, ordinary refactoring,
+  obvious bug fixes.
+- When you get something wrong, add the lesson to the repo's `CLAUDE.md` so the next session
+  doesn't repeat it.
+- When a pattern recurs, write it into the right `docs/` file.
+- Record a non-obvious decision where someone will find it: a short code comment, the commit
+  message, or the plan.
+- Start a fresh session for unrelated work.
+- Match the rigor to the stakes. A prototype can be loose; production changes get the full
+  treatment.

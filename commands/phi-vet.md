@@ -30,7 +30,7 @@ if [ -n "$CHK" ]; then "$CHK" --explain; echo "exit=$?"; else echo "helper not f
 
 - **exit 1 — `ASSUME_PHI`** → this machine may hold PHI. Proceed with the full vet (Step 1 onward).
 - **exit 0 — `PHI_FREE`** → this machine is on the PHI-FREE allowlist. STOP. There is no PHI here to scan and no hard commit gate to clear. Tell the user plainly: *"phi-vet is inert on this PHI-free machine (`<matched-name>`) — PHI scanning runs on the PHI-bearing machine. Appropriateness review of docs on this machine is covered by `/commit-review`."* Do NOT run the scan and do NOT write a sign-off marker.
-- **Can't locate the helper** → fail-closed: assume PHI and proceed with the full vet. (Better to over-scan on a planner machine than skip on a PHI machine.)
+- **Can't locate the helper** → fail-closed: assume PHI and proceed with the full vet. (Better to over-scan on a machine with no patient data than to skip on one that has it.)
 
 This is the same fail-closed contract as the hook: active everywhere except machines listed in the machine-local, git-ignored `hooks/lib/phi-free-machines.local` (the committed script reads it; real machine names stay out of the public repo). To exempt a machine, copy `phi-free-machines.example` to `.local` on it and add its stable name — there is intentionally no env-var backdoor.
 

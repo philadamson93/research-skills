@@ -8,7 +8,7 @@
 # discipline: never write raw PHI into them (git-ignoring controls commit exposure,
 # not what may be written). Egress rule: no per-doc vet while local/git-ignored, but
 # a human PHI vet is required the moment content leaves the machine (committed, copied
-# to the mount, pasted out). See claude_ops.md → Git Practices → What Gets Committed.
+# to the mount, pasted out). See claude_ops.md → What gets committed.
 docs/session/
 
 # Claude Code local worktrees / settings (machine-local plumbing)

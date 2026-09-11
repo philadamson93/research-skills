@@ -5,7 +5,7 @@ description: Independent implementation audit of uncommitted code by Codex CLI a
 
 # review-implementation
 
-Get a Codex-side independent audit of uncommitted code against the plan it was meant to implement. Codex's lens differs from Claude's; the delta surfaces drift, missed contracts, and quiet shortcuts.
+Get a Codex-side independent audit of uncommitted code against the plan it was meant to implement. Codex sees the code differently from Claude; the gap between them surfaces drift, missed contracts, and quiet shortcuts.
 
 The skill exists because Claude reviewing its own implementation is not an independent check — Claude wrote the code; Claude already believes the plan was followed. Always invoke Codex via `codex exec` — never substitute Claude as the reviewer.
 

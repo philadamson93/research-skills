@@ -5,7 +5,7 @@ description: Independent test-coverage audit of uncommitted code by Codex CLI or
 
 # review-tests
 
-Get an independent audit of test coverage for uncommitted code against the plan it was meant to implement. The reviewer's lens differs from Claude's; the delta surfaces silent regression risk — code paths the implementer wrote but didn't think to assert.
+Get an independent audit of test coverage for uncommitted code against the plan it was meant to implement. The reviewer sees the code differently from Claude; the gap between them surfaces silent regression risk — code paths the implementer wrote but didn't think to assert.
 
 This skill is distinct from `/review-implementation`. That skill audits *fidelity* (drift, contracts, missing pieces) and surfaces test gaps as one section among several. `/review-tests` is the deeper version — focused exclusively on coverage, with apply-mode stubs and a re-run gate. Run it after `/review-implementation` when the implementation introduces new branches, raise paths, optional params, or boundary conditions that need regression protection.
 

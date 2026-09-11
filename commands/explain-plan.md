@@ -23,24 +23,11 @@ Convert a plan doc into an interactive HTML explanation. Plans for repo-wide cha
 
 ## Writing voice — plain English, and questions about the design not the machinery
 
-Everything this skill puts in front of a human — the questions it asks, the HTML prose (TL;DR, "what changed" notes, plain restatements of open questions, `.resp` callouts, drill answers), and any edit it applies back into a plan doc — should read like a sharp colleague talking, not like a chatbot. The reader is a busy person reviewing a plan on screen, **not reading the code**. Write the way you'd explain it across a desk to someone who knows the research cold and has never opened the repo.
-
-**Do:**
-- Short, concrete sentences. Say the thing, then stop.
-- Plain verbs: *use*, not *utilize / leverage*; *let*, not *facilitate / enable*; *so*, not *in order to*; *about*, not *approximately*.
-- Name the actual thing in the world — the dataset, the output table, the step, the number that changes — instead of an abstract noun ("the relevant artifact", "this capability").
-- Spell out consequences in units a person feels: minutes, dollars, "we'd re-run the embeddings", "the leaderboard numbers move", "we throw away a day of work".
-- Gloss any term the user hasn't already used, in five words or fewer, the first time it appears.
-
-**Don't:**
-- No preamble or self-narration: drop "It's worth noting that", "I'll now", "Let's dive in", "In this section we will".
-- No inflated diction: *robust, seamless, comprehensive, delve, holistic, leverage, utilize, facilitate, myriad, plethora*.
-- No hedge-stacking ("it may be the case that this could potentially…") — say it plainly or cut it.
-- Don't reach for a rule-of-three or an em-dash triad when one clear clause does the job.
-- No filler affirmations ("Great question", "Certainly").
-- **Don't make a code-level noun the subject of anything the user has to act on** — function names, class names, flags, config keys, file paths, schema fields. Say what it does in English; put the identifier in parentheses afterwards if it genuinely helps.
-
-The test: read it back as if a person wrote it in a hurry but knew the material cold. If it sounds like a press release or a model showing off, cut it down. This governs every human-facing string the rest of this skill tells you to produce.
+**The voice is defined once, in `claude_ops.md` → How to write to me.** Read it and follow it;
+it is not repeated here. In this skill it governs *every* human-facing string: the questions it
+asks, the HTML prose (TL;DR, "what changed" notes, plain restatements of open questions, `.resp`
+callouts, drill answers), and any edit applied back into a plan doc. The reader is a busy person
+reviewing a plan on screen who is **not reading the code**.
 
 ### Questions: ask about the design, not the machinery
 
@@ -364,7 +351,7 @@ Plans are reviewed **iteratively** — the reader has usually seen a prior versi
 
 **"Since last time" means "since the version the reader last looked at" — the *previous generation*, not the last formal approval.** During a feedback loop (feedback → regenerate → feedback → regenerate…) the reader sees the HTML every round, so each regeneration is a "last time." The baseline must therefore advance on **every** regeneration, not only on approval — see *Baseline snapshot sidecar* below for the mechanism.
 
-> **The staleness trap this fixes.** Plans under iteration are *not committed each round* (`claude_ops.md` → one PHI vet per plan, not per revision), and approval anchors only advance on sign-off. So "diff against git HEAD" and "diff against the last-approved SHA" both freeze at the last approval — which can be 2–3 rounds back. Diffing against a frozen baseline makes "what changed since last time" *accumulate every round since approval* and re-show old deltas. Never use the approval anchor or git HEAD as the round-to-round baseline; that IS the bug. The approval SHA is a `--since` target for a returning reviewer ("what changed since I signed off"), nothing more.
+> **The staleness trap this fixes.** Plans under iteration are *not committed each round* (`claude_ops.md` → Saving a plan: one PHI review per plan, not per revision), and approval anchors only advance on sign-off. So "diff against git HEAD" and "diff against the last-approved SHA" both freeze at the last approval — which can be 2–3 rounds back. Diffing against a frozen baseline makes "what changed since last time" *accumulate every round since approval* and re-show old deltas. Never use the approval anchor or git HEAD as the round-to-round baseline; that IS the bug. The approval SHA is a `--since` target for a returning reviewer ("what changed since I signed off"), nothing more.
 
 Pick the first that applies:
 
@@ -475,7 +462,7 @@ After writing the HTML, run a drift-reconciliation step. The user explicitly ask
 
 ## VM runs — deliver to the shared mount
 
-On the headless Executor VM (`phil-sllm-01`) there is no display, so step 7's `open`/`xdg-open` can't render the HTML — and the VM's local disk (repo checkout, git worktree) is invisible to Phil's Mac. The **only** surface both machines share is the `/mnt/su-vista-uscentral1` gcsfuse bucket. So on the VM, *delivery* means copying the explainer there for Phil to open on the Mac.
+On the headless VM (`phil-sllm-01`) there is no display, so step 7's `open`/`xdg-open` can't render the HTML — and the VM's local disk (repo checkout, git worktree) is invisible to Phil's Mac. The **only** surface both machines share is the `/mnt/su-vista-uscentral1` gcsfuse bucket. So on the VM, *delivery* means copying the explainer there for Phil to open on the Mac.
 
 **When this branch applies.** Both must hold: (a) you're on the VM — `hostname` is `phil-sllm-01` (or an unfamiliar host where local open fails); and (b) the mount destination exists — `/mnt/su-vista-uscentral1/chaudhari_lab/phil/plan-explainers/` is present. If either is false, fall back to the normal local `open` (or, if there's genuinely no way to surface it, just report the local path).
 
@@ -484,7 +471,7 @@ On the headless Executor VM (`phil-sllm-01`) there is no display, so step 7's `o
 - `<stem>.md` (the source plan) → `plan-explainers/<stem>.md`
 - the feedback file, if one exists — `<plan-dir>/reviews/<stem>-*feedback*.md` → `plan-explainers/reviews/` (mkdir the `reviews/` subdir first).
 
-**No `/phi-vet` gate — the shared bucket mount is inside the secure perimeter.** The `su-vista-uscentral1` bucket is mounted only on the secured Mac and the secured VMs — all within the same IRB-covered environment — so copying onto it is intra-perimeter shared storage, not content *leaving* to an uncontrolled system. Writing the bundle there therefore does **not** trigger a human PHI vet (this is Phil's ruling, 2026-08-27; see claude_ops.md → Git Practices → What Gets Committed, *egress rule*). The standing authorship discipline still holds unchanged: never write raw PHI (patient identifiers, sample rows, report text) into the plan / HTML / feedback in the first place. The flow is:
+**No `/phi-vet` gate — the shared bucket mount is inside the secure perimeter.** The `su-vista-uscentral1` bucket is mounted only on the secured Mac and the secured VMs — all within the same IRB-covered environment — so copying onto it is intra-perimeter shared storage, not content *leaving* to an uncontrolled system. Writing the bundle there therefore does **not** trigger a human PHI vet (this is Phil's ruling, 2026-08-27; see claude_ops.md → What gets committed, *egress rule*). The standing authorship discipline still holds unchanged: never write raw PHI (patient identifiers, sample rows, report text) into the plan / HTML / feedback in the first place. The flow is:
 1. Generate + verify the HTML on VM-local disk first (keep iterating locally as much as needed).
 2. When ready to deliver, `cp` the bundle to the mount directly.
 3. Report the mount path and tell Phil to open it from the Mac (via that same bucket's mount point there). Mention the VM-local path too, so a later commit to the git home can find it.
@@ -561,7 +548,7 @@ Write every response in the plain voice (see *Writing voice*): answer the questi
 2. **Confirm the plan is settled** — no unaddressed feedback, no open questions left dangling. If something is open, surface it once before closing out: "Before I mark this Reviewed — OQ2 is still Pending. Resolve or defer?"
 3. **Mark the plan as Reviewed.** If the project has a plan-tracking index (`docs/plans/README.md` or equivalent with a `Reviewed` column), update this plan's row to `Reviewed: Yes` — the same step as `/read-plan` Phase 5, just reached via the visual path. Confirm inline: "Marked `<plan>` as Reviewed: Yes in `docs/plans/README.md` (HTML in-sync at `<sha-first-12>`)." If no such index exists, skip silently (don't bootstrap one mid-review — that's `/wrapup`'s job).
 4. **Record the approved SHA (for a returning reviewer, not the round-to-round baseline).** The change layer's baseline already advances every generation via the sidecar (see *Baseline snapshot sidecar*), so the next feedback round diffs against the approved plan automatically — you do **not** need to stamp an anchor to make "since last time" work. Do record the just-approved plan SHA (plans-README row note, or the `Reviewed: Yes` commit SHA) purely so a reviewer returning *after* the sign-off can run `/explain-plan <path> --since <approved-sha>` to see "what changed since I approved." Skip if the project has no place to record it — nothing round-to-round depends on it.
-5. Then offer the natural next steps in one line: commit the plan + HTML via `/commit-review`, run `/review-plan` (its handoff-readiness lens checks fresh-agent implementability), or start implementation.
+5. Then offer the natural next steps in one line: commit the plan + HTML via `/commit-review`, run `/review-plan` (it checks whether a fresh session could build it without asking questions), or start implementation.
 
 Like `/read-plan`, this is gated on an **explicit** approval signal — never infer it from a mid-loop "ok" or the user moving on, and never promote on a drifted HTML.
 

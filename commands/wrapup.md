@@ -6,7 +6,7 @@ End-of-session cleanup. Do the nine steps below in order.
 
 Recommended cadence: invoke around **~200k tokens of context** (or earlier at a clean cutoff), preserve session state, then start a fresh session with `/next`. Long sessions past that point get noticeably slower (cache misses on every turn, drift in long-tail context) and the marginal value of staying in-session keeps falling.
 
-`/wrapup` is **state-preservation first, commit second**. Its job is to leave the next session everything it needs to resume — `MEMORY.md`, `next.md`, `docs/session/` docs, and the resume block — none of which require a commit. Committing is **opt-in** at the Step 9 gate and defaults to *skip*: reserve it for work that reached a landable milestone (per `claude_ops.md` → Commit Cadence). Ending a session mid-workflow on a token budget is the common case, and it needs no commit — so no commit-time PHI gate fires — with the resume block plus the git-ignored `docs/session/` docs carrying the state forward. (Not committing is not license to relax authorship discipline: never write raw PHI into any doc, git-ignored ones included — see `claude_ops.md` → What Gets Committed.)
+`/wrapup` is **state-preservation first, commit second**. Its job is to leave the next session everything it needs to resume — `MEMORY.md`, `next.md`, `docs/session/` docs, and the resume block — none of which require a commit. Committing is **opt-in** at the Step 9 gate and defaults to *skip*: reserve it for work that is finished and worth sharing (per `claude_ops.md` → When to commit). Ending a session mid-workflow on a token budget is the common case, and it needs no commit — so no commit-time PHI gate fires — with the resume block plus the git-ignored `docs/session/` docs carrying the state forward. (Not committing is not license to relax authorship discipline: never write raw PHI into any doc, git-ignored ones included — see `claude_ops.md` → What gets committed.)
 
 ## Scope
 
@@ -26,7 +26,7 @@ For each `docs/` file you touched this session:
 - **Out of scope here**: full-tree consolidation, gathering scattered content from many untouched docs, large architectural reorganizations of `docs/` as a whole. Defer to a separate, deeper-context skill (or note the opportunity in `next.md` / `backlog.md` for a future pass).
 - Goal: optimize for *future-agent findability*. You're reorganizing for your own sake on the next session, not for a human reader.
 
-**Also glance at any code directory you touched this session** (same recently-touched, no-full-tree scope): if it has drifted into a flat dump of unrelated files, propose a small, in-scope split and update inbound imports/references. Placement should have been settled at plan time (`claude_ops.md` → File & Directory Placement) — this is the retrospective safety net, not a substitute for it, so keep the move small and note it in the commit message.
+**Also glance at any code directory you touched this session** (same recently-touched, no-full-tree scope): if it has drifted into a flat dump of unrelated files, propose a small, in-scope split and update inbound imports/references. Placement should have been settled at plan time (`claude_ops.md` → Writing code) — this is the retrospective safety net, not a substitute for it, so keep the move small and note it in the commit message.
 
 Update any plan/status tables (e.g., `docs/plans/README.md`) if work shipped or got promoted to a plan doc this session. *Review-status sync is handled separately in Step 2.*
 
@@ -75,7 +75,7 @@ Update `MEMORY.md` to reflect the current project state, open items, and any new
 
 Keep one cross-repo "in-flight work" index current so the next session can resume the *right* recent work without re-deriving it from git. This is the hub-level rollup of the per-repo `next.md` hygiene in Step 3 — it answers "which of my several worktrees do I pick back up?"
 
-**Planner-Mac only — never on the VM.** This index is a local-only, git-ignored, planner-Mac artifact: the `vista-pm/personal/` tree is never pushed, so there is nothing to pull at session start and it does not exist on the executor VM. Run this step ONLY on the planner Mac; skip it entirely on the executor VM (`phil-sllm-01`) or any host where `vista-pm/personal/` is absent. Per claude_ops Machine-Aware Operating Mode you already know the machine from the session-start `hostname` — `vista-pm/personal/` existing is the operative check.
+**Mac only — never on the VM.** This index is a local-only, git-ignored, Mac-only artifact: the `vista-pm/personal/` tree is never pushed, so there is nothing to pull at session start and it does not exist on the VM. Run this step ONLY on the Mac; skip it entirely on the VM (`phil-sllm-01`) or any host where `vista-pm/personal/` is absent. Per claude_ops Which machine to run on you already know the machine from the session-start `hostname` — `vista-pm/personal/` existing is the operative check.
 
 **Where**: `vista-pm/personal/in-flight.md` (same place the personal to-dos live). Find `vista-pm` as a sibling of the current repo (its parent dir / the `code/` workspace root). Also **skip** for sessions that didn't advance a branch/worktree (pure-doc tweaks, vista-pm-only work, trivial fixes).
 
@@ -129,7 +129,7 @@ Raise an `AskUserQuestion` with three options:
 
 Based on the answer:
 
-- *Commit and push* / *Commit only*: stage only the files you touched (`git -C <repo> add <file1> <file2>`; do **not** use `git -C <repo> add -A`), then commit with a short single-line thematic message describing what changed (e.g., `review-plan: fold in the handoff-readiness lens`). No AI attribution lines, matching the project commit-message convention. Push only if the option chosen requires it.
+- *Commit and push* / *Commit only*: stage only the files you touched (`git -C <repo> add <file1> <file2>`; do **not** use `git -C <repo> add -A`), then commit with a short single-line thematic message describing what changed (e.g., `review-plan: fold in the fresh-session-readiness check`). No AI attribution lines, matching the project commit-message convention. Push only if the option chosen requires it.
 - *Skip*: do nothing; surface in Step 9 summary.
 
 The `-C <path>` form keeps the project's cwd intact; do not `cd` into the skills repo.
@@ -147,7 +147,7 @@ For each in-flight task advanced this session, write (or update) a state doc at 
 - **Open questions / blockers** — anything unresolved or waiting on the user.
 - **Key coordinates** — branch / worktree, relevant file paths, the plan-doc pointer, and any verification run + its result.
 
-**Authorship discipline applies unchanged**: never write raw PHI (patient identifiers, sample rows, report text) into the state doc. Git-ignoring controls *commit* exposure, not what may be written — the standing rule that Claude never echoes PHI into any doc applies to git-ignored files exactly as to committed ones (`claude_ops.md` → What Gets Committed).
+**Authorship discipline applies unchanged**: never write raw PHI (patient identifiers, sample rows, report text) into the state doc. Git-ignoring controls *commit* exposure, not what may be written — the standing rule that Claude never echoes PHI into any doc applies to git-ignored files exactly as to committed ones (`claude_ops.md` → What gets committed).
 
 **Mechanics**: `docs/session/` is git-ignored — edit it in place; never stage or commit it. In a guarded background session where direct edits to a sibling checkout are blocked, write to scratch and `cp` it in (Bash isn't guarded).
 
@@ -163,10 +163,10 @@ For each in-flight task advanced this session, write (or update) a state doc at 
 - **Next**: what comes after this session (1–3 bullets).
 - **Blocked on user**: things the next session can't unblock itself (1–3 bullets).
 
-**Then raise an `AskUserQuestion` at the commit gate** with three structured options. Commit is **opt-in** — the default is to skip it and let the resume block + `docs/session/` docs carry state forward. Only offer commit as the recommended choice when this session's changes reached a **landable milestone** (per `claude_ops.md` → Commit Cadence): an approved plan, a completed and verified implementation, or results ready to hand off. For the common mid-workflow / budget-out close, skip.
+**Then raise an `AskUserQuestion` at the commit gate** with three structured options. Commit is **opt-in** — the default is to skip it and let the resume block + `docs/session/` docs carry state forward. Only offer commit as the recommended choice when this session's changes reached a **finished, shareable state** (per `claude_ops.md` → When to commit): an approved plan, a completed and verified implementation, or results ready to hand off. For the common mid-workflow / budget-out close, skip.
 
 1. **"Skip commit" (Recommended for a mid-workflow close)** — don't commit; leave changes in the working tree. State is preserved by `MEMORY.md`, `next.md`, `docs/session/`, and the resume block. Nothing is staged, so no commit-time PHI gate fires.
-2. **"Commit and push"** — commit the changes and push to the tracking remote in one action. Choose this when the work is a landable milestone.
+2. **"Commit and push"** — commit the changes and push to the tracking remote in one action. Choose this when the work is finished and worth sharing.
 3. **"Commit only (no push)"** — create the commit locally; defer the push.
 
 Recommend the option that matches the session's state (Skip for mid-workflow, Commit for a milestone), and put it first. Inline free-text yes/no is the wrong shape here — the answer space is enumerable; structured choices are clearer and faster. This single gate replaces what would otherwise be two asks (commit gate here + push gate inside `commit-review`).

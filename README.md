@@ -6,11 +6,11 @@ Personal Claude Code skills, shared in case they're useful. These are slash comm
 
 - `commands/` — slash commands loaded by Claude Code from `~/.claude/commands/`
   - [`explain-plan.md`](commands/explain-plan.md) — visual companion to `read-plan`: generates a self-contained interactive HTML (Mermaid diagrams with pan/zoom, blast-radius map, step accordion, inline feedback widgets) for plans too dense to review in prose
-  - [`review-plan.md`](commands/review-plan.md) — independent design audit of a plan doc by Codex CLI or a fresh Claude Code subagent, then *applies* agreed feedback; always-on lenses include **handoff-readiness** (does the plan POINT AT / STATE DIRECTLY everything a fresh implementing agent needs), folded in from the retired `plan-handoff-readiness`
+  - [`review-plan.md`](commands/review-plan.md) — independent design audit of a plan doc by Codex CLI or a fresh Claude Code subagent, then *applies* agreed feedback; always checks **whether a fresh session could build it** (does the plan POINT AT / STATE DIRECTLY everything a fresh implementing agent needs), folded in from the retired `plan-handoff-readiness`
   - [`wrapup.md`](commands/wrapup.md) — end-of-session cleanup
   - [`next.md`](commands/next.md) — "where did we leave off?" session-opener
   - [`commit-review.md`](commands/commit-review.md) — commit workflow with an appropriateness review (catches accidentally-leaked private content) before commit + push
-  - [`phi-vet.md`](commands/phi-vet.md) — hard pre-commit gate for medical-data repos that scans files for PHI leakage (patient/encounter/study identifiers, sample row data, free-text excerpts, image files); `commit-review` escalates to this when working in an OMOP/NeuralFrame/EHR/DICOM context. Machine-aware (fail-closed): inert on machines in the PHI-FREE allowlist (`hooks/lib/is-phi-free-machine.sh`), active everywhere else
+  - [`phi-vet.md`](commands/phi-vet.md) — hard pre-commit gate for medical-data repos that scans files for PHI leakage (patient/encounter/study identifiers, sample row data, free-text excerpts, image files); `commit-review` escalates to this when working in an OMOP/NeuralFrame/EHR/DICOM context. Adapts to the machine (fail-closed): inert on machines in the PHI-FREE allowlist (`hooks/lib/is-phi-free-machine.sh`), active everywhere else
   - [`review-implementation.md`](commands/review-implementation.md) — independent implementation audit of uncommitted code against a plan doc
   - [`review-tests.md`](commands/review-tests.md) — independent test-coverage audit of uncommitted code against a plan doc
   - [`read-plan.md`](commands/read-plan.md) — opens a plan doc in the user's default `.md` app
@@ -20,7 +20,7 @@ Personal Claude Code skills, shared in case they're useful. These are slash comm
   - [`phi-vet-gate.sh`](hooks/phi-vet-gate.sh) — `PreToolUse` hook that hard-gates `git commit` in medical-data repos until [`phi-vet`](commands/phi-vet.md) has signed off on the current staged tree (forces both PHI scan and explicit per-doc read-acknowledgement). Self-gates by machine (inert on PHI-free machines, so it's safe to install everywhere). See [`hooks/README.md`](hooks/README.md) for install.
   - [`lib/is-phi-free-machine.sh`](hooks/lib/is-phi-free-machine.sh) — shared fail-closed machine check (PHI-FREE allowlist) consulted by *both* the hook above and the [`phi-vet`](commands/phi-vet.md) skill, so they never disagree about where PHI tooling is active.
 - [`CLAUDE.md`](CLAUDE.md) — global Claude Code instructions (interaction style, environment notes)
-- [`claude_ops.md`](claude_ops.md) — operating standards shared across research repos: planning workflow, code quality, git practices, pre-commit review pointers, skill composition discipline. Designed to be **symlinked into each repo as `docs/claude_ops.md`** so all repos reference the same source-of-truth (see [Setup → Once per repo](#once-per-repo) below).
+- [`claude_ops.md`](claude_ops.md) — operating standards shared across research repos: how to write to the user (plain English, no coined shorthand), planning workflow, code quality, git practices, pre-commit review pointers, skill composition discipline. Designed to be **symlinked into each repo as `docs/claude_ops.md`** so all repos reference the same source-of-truth (see [Setup → Once per repo](#once-per-repo) below).
 
 ## Setup
 

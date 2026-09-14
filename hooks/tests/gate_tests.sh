@@ -18,17 +18,32 @@ PRECOMPACT="$HOOKS_DIR/precompact-wrapup-nudge.sh"
 
 pass=0; fail=0; fails=()
 
-# decision <hook> <command-string>  -> echoes "ask" or "silent"
+# decision <hook> <command-string>  -> echoes "deny", "ask", or "silent"
 decision() {
   local hook="$1" cmd="$2" out
   out="$(jq -nc --arg c "$cmd" '{tool_name:"Bash",tool_input:{command:$c}}' | "$hook" 2>/dev/null)"
-  if printf '%s' "$out" | grep -q '"permissionDecision":"ask"'; then echo ask; else echo silent; fi
+  if   printf '%s' "$out" | grep -q '"permissionDecision":"deny"'; then echo deny
+  elif printf '%s' "$out" | grep -q '"permissionDecision":"ask"';  then echo ask
+  else echo silent; fi
 }
 
 # expect_bash <hook> <ask|silent> <label> <command>
 expect_bash() {
   local hook="$1" want="$2" label="$3" cmd="$4" got
   got="$(decision "$hook" "$cmd")"
+  if [ "$got" = "$want" ]; then pass=$((pass+1)); printf '  PASS [%-6s] %s\n' "$got" "$label"
+  else fail=$((fail+1)); fails+=("$label (want=$want got=$got)"); printf '  FAIL want=%-6s got=%-6s %s\n' "$want" "$got" "$label"; fi
+}
+
+# expect_cwd <hook> <deny|ask|silent> <label> <command> <cwd>
+# Like expect_bash but supplies the event's .cwd, so relative-path resolution
+# (realpath against the tool's working directory) is exercised.
+expect_cwd() {
+  local hook="$1" want="$2" label="$3" cmd="$4" cwdv="$5" out got
+  out="$(jq -nc --arg c "$cmd" --arg w "$cwdv" '{tool_name:"Bash",tool_input:{command:$c},cwd:$w}' | "$hook" 2>/dev/null)"
+  if   printf '%s' "$out" | grep -q '"permissionDecision":"deny"'; then got=deny
+  elif printf '%s' "$out" | grep -q '"permissionDecision":"ask"';  then got=ask
+  else got=silent; fi
   if [ "$got" = "$want" ]; then pass=$((pass+1)); printf '  PASS [%-6s] %s\n' "$got" "$label"
   else fail=$((fail+1)); fails+=("$label (want=$want got=$got)"); printf '  FAIL want=%-6s got=%-6s %s\n' "$want" "$got" "$label"; fi
 }
@@ -93,12 +108,80 @@ expect_bash "$PROV" silent "disks create --help (scoped)"  'gcloud compute disks
 expect_bash "$PROV" silent "instances create --dry-run"    'gcloud compute instances create vm --dry-run'
 expect_bash "$PROV" silent "heredoc body MENTIONS create"  $'codex exec - <<PROMPT\nex: gcloud compute disks create foo\nPROMPT'
 
+echo "== mnt-delete-gate: protected bucket root -> DENY =="
+expect_bash "$MNT" deny   "rm whole mount root"              'rm -rf /mnt/su-vista-uscentral1'
+expect_bash "$MNT" deny   "rm ro mount root"                 'rm -rf /mnt/su-vista-hot'
+expect_bash "$MNT" deny   "rm /mnt itself"                   'rm -rf /mnt'
+expect_bash "$MNT" deny   "mount root w/ trailing slash"     'rm -rf /mnt/su-vista-uscentral1/'
+
+echo "== mnt-delete-gate: write-zone deletes -> silent (PASS) =="
+ZP=/mnt/su-vista-uscentral1/chaudhari_lab/phil
+expect_bash "$MNT" silent "delete in planning/"             "rm -rf $ZP/planning/boards/old.md"
+expect_bash "$MNT" silent "delete in session-docs/"         "rm -rf $ZP/session-docs/note.md"
+expect_bash "$MNT" silent "delete in plan-explainers/"      "rm -rf $ZP/plan-explainers/x.html"
+expect_bash "$MNT" silent "delete in a tmp/ dir"            'rm -rf /mnt/su-vista-uscentral1/chaudhari_lab/tmp/scratch'
+expect_bash "$MNT" ask    "delete on mount OUTSIDE a zone"  "rm -rf $ZP/reports/x"
+
+echo "== mnt-delete-gate: target-bound (no longer nags on safe direction) =="
+# These were false positives under the old whole-string co-occurrence gate. The
+# target-bound gate resolves the destructive verb's actual argument, so a delete
+# aimed off-mount is silent even when a sibling subcommand touches /mnt.
+expect_bash "$MNT" silent "rm /tmp AND unrelated ls /mnt"   'rm -rf /tmp/x && ls /mnt'
+expect_bash "$MNT" silent "mkdir /mnt zone AND rm /tmp"     'mkdir -p /mnt/su-vista-uscentral1/chaudhari_lab/phil/planning/boards && rm -rf /tmp/scratch'
+expect_bash "$MNT" silent "mv INTO /mnt (dest, additive)"   'mv /tmp/x /mnt/'
+
+echo "== mnt-delete-gate: symlink resolving onto /mnt (realpath, old gate MISSED) =="
+# The old string-match gate waved these through: the command has no literal /mnt
+# token, but the target resolves onto the mount through a symlink.
+symd="$(mktemp -d)"
+ln -s /mnt/su-vista-uscentral1/chaudhari_lab/phil/reports    "$symd/plans_link"
+ln -s /mnt/su-vista-uscentral1/chaudhari_lab/phil/planning   "$symd/zone_link"
+expect_bash "$MNT" ask    "rm -rf through symlink onto /mnt" "rm -rf $symd/plans_link"
+expect_bash "$MNT" ask    "rm a child BELOW a symlink onto /mnt" "rm -rf $symd/plans_link/sub"
+expect_bash "$MNT" silent "rm through symlink into a zone"   "rm -rf $symd/zone_link/x"
+rm -rf "$symd"
+
+echo "== mnt-delete-gate: destructive verb, target unparseable -> ask (fail closed) =="
+# Codex audit caught these going SILENT under the first rewrite: a wrapper or a
+# control token hides the verb from a naive scan, or the verb has no argument the
+# scanner can bind. The fix equates "destructive verb, no parseable target" with
+# "unsafe" -> ask, never silent.
+RP=/mnt/su-vista-uscentral1/chaudhari_lab/phil/reports/x
+expect_bash "$MNT" ask    "sudo -u root rm on mount"        "sudo -u root rm -rf $RP"
+expect_bash "$MNT" ask    "sudo rm on mount"                "sudo rm -rf $RP"
+expect_bash "$MNT" ask    "timeout N rm on mount"           "timeout 30 rm -rf $RP"
+expect_bash "$MNT" ask    "negated ! rm on mount"           "! rm -rf $RP"
+expect_bash "$MNT" ask    "grouped ( rm ) on mount"         "( rm -rf $RP )"
+expect_bash "$MNT" ask    "mv -t OUT of mount"              "mv -t /tmp $RP"
+expect_bash "$MNT" ask    "mv --target-directory= OUT"      "mv --target-directory=/tmp $RP"
+expect_bash "$MNT" ask    "find -L ... -delete on mount"    'find -L /mnt/su-vista-uscentral1/chaudhari_lab/phil/reports -delete'
+expect_bash "$MNT" ask    "multi-redirect, mount first"     ": > $RP > /tmp/out"
+
+echo "== mnt-delete-gate: verb-anchored, so incidental mentions stay silent =="
+# The scanner binds destructiveness to a verb in command position, not to the
+# string "rm" appearing anywhere. These must NOT nag.
+expect_bash "$MNT" silent "commit -m mentions rm"           'git commit -m "rm old files"'
+expect_bash "$MNT" silent "grep -r rm as an argument"       'grep -r rm .'
+expect_bash "$MNT" silent "dd reads FROM mount (no of=)"    'dd if=/mnt/su-vista-uscentral1/x of=/tmp/y'
+expect_bash "$MNT" silent "find on mount, no -delete"       'find /mnt/su-vista-uscentral1 -name x'
+
+echo "== mnt-delete-gate: plan's second exact no-nag example =="
+expect_bash "$MNT" silent "cp INTO mount THEN rm scratch"   'cp x /mnt/su-vista-uscentral1/chaudhari_lab/phil/planning/ && rm scratch.txt'
+
+echo "== mnt-delete-gate: an unapproved tmp segment is NOT a write-zone -> ask =="
+# Only the explicitly-listed tmp roots pass. A 'tmp' segment anywhere else on the
+# mount still asks (the first rewrite auto-passed any path with a tmp segment).
+expect_bash "$MNT" ask    "deep .../production/tmp/ delete"  'rm -rf /mnt/su-vista-uscentral1/vistabench/production/tmp/checkpoints'
+
+echo "== mnt-delete-gate: relative target resolved against the event's .cwd =="
+expect_cwd  "$MNT" ask    "relative rm, CWD on mount outside a zone" 'rm -rf results' '/mnt/su-vista-uscentral1/chaudhari_lab/phil/reports'
+expect_cwd  "$MNT" silent "relative rm, CWD inside a write-zone"     'rm -rf old'     '/mnt/su-vista-uscentral1/chaudhari_lab/phil/planning/boards'
+expect_cwd  "$MNT" silent "relative rm, CWD off the mount"           'rm -rf build'   '/home/philadamson/code'
+
 echo "== accepted conservative nags (co-occurrence, no shell parse) =="
 # These are known FALSE POSITIVES we accept as safe-direction: without a real
 # shell parser we cannot tell a quoted/commented mention from an executed verb.
-expect_bash "$MNT"  ask "cross-subcmd rm /tmp && ls /mnt"   'rm -rf /tmp/x && ls /mnt'
 expect_bash "$PROV" ask "commented # terraform apply"       'echo ok # terraform apply'
-expect_bash "$MNT"  ask "mv INTO /mnt (adds data)"          'mv /tmp/x /mnt/'
 # INCIDENTALLY silent: the closing quote makes `apply'` fail the trailing
 # word-boundary. NOT reliable quote-awareness (a trailing space would still nag);
 # asserted only to pin current behavior.
@@ -107,6 +190,29 @@ expect_bash "$PROV" silent "quoted 'terraform apply' (incidental)" $'printf \'%s
 echo "== fail-closed: malformed / missing deps -> ask =="
 expect_raw "$MNT"  ask "malformed JSON -> ask"              'not json at all'
 expect_raw "$PROV" ask "malformed JSON -> ask"             '{"tool_name":'
+
+echo "== mnt-delete-gate: realpath unavailable -> fail closed =="
+# The gate resolves targets with `realpath`. If it's missing, it cannot prove a
+# path is off-mount, so a destructive verb must ASK (never silently allow); a
+# non-destructive command stays silent. Simulate absence with a PATH that has
+# every tool the gate needs EXCEPT realpath.
+norp="$(mktemp -d)"
+for t in bash jq grep sed xargs tr cut cat head readlink dirname env; do
+  p="$(command -v "$t" 2>/dev/null)" && ln -s "$p" "$norp/$t"
+done
+norp_rm="$(jq -nc '{tool_name:"Bash",tool_input:{command:"rm -rf /mnt/su-vista-uscentral1/chaudhari_lab/phil/reports/x"}}' | PATH="$norp" "$MNT" 2>/dev/null)"
+if printf '%s' "$norp_rm" | grep -q '"permissionDecision":"ask"'; then
+  pass=$((pass+1)); printf '  PASS [%-6s] %s\n' ask "no realpath + destructive -> ask"
+else
+  fail=$((fail+1)); fails+=("no realpath + destructive -> ask (got: $norp_rm)"); printf '  FAIL %s\n' "no realpath + destructive -> ask"
+fi
+norp_ls="$(jq -nc '{tool_name:"Bash",tool_input:{command:"ls /mnt"}}' | PATH="$norp" "$MNT" 2>/dev/null)"
+if [ -z "$norp_ls" ]; then
+  pass=$((pass+1)); printf '  PASS [%-6s] %s\n' silent "no realpath + non-destructive -> silent"
+else
+  fail=$((fail+1)); fails+=("no realpath + non-destructive -> silent (got: $norp_ls)"); printf '  FAIL %s\n' "no realpath + non-destructive -> silent"
+fi
+rm -rf "$norp"
 
 echo "== non-Bash / empty -> silent =="
 expect_raw "$MNT"  silent "non-Bash tool"                   '{"tool_name":"Read","tool_input":{"file_path":"/mnt/x"}}'

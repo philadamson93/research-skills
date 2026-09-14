@@ -7,11 +7,11 @@ Claude Code **hooks** that compose with the slash-command skills in `../commands
 | Hook | Lifecycle | Purpose |
 |---|---|---|
 | [`phi-vet-gate.sh`](phi-vet-gate.sh) | `PreToolUse` (Bash) | Hard-gates `git commit` in medical-data research repos until [`/phi-vet`](../commands/phi-vet.md) has signed off on the current staged tree. Forces both a PHI scan **and** explicit per-doc read-acknowledgement **from the human user** (Claude having read the file during the scan does NOT count — the user's own eyes on every staged doc are the load-bearing check) before any commit lands. Self-gates by machine via [`lib/is-phi-free-machine.sh`](#machine-gate--fail-closed-phi-free-allowlist) — inert on PHI-free machines. |
-| [`mnt-delete-gate.sh`](mnt-delete-gate.sh) | `PreToolUse` (Bash) | Asks for **human approval** before any Bash command deletes / overwrites / moves data under `/mnt` (the shared bucket mount — irreplaceable results/data): `rm`/`rmdir`/`unlink`/`shred`/`truncate`, `mv`, `dd of=`, `rsync --delete`, `find -delete`, and truncating redirects (`> /mnt/…`). Keyed on `/mnt` **only** by design; recursive `rm` elsewhere is not gated. Returns `permissionDecision:"ask"`. |
+| [`mnt-delete-gate.sh`](mnt-delete-gate.sh) | `PreToolUse` (Bash) | Guards destructive Bash ops against the `/mnt` shared bucket mount (irreplaceable results/data): `rm`/`rmdir`/`unlink`/`shred`/`truncate`, `mv`, `dd of=`, `rsync --delete`, `find -delete`, and truncating redirects. **Binds each verb to its actual target** and resolves it with `realpath -m` (so a delete reaching the mount through a symlink is caught, and a delete merely mentioning `/mnt` in a sibling subcommand is not). Three outcomes: **DENY** a whole-mount-root delete (`permissionDecision:"deny"`); **PASS** silently inside the scratch write-zones (`planning/`, `session-docs/`, `plan-explainers/`, any `tmp/`); **ASK** (`permissionDecision:"ask"`) for a mount delete outside them. Deletes off the mount are not gated. |
 | [`provision-gate.sh`](provision-gate.sh) | `PreToolUse` (Bash) | Asks for **human approval** before expensive / irreversible cloud provisioning — `gcloud compute instances create/start`, `disks create/resize`, bucket create, `terraform apply/destroy`. Tolerates normal flag placement (`gcloud beta …`, `gcloud --project p …`, `gsutil -m mb`, `terraform -chdir=… apply`). Motivated by a real post-auto-compact incident (a VM + 1.5TB disk created with no approval). Returns `permissionDecision:"ask"`. |
 | [`post-compact-reinject.sh`](post-compact-reinject.sh) | `SessionStart` (`compact`) | Re-injects the `claude_ops` **non-negotiables** (plan-before-code, ask-before-destructive, PHI discipline, executor lane) into a fresh context after a compact, since the docs don't guarantee `CLAUDE.md` survives one. Fires on the `compact` start reason (which covers **both** an automatic compact and a manual `/compact`). |
 | [`precompact-wrapup-nudge.sh`](precompact-wrapup-nudge.sh) | `PreCompact` (`auto`) | *Best-effort* nudge toward `/wrapup` just before an automatic compaction (reads the documented `.trigger` field). Never blocks (blocking a full context risks an overflow wall). Drop it if your version doesn't surface its message — the load-bearing piece is `post-compact-reinject.sh`. |
-| [`lib/shell-scan.sh`](lib/shell-scan.sh) | *(sourced)* | Shared helpers for the two Bash gates: `strip_heredoc_bodies` (removes heredoc bodies but preserves post-terminator commands) and `emit_ask` (fail-closed "ask" JSON). Not a hook itself. |
+| [`lib/shell-scan.sh`](lib/shell-scan.sh) | *(sourced)* | Shared plumbing for the two Bash gates: `strip_heredoc_bodies` (removes heredoc bodies but preserves post-terminator commands) and the decision emitters `emit_ask` / `emit_deny` (fail-closed "ask" / "deny" JSON). Detection itself is NOT shared — the mnt gate's target-binding parser lives in its own file; only the provision gate still uses whole-string co-occurrence. Not a hook itself. |
 | [`tests/gate_tests.sh`](tests/gate_tests.sh) | *(test)* | Table-driven regression suite for all four hooks (`bash hooks/tests/gate_tests.sh`). Part of the landing gate. |
 
 The companion script [`lib/is-phi-free-machine.sh`](lib/is-phi-free-machine.sh) is not a hook itself — it's the shared machine check that *both* the hook above and the [`/phi-vet`](../commands/phi-vet.md) skill consult so they never disagree about where PHI tooling is active. See [Machine gate](#machine-gate--fail-closed-phi-free-allowlist).
@@ -199,44 +199,51 @@ and the command just runs, your version isn't honoring `permissionDecision:"ask"
 hook — switch the scripts to the `"deny"` / legacy `block` fallback above. (This mechanism was
 confirmed working on 2.1.246 — the gate fired live during development.)
 
-### Known limits (important — this is a guardrail, not a sandbox)
+### Known limits (important — these are guardrails, not a sandbox)
 
-Detection is **whole-string co-occurrence** on the heredoc-body-stripped command — the gate
-checks that a destructive/provisioning token and its target/operation both appear. It is
-**not** a shell parser: it does not bind a verb to its exact argument, does not split on
-`&&` / `;` / `|`, and does not resolve indirection. The limits below separate what is
-**inherently** unresolvable by string matching from the **conservative nags** we accept.
+The two gates now use **different** detection models, so their limits differ.
+
+`mnt-delete-gate.sh` **binds each destructive verb to its actual target**, resolves that target
+with `realpath -m` (against the event's `.cwd` for relative paths, following symlinks), and
+classifies the resolved path: DENY a protected mount root, PASS inside a named write-zone, ASK
+elsewhere on the mount. It splits the command on `&&` / `||` / `;` / `|` and newlines and strips
+heredoc bodies, so a destructive verb is bound to its own subcommand. `provision-gate.sh` is
+**still whole-string co-occurrence** — it checks that a provisioning token and its operation both
+appear anywhere in the heredoc-stripped command, without binding verb to argument.
 
 **Inherent (cannot be fixed without a real shell parser / runtime) — the true backstop is
 OS/IAM least-privilege on the mount:**
 
-1. **Indirection is invisible.** `eval`, `$(…)`, backticks, shell variables, `xargs` with a
-   dynamically-supplied path, and symlinks are **not** expanded. `rm -rf "$MNT_TARGET"` (where
-   the var resolves under `/mnt`) will not fire. A determined or obfuscated delete can slip
-   past. The real backstop is **least-privilege on the mount** (a service account without
-   object-delete, or a read-only mount) — outside Claude Code, and the right follow-up if
-   accidental-deletion protection isn't enough.
-2. **`.cwd` is not consulted.** A relative `rm -rf results` issued while the tool's cwd is
-   under `/mnt` has no literal `/mnt` token and will not fire.
+1. **Runtime indirection is invisible.** `eval`, `$(…)`, backticks, shell variables, and
+   `xargs` with a dynamically-supplied path are **not** expanded (only *symlinks* are, via
+   `realpath`). `rm -rf "$MNT_TARGET"` (where the var resolves under `/mnt`) will not fire — the
+   target is not literal in the command. The real backstop is **least-privilege on the mount** (a
+   service account without object-delete, or a read-only mount), outside Claude Code.
+2. **The target parser is light, not a shell.** It tokenizes with `xargs` (quote-aware) and knows
+   the argument shape of each gated verb, but exotic constructs (unusual flag ordering, deletes
+   fanned out by a pipeline) can be mis-parsed. On any parse it can't resolve confidently it errs
+   toward **ASK**, never toward silent-allow.
 
 **Deliberate scope choices:**
 
-3. **`/mnt`-only deletion scope:** recursive `rm` of code dirs, worktrees, or scratch is
-   **not** gated — keeps routine cleanup quiet.
-4. **Provision verb set:** only Compute-Engine instances/disks, buckets, and terraform
+3. **`/mnt`-only deletion scope:** recursive `rm` of code dirs, worktrees, or off-mount scratch
+   is **not** gated — keeps routine cleanup quiet.
+4. **Write-zones pass silently.** Deletes resolving inside `planning/`, `session-docs/`,
+   `plan-explainers/`, or any `tmp/` under the mount are expected scratch churn and are not
+   prompted. Edit `WRITE_ZONES` / `PROTECTED_ROOTS` in `mnt-delete-gate.sh` to adjust.
+5. **Provision verb set:** only Compute-Engine instances/disks, buckets, and terraform
    apply/destroy are gated (the incident class). Other cost-creating resources (GKE clusters,
    Cloud SQL, managed instance groups, …) are **not** gated — add them to `provision-gate.sh`
    if needed.
-5. **Bucket-URL deletes** (`gsutil rm gs://…` that never touch the `/mnt` mount) are out of
-   scope — the deletion gate keys on `/mnt`.
+6. **Bucket-URL deletes** (`gsutil rm gs://…` that never touch the `/mnt` mount) are out of
+   scope — the deletion gate resolves local mount paths, not `gs://` URLs.
 
 **Accepted conservative nags (safe-direction false positives — we ask when unsure):**
 
-6. **Cross-subcommand / quoted / commented mentions** may prompt: `rm -rf /tmp/x && ls /mnt`
-   asks (both tokens co-occur), and an executed-looking `# terraform apply` comment asks.
-   Without a shell parse we cannot tell a mention from an execution, so we err toward asking.
-7. **`mv` into `/mnt`** (adding data, harmless) also prompts — the gate can't cheaply tell
-   move-in from move-out, and asks on either.
+7. **Provision-gate co-occurrence.** Because `provision-gate.sh` does not bind verb to argument,
+   a quoted or commented mention may prompt: an executed-looking `# terraform apply` comment asks.
+   The mnt gate no longer has this class — a delete aimed off-mount (`rm -rf /tmp/x && ls /mnt`)
+   and a `mv` *into* the mount are now silent, because the target is resolved.
 
 **Other:**
 

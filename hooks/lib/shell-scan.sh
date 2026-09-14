@@ -2,15 +2,21 @@
 # Shared helpers for the Bash ask-gates (mnt-delete-gate.sh, provision-gate.sh).
 #
 # Sourced, not executed. Both gates need identical heredoc-body handling and the
-# same fail-closed / ask-emission contract, so it lives here once (a single
-# tested scanner) rather than duplicated — see hooks/README.md "Known limits".
+# same fail-closed / decision-emission contract, so those live here once (a single
+# tested helper set) rather than duplicated — see hooks/README.md "Known limits".
 #
-# NOTE ON DETECTION SCOPE (stated honestly, mirrored in README):
-#   Matching is WHOLE-STRING co-occurrence on the heredoc-body-stripped command,
-#   NOT a real shell parse. We do not bind a verb to its specific argument, do
-#   not split on `&&`/`;`/`|`, and do not expand variables / `$()` / `eval` /
-#   symlinks. This is a careless-mistake guardrail, not a sandbox; the true
-#   backstop for /mnt is OS/IAM least-privilege on the mount.
+# What lives here is ONLY the shared plumbing: heredoc-body stripping and the
+# ask/deny JSON emitters. The two gates differ in how they DETECT:
+#   - mnt-delete-gate.sh   binds each destructive verb to its actual argument,
+#     splits on `&&`/`||`/`;`/`|`, and resolves the target with `realpath -m`
+#     (so a delete reaching /mnt through a symlink is caught). Its own file
+#     carries that parser.
+#   - provision-gate.sh    still uses WHOLE-STRING co-occurrence on the
+#     heredoc-body-stripped command (verb + object appearing together), NOT a
+#     real shell parse: no verb/argument binding, no variable / `$()` / `eval`
+#     expansion.
+# Neither is a sandbox; the true backstop for /mnt is OS/IAM least-privilege on
+# the mount. Both fail CLOSED (toward asking), never toward silent-allow.
 
 # ---------------------------------------------------------------------------
 # strip_heredoc_bodies <command-string>
@@ -65,18 +71,24 @@ strip_heredoc_bodies() {
 }
 
 # ---------------------------------------------------------------------------
-# emit_ask <reason>   — print the PreToolUse "ask" decision JSON on stdout.
-# Uses jq when present; falls back to a hand-built JSON string so the gate still
-# fails CLOSED (asks) even if jq is missing.
-emit_ask() {
-  local reason="$1"
+# emit_decision <ask|deny> <reason>  — print the PreToolUse decision JSON on
+# stdout. Uses jq when present; falls back to a hand-built JSON string so the
+# gate still fails CLOSED (asks/denies) even if jq is missing.
+emit_decision() {
+  local decision="$1" reason="$2"
   if command -v jq >/dev/null 2>&1; then
-    jq -nc --arg r "$reason" \
-      '{hookSpecificOutput:{hookEventName:"PreToolUse",permissionDecision:"ask",permissionDecisionReason:$r}}'
+    jq -nc --arg d "$decision" --arg r "$reason" \
+      '{hookSpecificOutput:{hookEventName:"PreToolUse",permissionDecision:$d,permissionDecisionReason:$r}}'
   else
     # Minimal manual JSON escaping (backslash, double-quote, newline) for the
     # jq-absent fail-closed path.
     local esc="${reason//\\/\\\\}"; esc="${esc//\"/\\\"}"; esc="${esc//$'\n'/ }"
-    printf '{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"ask","permissionDecisionReason":"%s"}}\n' "$esc"
+    printf '{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"%s","permissionDecisionReason":"%s"}}\n' "$decision" "$esc"
   fi
 }
+
+# emit_ask <reason>  — prompt the human (Y/N); they decide.
+emit_ask()  { emit_decision ask  "$1"; }
+# emit_deny <reason> — block outright (no prompt); reserved for catastrophic,
+# never-intended operations (e.g. deleting a whole bucket mount root).
+emit_deny() { emit_decision deny "$1"; }

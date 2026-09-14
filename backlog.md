@@ -43,7 +43,8 @@ Decide per repo: convert to a symlink like the other 39, or leave it if the dive
 deliberate. Each is a separate medical-data repo, so replacing the file there costs one commit
 and its own PHI review.
 
-Filed 2026-09-11 during the plain-English rewrite.
+Filed 2026-09-11 during the plain-English rewrite. **paper-trail's repair is now scheduled as
+Stage 1(e) of [`docs/plans/planning-layer-and-mount-migration.md`](docs/plans/planning-layer-and-mount-migration.md)** (APPROVED 2026-09-14); contrastive-3d-onc still open here.
 
 ## ~/code/CLAUDE.md still uses the retired shorthand
 

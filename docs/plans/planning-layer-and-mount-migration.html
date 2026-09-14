@@ -1,0 +1,394 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="plan-sha256" content="fc335cc1603e08a670bfeca90371c02ffbb7fc8ed02b7a1d66ecaa25707357d4">
+<meta name="plan-path" content="docs/plans/planning-layer-and-mount-migration.md">
+<title>A planning layer above plan docs</title>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/svg-pan-zoom@3.6.1/dist/svg-pan-zoom.min.js"></script>
+<style>
+:root{--bg:#fff;--fg:#111827;--muted:#6b7280;--line:#e5e7eb;--card:#f9fafb;--accent:#0891b2;
+--accent-bg:#ecfeff;--warn:#b45309;--warn-bg:#fffbeb;--care:#be123c;--care-bg:#fff1f2;--ok:#047857;
+--ok-bg:#ecfdf5;--prog:#4338ca;--prog-bg:#eef2ff;--chg:#a21caf;--chg-bg:#fdf4ff;}
+@media (prefers-color-scheme:dark){:root{--bg:#0b1020;--fg:#e5e7eb;--muted:#9ca3af;--line:#1f2937;
+--card:#111827;--accent:#22d3ee;--accent-bg:#083344;--warn:#fbbf24;--warn-bg:#3b2a06;--care:#fb7185;
+--care-bg:#4c0519;--ok:#34d399;--ok-bg:#064e3b;--prog:#a5b4fc;--prog-bg:#1e1b4b;--chg:#e879f9;--chg-bg:#3b0764;}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI",Inter,Roboto,Helvetica,Arial,sans-serif}
+.wrap{max-width:1080px;margin:0 auto;padding:28px 22px 120px}
+h1{font-size:27px;line-height:1.25;margin:0 0 6px}
+h2{font-size:19px;margin:38px 0 12px;padding-bottom:6px;border-bottom:1px solid var(--line)}
+h3{font-size:16px;margin:22px 0 8px}
+p{margin:10px 0}
+code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.88em;background:var(--card);border:1px solid var(--line);border-radius:4px;padding:1px 5px}
+pre code{border:0;background:none;padding:0}
+a{color:var(--accent)}
+.muted{color:var(--muted)}.small{font-size:13px}
+.program{border:2px solid var(--prog);background:var(--prog-bg);border-radius:12px;padding:20px 22px;margin:0 0 22px}
+.program .plabel{font-size:11px;letter-spacing:.09em;text-transform:uppercase;color:var(--prog);font-weight:700;margin-bottom:8px}
+.program h1{margin:0 0 10px;font-size:24px}
+.program .why{font-size:15.5px;margin:0 0 14px}
+.stagebar{display:flex;flex-wrap:wrap;gap:8px;margin:14px 0 4px}
+.stagepill{border:1px solid var(--line);background:var(--bg);border-radius:999px;padding:5px 12px;font-size:12.5px;white-space:nowrap}
+.stagepill.here{border-color:var(--prog);color:var(--prog);font-weight:650}
+.progmeta{font-size:13px;color:var(--muted);margin-top:12px}
+.card{border:1px solid var(--line);background:var(--card);border-radius:10px;padding:16px 18px;margin:14px 0}
+.hdrgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:10px 22px;font-size:13.5px}
+.hdrgrid div span{color:var(--muted);display:block;font-size:11.5px;text-transform:uppercase;letter-spacing:.06em}
+.banner{border-left:4px solid var(--accent);background:var(--accent-bg);padding:11px 15px;border-radius:0 8px 8px 0;margin:14px 0;font-size:14px}
+.banner.care{border-left-color:var(--care);background:var(--care-bg)}
+.banner.chg{border-left-color:var(--chg);background:var(--chg-bg)}
+table{border-collapse:collapse;width:100%;font-size:13.5px;margin:12px 0}
+th,td{border:1px solid var(--line);padding:7px 10px;text-align:left;vertical-align:top}
+th{background:var(--card);font-weight:650}
+td.num{text-align:right;font-variant-numeric:tabular-nums}
+tr.total td{font-weight:700;background:var(--card)}
+.figure{margin:16px 0 26px}
+.figure .cap{font-size:13px;color:var(--muted);margin:0 0 6px}
+.mmbox{position:relative;height:520px;overflow:hidden;border:1px solid var(--line);border-radius:10px;background:var(--card)}
+.mmbox.full{position:fixed;inset:14px;height:auto;z-index:70;box-shadow:0 12px 50px rgba(0,0,0,.45)}
+.mmctl{position:absolute;top:8px;right:8px;z-index:5;display:flex;gap:6px}
+.mmctl button{font:12px inherit;padding:4px 9px;border:1px solid var(--line);background:var(--bg);color:var(--fg);border-radius:6px;cursor:pointer}
+.mmctl button:hover{border-color:var(--accent)}
+.mmhint{position:absolute;bottom:7px;left:10px;z-index:5;font-size:11.5px;color:var(--muted)}
+pre.mermaid{margin:0;display:flex;align-items:center;justify-content:center;height:100%}
+details{border:1px solid var(--line);border-radius:9px;margin:9px 0;background:var(--card)}
+details[data-changed]{border-color:var(--chg)}
+details.recede{opacity:.6}
+details>summary{cursor:pointer;padding:12px 15px;font-weight:600;list-style:none;display:flex;gap:10px;align-items:baseline;flex-wrap:wrap}
+details>summary::-webkit-details-marker{display:none}
+details>summary::before{content:"\25B8";color:var(--muted);font-size:12px}
+details[open]>summary::before{content:"\25BE"}
+.dbody{padding:2px 17px 16px;border-top:1px solid var(--line)}
+.chgnote{background:var(--chg-bg);border:1px solid var(--chg);border-radius:7px;padding:8px 11px;margin:10px 0;font-size:13px}
+.chgnote b{color:var(--chg)}
+.chip{font-size:11px;letter-spacing:.05em;text-transform:uppercase;border-radius:999px;padding:2px 9px;border:1px solid var(--line);color:var(--muted);font-weight:650}
+.chip.pend{color:var(--warn);border-color:var(--warn);background:var(--warn-bg)}
+.chip.care{color:var(--care);border-color:var(--care);background:var(--care-bg)}
+.chip.alone{color:var(--ok);border-color:var(--ok);background:var(--ok-bg)}
+.chip.new{color:var(--chg);border-color:var(--chg);background:var(--chg-bg)}
+.kv{font-size:13.5px;margin:9px 0}
+.kv b{display:inline-block;min-width:92px;color:var(--muted);font-weight:600}
+textarea.section-feedback,textarea#global-feedback{width:100%;min-height:62px;margin-top:11px;font:13.5px/1.5 inherit;background:var(--bg);color:var(--fg);border:1px solid var(--line);border-radius:7px;padding:9px}
+textarea:focus{outline:2px solid var(--accent);outline-offset:1px}
+.fblabel{font-size:11.5px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin-top:12px}
+.oq{border:1px solid var(--line);border-radius:9px;padding:15px 17px;margin:11px 0;background:var(--card)}
+.oq.decided{border-color:var(--ok)}
+.oq .plain{font-weight:700;font-size:15px;margin:0 0 8px}
+.footbar{position:fixed;left:0;right:0;bottom:0;z-index:60;background:var(--bg);border-top:1px solid var(--line);padding:10px 22px;display:flex;gap:14px;align-items:center;justify-content:space-between;font-size:13px}
+.footbar button{font:13.5px inherit;font-weight:650;padding:8px 15px;border-radius:8px;border:1px solid var(--accent);background:var(--accent);color:#fff;cursor:pointer}
+@media (prefers-color-scheme:dark){.footbar button{color:#06202a}}
+.toast{position:fixed;bottom:66px;left:50%;transform:translateX(-50%);background:var(--fg);color:var(--bg);padding:9px 17px;border-radius:8px;font-size:13.5px;opacity:0;transition:opacity .18s;z-index:80;pointer-events:none}
+.toast.on{opacity:1}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<div class="program">
+  <div class="plabel">Program &middot; stages 0 to 6 of 7</div>
+  <h1>A planning layer above plan docs</h1>
+  <p class="why">Plans and repos got big enough that the plan doc stopped being the right unit.
+  There are 262 plan docs across the six repos in active use, and each states its own goal, but
+  nothing states which larger effort it serves, which stage it is, or what comes after. So "why are
+  we doing this at all" has no written home, and every session re-derives it from git, badly. The
+  trackers meant to hold that context grew past being readable, and because they are committed files
+  edited inside 127 checkouts, five checkouts of vista-eval alone hold five different versions. The
+  result is the failure that gets felt: decisions re-litigated, context documents lost, and mistakes
+  that are high-level rather than in the code.</p>
+  <div class="stagebar">
+    <span class="stagepill here">0 &middot; Fix the mount hook</span>
+    <span class="stagepill here">1 &middot; Standing rules</span>
+    <span class="stagepill here">2 &middot; Briefs</span>
+    <span class="stagepill here">3 &middot; Boards</span>
+    <span class="stagepill here">4 &middot; Copy to mount</span>
+    <span class="stagepill here">5 &middot; Teach the skills</span>
+    <span class="stagepill here">6 &middot; The manager</span>
+  </div>
+  <div class="progmeta">Nothing built yet. Brief:
+  <code>&lt;mount&gt;/chaudhari_lab/phil/planning/programs/planning-layer.md</code> &middot;
+  research: <code>planning-layer-research-findings.md</code> alongside it</div>
+</div>
+
+<div class="banner chg">
+  <b>Changed since you last looked</b> (your feedback round). <b>Stage 4 is now copy-only</b> — no
+  delete, no untracking, no symlink: existing plans are copied to the mount for context and left
+  frozen in git; new plans are authored on the mount. That removes the one dangerous step and both
+  symlink defects. <b>Stages 6 and 7 merged into one always-on manager</b> that advances ready work,
+  watches all sessions, reminds a session that drifts off the guidelines, and raises conflicts to
+  you without resolving them. <b>Both open questions resolved</b> — dated-filename snapshots instead
+  of bucket versioning, and nobody reads the plans on GitHub. Changed sections are outlined and open;
+  settled ones are dimmed.
+</div>
+
+<h2>What this is for</h2>
+<div class="card">
+<p><b>Two things get fixed.</b> Every piece of work gets a one-page statement of why it exists and
+which stage it is at, so the big picture survives between sessions and across the ten things running
+in parallel. And new plans plus their reviews stop entering git, so they stop costing a personal PHI
+read — the existing 262 stay frozen in git (already reviewed, free where they sit) and get copied to
+the mount for cross-project context.</p>
+<p>The payoff beyond reading time is structural: a path on the shared mount is not per-checkout, so
+one board and one set of briefs replace the five diverging copies that exist today.</p>
+</div>
+
+<div class="hdrgrid card">
+  <div><span>Status</span>Draft, not reviewed, nothing built</div>
+  <div><span>Branch</span><code>main</code> &middot; uncommitted</div>
+  <div><span>Source</span><a href="planning-layer-and-mount-migration.md">planning-layer-and-mount-migration.md</a></div>
+  <div><span>Plan hash</span><code>fc335cc1603e</code></div>
+  <div><span>Authored on</span>2026-09-14 &middot; <code>phil-sllm-01</code></div>
+  <div><span>Scope</span>6 repos &middot; 127 checkouts</div>
+</div>
+
+<h2>Order of the seven stages</h2>
+<div class="figure">
+  <p class="cap">Stage 0 and Stage 1 each land alone. 2 to 5 are sequential. The manager needs only Stage 3.</p>
+  <div class="mmbox" id="box2">
+    <div class="mmctl"><button data-reset="box2">Reset view</button><button data-full="box2">Fullscreen</button></div>
+    <div class="mmhint">scroll to zoom &middot; drag to pan</div>
+<pre class="mermaid">
+flowchart TD
+  s0["Stage 0 &#9888; urgent, lands first<br/>Fix the mount-delete hook<br/>so safe writes stop nagging"]
+  s1["Stage 1 &#9203; lands alone<br/>Close-out block that WRITES,<br/>question filter, Program header,<br/>auto-explainer, repair paper-trail"]
+  s2["Stage 2 &#9203;<br/>Brief format, a brief per<br/>live program, 10 to 15"]
+  s3["Stage 3 &#9203;<br/>One board per repo,<br/>retire the 706 line next.md"]
+  s4["Stage 4 &#9989; safe, copy-only<br/>Copy plans to the mount,<br/>author new ones there,<br/>freeze the git originals"]
+  s5["Stage 5 &#9203;<br/>Teach the skills the new layer"]
+  s6["Stage 6 &#9203; the manager<br/>Advance, watch, remind,<br/>raise to Phil, resolve nothing"]
+  s0 --> s4
+  s1 --> s2
+  s2 -->|"needs the brief layout"| s3
+  s3 -->|"needs the board"| s4
+  s3 -->|"manager reads boards"| s6
+  s4 -->|"skills point at final layout"| s5
+  classDef urgent fill:#67e8f9,stroke:#0891b2,color:#083344,stroke-width:2px
+  classDef norm fill:#fcd34d,stroke:#d97706,color:#451a03
+  classDef safe fill:#a7f3d0,stroke:#059669,color:#064e3b
+  class s0 urgent
+  class s1,s2,s3,s5,s6 norm
+  class s4 safe
+</pre>
+  </div>
+</div>
+
+<h2>The seven stages in detail</h2>
+<p class="small muted">Changed-this-round sections are outlined and open; settled ones are dimmed and closed.</p>
+
+<details data-section="stage-0">
+<summary>Stage 0 &mdash; Fix the mount-delete hook <span class="chip alone">lands first</span></summary>
+<div class="dbody">
+<p>The part blocking daily work today. The current gate fires whenever a command contains the literal
+string <code>/mnt</code> plus any destructive verb, ignoring the actual target &mdash; so every
+<code>mkdir &lt;mount&gt;/boards &amp;&amp; rm -rf /tmp/scratch</code> nags. Rewrite it target-bound:
+resolve each destructive path with <code>realpath</code>, then deny the protected bucket roots
+outright, pass targets inside a named write-zone allowlist, ask only for a mount delete outside the
+zone. Nags far less and is strictly safer than the string match.</p>
+<div class="kv"><b>Files</b> <code>hooks/mnt-delete-gate.sh</code> + a new test case</div>
+<div class="fblabel">Your notes on stage 0</div>
+<textarea class="section-feedback" data-fb="stage-0" placeholder="..."></textarea>
+</div>
+</details>
+
+<details data-section="stage-1">
+<summary>Stage 1 &mdash; Standing rules <span class="chip alone">lands alone</span></summary>
+<div class="dbody">
+<p>Six edits to one file symlinked into 39 repos. The close-out block after every chunk (program and
+stage, done, verified, next, your call) <b>writes</b> to the board and appends decisions to the
+ledger, so the summary survives the session and the ledger gets its missing writer. Plus the
+question-materiality filter; an empty open-questions section made legitimate; the program-and-stage
+line; repairing paper-trail's stale standards copy; and every plan arriving with its explainer
+already generated. Research caveat, accepted: prose rules lapse in long sessions &mdash; ship as
+prose, and the manager (Stage 6) is the cross-session backstop that reminds a drifting session.</p>
+<div class="fblabel">Your notes on stage 1</div>
+<textarea class="section-feedback" data-fb="stage-1" placeholder="..."></textarea>
+</div>
+</details>
+
+<details data-section="stage-2">
+<summary>Stage 2 &mdash; A brief per live program <span class="chip pend">pending</span></summary>
+<div class="dbody">
+<p>One page, fixed shape: why (plain English), done when, a stage table, dated decisions, cross-repo
+order, what we are not doing. 10 to 15 briefs; the program line goes onto live plan docs only.</p>
+<div class="fblabel">Your notes on stage 2</div>
+<textarea class="section-feedback" data-fb="stage-2" placeholder="..."></textarea>
+</div>
+</details>
+
+<details data-section="stage-3">
+<summary>Stage 3 &mdash; One status board per repo <span class="chip pend">pending</span></summary>
+<div class="dbody">
+<p>One screen per repo on the mount. Each <code>next.md</code> becomes a pointer; the 8,600-word log
+is dropped. A mount path is not per-checkout, so all checkouts read one file &mdash; the fork is gone.</p>
+<div class="fblabel">Your notes on stage 3</div>
+<textarea class="section-feedback" data-fb="stage-3" placeholder="..."></textarea>
+</div>
+</details>
+
+<details data-section="stage-4" data-changed open>
+<summary>Stage 4 &mdash; Copy plans to the mount, author new ones there <span class="chip alone">now safe</span> <span class="chip pend">changed</span></summary>
+<div class="dbody">
+<div class="chgnote"><b>Reshaped by your feedback:</b> "we don't need to delete, just copy over and
+save there." So no <code>git rm</code>, no symlink, no 127-checkout script &mdash; the one dangerous
+step is gone, and so are both symlink defects.</div>
+<p><b>Two moves.</b> Copy every repo's existing <code>docs/plans</code> tree to the mount
+(non-destructive, checksum-verified) so the manager and any session can read across all six
+projects, and leave the git originals frozen where they are &mdash; already reviewed, free where
+they sit. From now on, new plans, reviews and explainers are authored on the mount path and never
+enter git, so they never cost a PHI read. On each save the canonical name stays stable and a dated
+snapshot lands in <code>&lt;stem&gt;/history/</code> (your "trivial to add version to filename").</p>
+<p><b>The one cost:</b> during the transition plans live in two places &mdash; frozen old ones in git
+<code>docs/plans</code>, live ones on the mount &mdash; so Stage 5 teaches the skills both: search
+the mount for current work, fall back to git for frozen history. Day to day the board and brief are
+the index, so nobody greps for a plan anyway.</p>
+<div class="kv"><b>How we know</b> Copy count and checksums match (a mismatch just means re-copy,
+nothing lost); a new plan's <code>Reference:</code> resolves and its snapshot lands; the git
+originals are untouched.</div>
+<div class="fblabel">Your notes on stage 4</div>
+<textarea class="section-feedback" data-fb="stage-4" placeholder="..."></textarea>
+</div>
+</details>
+
+<details data-section="stage-5">
+<summary>Stage 5 &mdash; Teach the skills the new layer <span class="chip pend">pending</span></summary>
+<div class="dbody">
+<p>The session opener leads with program and stage and reads the board first. The closer keys its
+reviewed column on a content hash and edits the board. This explainer generator gets the program
+panel and stops being opt-in; the markdown opener retires its promotion path. Skills search the
+mount for live plans, fall back to git for frozen ones. One gate policy for every repo &mdash; no
+rigor tiers, per your call.</p>
+<div class="fblabel">Your notes on stage 5</div>
+<textarea class="section-feedback" data-fb="stage-5" placeholder="..."></textarea>
+</div>
+</details>
+
+<details data-section="stage-6" data-changed open>
+<summary>Stage 6 &mdash; The manager: holds the big picture, advances, reminds &mdash; decides nothing you should <span class="chip new">refined this round</span></summary>
+<div class="dbody">
+<div class="chgnote"><b>Refined by your constraint:</b> the manager must never decide anything a task
+raised for you. "Answers trivial questions" is dropped; the big-picture map is now its lead value;
+question routing is a board-state queue plus push.</div>
+<p>One long-running session that supplies the vantage no single-repo session has. <b>Hard rule:</b>
+once a task judges "this needs Phil," that is authoritative &mdash; the manager passes it through
+untouched. Its value is altitude and hygiene, not authority. Five jobs:</p>
+<p><b>1. Holds the big-picture map (the lead value)</b> &mdash; answers "what are the eight things
+I'm working on and where does each fit" by joining running sessions (transcript mtime, working dir,
+token spend) &times; boards &times; briefs. Each session resolves to a row: this session is on
+<code>feat/x</code>, item 3 on the vista-eval board, stage 4 of the matched-cohort program, plan at
+&lt;mount path&gt;. Degrades to session &rarr; branch &rarr; nearest doc before the layer exists. A
+session mapping to no program is itself a flagged inconsistency &mdash; untracked work.</p>
+<p><b>2. Watches for high-level inconsistencies (read-only)</b> &mdash; cross-repo drift, stage-order
+violations, a board that disagrees with git, two sessions on one behaviour. Surfaces facts, resolves
+none. Never reads code.</p>
+<p><b>3. Advances mechanical steps</b> &mdash; runs on a loop so you don't type <code>/advance</code>.
+Procedural progress only; stops at the real gates (plan approval, commit, merge, anything
+irreversible or costly) and never advances past a question a task raised for you.</p>
+<p><b>4. Reminds an agent that drifted from guidance</b> &mdash; the cross-session fix for rules that
+decay mid-session: it nudges the one drifting session back (a message to that session, not a
+broadcast). This includes nudging an agent about to escalate a trivial question to apply the filter
+itself &mdash; the nudge goes to the agent, the decision stays with the agent.</p>
+<p><b>5. Routes questions to you, answers none</b> &mdash; a blocking question is a <i>state</i>, not
+a feed entry: the session sets its board entry to <code>blocked-on-Phil</code>, and your "for you"
+list is a filter over those states. It can't scroll away under concurrent pings, survives the
+manager dying (state lives in the mount files), and clears when answered. Urgent ones also push
+immediately; an old unanswered one escalates, getting louder not quieter. You answer in the one
+manager session; it routes the answer back and unblocks. Conflicts are surfaced the same way, never
+auto-resolved.</p>
+<p class="small muted">Findings are yes-or-no facts; the key one is a board whose stage disagrees
+with the newest commit on its branch. Checks retire by measured usefulness (~90% over 20 firings),
+not by one false alarm. It coordinates through the boards, not by polling peers &mdash; so it needs
+Stage 3 and nothing after it.</p>
+<div class="kv"><b>Files</b> <code>commands/manage.md</code> (the loop; subsumes the old driver + watcher)</div>
+<div class="fblabel">Your notes on the manager</div>
+<textarea class="section-feedback" data-fb="stage-6" placeholder="..."></textarea>
+</div>
+</details>
+
+<h2>Decisions settled</h2>
+<div id="oqs"></div>
+
+<div class="fblabel">Anything else, across the whole plan</div>
+<textarea id="global-feedback" placeholder="..."></textarea>
+
+</div>
+
+<div class="footbar">
+  <span class="small muted">Plan hash <code>fc335cc1603e</code> &middot; notes save automatically in this browser</span>
+  <button id="copybtn">Copy all feedback as a Claude prompt</button>
+</div>
+<div class="toast" id="toast"></div>
+
+<script>
+const PLAN_PATH="docs/plans/planning-layer-and-mount-migration.md";
+const PLAN_SHA="fc335cc1603e08a670bfeca90371c02ffbb7fc8ed02b7a1d66ecaa25707357d4";
+const PLAN_STEM="planning-layer-and-mount-migration";
+const BRANCH="main";
+const OQS=[
+ {n:"stage4",plain:"Stage 4 — delete, or just copy?",
+  body:"Phil: we don't need to delete, just copy to the mount and save there.",
+  ans:"RESOLVED — copy-only. Existing plans copied to the mount for context and left frozen in git; new plans authored on the mount, never entering git. No delete, no symlink."},
+ {n:"manager",plain:"Should /advance be automatic, and what should the manager do?",
+  body:"Phil: advance when needed, remind agents if they fall off guidelines, raise things to me — don't resolve conflicts.",
+  ans:"RESOLVED — one always-on manager: watch + advance-mechanical + answer-trivial + remind-drifting-session + surface-conflicts. Never resolves conflicts."},
+ {n:"versioning",plain:"How to keep plan history without bucket versioning?",
+  body:"Phil: trivial to add version to filename.",
+  ans:"RESOLVED — canonical name stays stable; a dated snapshot lands in <stem>/history/ on each save."},
+ {n:"visibility",plain:"Does anyone read these plans on GitHub?",
+  body:"Phil: nobody reads them.",
+  ans:"RESOLVED — no visibility cost; and copy-only Stage 4 leaves the git originals in place anyway."}
+];
+const oqWrap=document.getElementById('oqs');
+OQS.forEach(q=>{const d=document.createElement('div');d.className='oq decided';d.id='oq-'+q.n;
+ d.innerHTML='<p class="plain">'+q.plain+'</p><p class="small muted">'+q.body+'</p>'+
+  '<p class="small"><b>'+q.ans+'</b></p>'+
+  '<textarea class="section-feedback" data-fb="OQ-'+q.n+'" placeholder="Reopen or add a note..."></textarea>';
+ oqWrap.appendChild(d);});
+const LSK=k=>'ep::'+PLAN_STEM+'::'+k;
+if(localStorage.getItem(LSK('__sha'))!==PLAN_SHA){
+ Object.keys(localStorage).filter(k=>k.startsWith('ep::'+PLAN_STEM+'::')).forEach(k=>localStorage.removeItem(k));
+ localStorage.setItem(LSK('__sha'),PLAN_SHA);}
+function wire(el,key){const v=localStorage.getItem(LSK(key));if(v!==null)el.value=v;
+ el.addEventListener('input',()=>{localStorage.setItem(LSK(key),el.value);badge();});}
+document.querySelectorAll('textarea[data-fb]').forEach(t=>wire(t,'fb::'+t.dataset.fb));
+wire(document.getElementById('global-feedback'),'fb::__global');
+function pending(){let n=0;document.querySelectorAll('textarea[data-fb]').forEach(t=>{if(t.value.trim())n++;});
+ if(document.getElementById('global-feedback').value.trim())n++;return n;}
+function badge(){const n=pending();document.getElementById('copybtn').textContent=
+ n?'Copy all feedback as a Claude prompt ('+n+')':'Copy all feedback as a Claude prompt';}
+badge();
+function toast(m){const t=document.getElementById('toast');t.textContent=m;t.classList.add('on');setTimeout(()=>t.classList.remove('on'),2600);}
+document.getElementById('copybtn').addEventListener('click',async()=>{
+ const L=[];L.push('# Resume: apply explain-plan feedback');
+ L.push('Plan: '+PLAN_PATH+' · branch: '+BRANCH+' · plan-sha: '+PLAN_SHA.slice(0,12));
+ L.push('→ Fresh session: read the plan doc, the program brief it names, and the research-findings doc beside it, then apply the feedback.');
+ L.push('');L.push('# Feedback on '+PLAN_STEM);L.push('');
+ document.querySelectorAll('textarea[data-fb]').forEach(t=>{const v=t.value.trim();if(!v)return;
+  L.push('## '+t.dataset.fb);L.push(v);L.push('');});
+ const g=document.getElementById('global-feedback').value.trim();
+ if(g){L.push('## Overall');L.push(g);L.push('');}
+ if(L.length<=6){toast('Nothing written down yet.');return;}
+ try{await navigator.clipboard.writeText(L.join('\n'));toast('Copied. Paste it into Claude.');}
+ catch(e){toast('Clipboard blocked — select and copy manually.');}});
+mermaid.initialize({startOnLoad:false,theme:'base',flowchart:{useMaxWidth:false,htmlLabels:true}});
+const insts={};
+(async()=>{
+ await mermaid.run({querySelector:'pre.mermaid'});
+ document.querySelectorAll('.mmbox').forEach(box=>{const svg=box.querySelector('svg');if(!svg)return;
+  svg.removeAttribute('style');svg.style.width='100%';svg.style.height='100%';
+  insts[box.id]=svgPanZoom(svg,{zoomEnabled:true,controlIconsEnabled:false,fit:true,center:true,minZoom:0.3,maxZoom:8,mouseWheelZoomEnabled:true});});
+ document.querySelectorAll('[data-reset]').forEach(b=>b.addEventListener('click',()=>{const i=insts[b.dataset.reset];if(i){i.resize();i.fit();i.center();}}));
+ document.querySelectorAll('[data-full]').forEach(b=>b.addEventListener('click',()=>{
+  const box=document.getElementById(b.dataset.full);box.classList.toggle('full');
+  b.textContent=box.classList.contains('full')?'Exit fullscreen':'Fullscreen';
+  setTimeout(()=>{const i=insts[box.id];if(i){i.resize();i.fit();i.center();}},90);}));
+ window.addEventListener('keydown',e=>{if(e.key!=='Escape')return;
+  document.querySelectorAll('.mmbox.full').forEach(box=>{box.classList.remove('full');
+   const b=box.querySelector('[data-full]');if(b)b.textContent='Fullscreen';
+   setTimeout(()=>{const i=insts[box.id];if(i){i.resize();i.fit();i.center();}},90);});});
+ let t;window.addEventListener('resize',()=>{clearTimeout(t);t=setTimeout(()=>{Object.values(insts).forEach(i=>{i.resize();i.fit();i.center();});},160);});
+})();
+</script>
+</body>
+</html>

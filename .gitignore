@@ -18,3 +18,7 @@ docs/session/
 # PHI-FREE allowlist — real machine names (often embed a hardware serial) stay
 # machine-local, never committed. The .example template IS committed.
 hooks/lib/phi-free-machines.local
+
+# explain-plan baseline snapshots (review scratch) — never committed
+.explain-plan/
+docs/plans/.explain-plan/

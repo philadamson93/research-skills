@@ -3,7 +3,7 @@ Program: `<mount>/chaudhari_lab/phil/planning/programs/planning-layer.md` — st
 
 # A planning layer above plan docs, and moving plans off git
 
-**Status: DRAFT 2026-09-14 — not reviewed, not approved, nothing built.**
+**Status: APPROVED 2026-09-14 (Phil), Reviewed: Yes (SHA `fc335cc1603e`). Stage 0 landed on `main` @892ffb5; Stage 1 landed on `main` @22ae467 (paper-trail symlink half @09f8905). Stages 2-6 remain.**
 
 ## Goal
 

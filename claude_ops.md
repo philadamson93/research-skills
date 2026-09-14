@@ -42,6 +42,10 @@ desk to someone who knows the research cold and has never opened the repo.
 **When you ask me something**
 
 - Describe what each choice leads to, not how it works inside. I usually can't see the code.
+  Options describe outcomes, never mechanisms.
+- Every question must name what changes in the outcome depending on the answer, *and* the default
+  you'll take if I shrug. If you can't name the consequence, it isn't a question — decide it and
+  record it. (The tiers for what's worth asking are under *Standing rules*.)
 - Any multiple-choice question goes through the `AskUserQuestion` tool, not inline prose.
 
 The test: read it back as if a person wrote it in a hurry but knew the material cold. If it sounds
@@ -111,6 +115,7 @@ Plan mode can only write to its own scratch file, never to `docs/plans/`. So:
 
 ```markdown
 Reference: docs/claude_ops.md
+Program: <brief path> — stage N of M
 
 # [What this is]
 
@@ -125,7 +130,9 @@ Each path and what changes there. For a new file, name the directory it goes in,
 any directory that doesn't exist yet.
 
 ## Open Questions
-What's still ambiguous.
+What's still ambiguous. "None — the defaults below are mine to make" is a valid and often correct
+body: don't invent a question to fill the section. Keep the header (three skills parse it and it's
+in 2,000+ plan docs), but a body with no real questions is fine.
 
 ## Verification
 How we'll know it worked:
@@ -151,6 +158,9 @@ How we'll know it worked:
   entry, and anything extra like scratch directories or temporary tables.
 ```
 
+The `Program:` line names the brief this plan serves and its stage. Omit it only when no brief
+exists yet — a live plan should resolve to one.
+
 ### When a plan is finished
 
 - Land branch work with `/land`, following the plan's landing section. Don't merge or delete
@@ -158,6 +168,17 @@ How we'll know it worked:
 - Fix the documentation the change invalidated: stale paths, command examples, imports, links.
 - Mark the plan `**Status: Completed** (date)`.
 - Update the table in `docs/plans/README.md`.
+
+### Hand a plan over with its explainer
+
+I don't read markdown, so a plan isn't handed over until its explainer exists:
+
+- Any plan you write or substantively edit is handed to me *with* its rendered explainer already
+  generated (`/explain-plan`) — on this VM, already copied to the mount where I can open it. Don't
+  wait for me to ask.
+- The explainer HTML is the review surface: an approved, in-sync explainer is what promotes a plan
+  to `Reviewed: Yes`, not the markdown. Trivial changes don't get plan docs at all, so this never
+  fires on them.
 
 ---
 
@@ -188,6 +209,35 @@ Give yourself something that tells you pass from fail. This matters more than an
 - A check that cannot fail proves nothing. Work out the expected answer independently of the thing
   you're testing.
 - Run the checks yourself and bring me the results. Don't leave assertions for me to run.
+
+---
+
+## Closing out a block of work
+
+When you finish a block — an implementation, a verification run, a review — print exactly this,
+the same five labels every time, nothing decorative around it:
+
+```
+Program  <name> — stage N of M
+Done     <what concretely finished>
+Verified <the command you ran and what it printed>
+Next     <the one next action>
+Yours    <the decision you need from me, or "none">
+```
+
+This is not only for session end (`/wrapup` still does that once per session). It fires after every
+chunk, so I never have to scroll and ask "what did we do, where did we stop, what's next".
+
+**The block writes, it doesn't only print.** A terminal print dies with the session; the next
+session can't read it — which is exactly how I lose the thread across sessions. So when a board and
+brief exist for this work (the boards and briefs from the planning layer), the block also:
+
+- upserts this item's board entry with the current stage and the `Next` line, and
+- when `Yours` recorded a real decision I made, appends one dated line to the brief's
+  `Decided already` ledger.
+
+Until those files exist, just print the block; the writes begin once the board and brief do. That
+write is what stops the decision ledger from freezing on the day it was hand-typed.
 
 ---
 
@@ -334,6 +384,10 @@ the machines that have GPUs.
 
 ## Standing rules
 
+- Sort every decision by what the answer changes, and act on the tier:
+  - Changes the results, the cost, or what we can conclude → ask me.
+  - Changes only the shape of the code → decide it, record it in the plan, don't ask.
+  - Reversible in under an hour → just do it.
 - Ask me about: what to build and how it should behave, anything ambiguous, decisions that shape
   the architecture, anything where a wrong assumption wastes work, whether a failure should fall
   back or raise (don't assume a fallback — it can hide a real error upstream), and what's worth

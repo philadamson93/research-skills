@@ -6,7 +6,7 @@ End-of-session cleanup. Do the nine steps below in order.
 
 Recommended cadence: invoke around **~200k tokens of context** (or earlier at a clean cutoff), preserve session state, then start a fresh session with `/next`. Long sessions past that point get noticeably slower (cache misses on every turn, drift in long-tail context) and the marginal value of staying in-session keeps falling.
 
-`/wrapup` is **state-preservation first, commit second**. Its job is to leave the next session everything it needs to resume — `MEMORY.md`, `next.md`, `docs/session/` docs, and the resume block — none of which require a commit. Committing is **opt-in** at the Step 9 gate and defaults to *skip*: reserve it for work that is finished and worth sharing (per `claude_ops.md` → When to commit). Ending a session mid-workflow on a token budget is the common case, and it needs no commit — so no commit-time PHI gate fires — with the resume block plus the git-ignored `docs/session/` docs carrying the state forward. (Not committing is not license to relax authorship discipline: never write raw PHI into any doc, git-ignored ones included — see `claude_ops.md` → What gets committed.)
+`/wrapup` is **state-preservation first, commit second**. Its job is to leave the next session everything it needs to resume — the repo's board and the brief it names (both on the mount), `MEMORY.md`, `docs/session/` docs, and the resume block — none of which require a commit. Committing is **opt-in** at the Step 9 gate and defaults to *skip*: reserve it for work that is finished and worth sharing (per `claude_ops.md` → When to commit). Ending a session mid-workflow on a token budget is the common case, and it needs no commit — so no commit-time PHI gate fires — with the resume block plus the git-ignored `docs/session/` docs carrying the state forward. (Not committing is not license to relax authorship discipline: never write raw PHI into any doc, git-ignored ones included — see `claude_ops.md` → What gets committed.)
 
 ## Scope
 
@@ -23,7 +23,7 @@ For each `docs/` file you touched this session:
 - Skim for stale content, duplication, bloated sections, content sitting in the wrong file, unclear ordering.
 - **Tighten inline** — typo fixes, dead-link cleanup, redundant-paragraph removal, light rewording for clarity, section-header renames.
 - **Small-to-moderate reorgs are encouraged when they clearly help findability**: split a bloated doc into focused files, move a section to a doc where it belongs better, merge two docs that should be one, restructure a list, reorder major sections. Update inbound links when you move content. The asking discipline above governs the rare high-stakes ambiguous cases (e.g., renaming a doc that's heavily linked from external repos or external systems).
-- **Out of scope here**: full-tree consolidation, gathering scattered content from many untouched docs, large architectural reorganizations of `docs/` as a whole. Defer to a separate, deeper-context skill (or note the opportunity in `next.md` / `backlog.md` for a future pass).
+- **Out of scope here**: full-tree consolidation, gathering scattered content from many untouched docs, large architectural reorganizations of `docs/` as a whole. Defer to a separate, deeper-context skill (or note the opportunity on the board / in `backlog.md` for a future pass).
 - Goal: optimize for *future-agent findability*. You're reorganizing for your own sake on the next session, not for a human reader.
 
 **Also glance at any code directory you touched this session** (same recently-touched, no-full-tree scope): if it has drifted into a flat dump of unrelated files, propose a small, in-scope split and update inbound imports/references. Placement should have been settled at plan time (`claude_ops.md` → Writing code) — this is the retrospective safety net, not a substitute for it, so keep the move small and note it in the commit message.
@@ -34,30 +34,57 @@ Update any plan/status tables (e.g., `docs/plans/README.md`) if work shipped or 
 
 If the project has a plan-tracking index (`docs/plans/README.md` or equivalent), maintain a **Reviewed** column with three values:
 
-- `Yes` — the user has reviewed the current content (via `/read-plan` Phase 5 completion, or an approved in-sync `/explain-plan` HTML — its peer visual path).
+- `Yes` — the user approved the plan's **rendered explainer** and that explainer is in sync with
+  the plan's current content.
 - `No` — never reviewed.
 - `Stale` — was `Yes`, but the plan has been substantively edited since.
+
+**Staleness is measured against a hash of the plan's own content, not a git SHA.** Plans are now
+authored on the shared mount and never enter git, so most of them have no commit to anchor to. Use
+the same hash the explainer records in its own header, so the two agree by construction.
 
 **Sync rules during wrapup**:
 
 - **New plan doc created this session** → ensure README row exists with `Reviewed: No`.
 - **Existing plan doc substantively edited this session** ("substantive" = content/section changes; *not* typo fixes, formatting, dead-link cleanup, or whitespace): if the row is currently `Yes`, demote to `Stale`. If `No` or `Stale`, leave as-is.
-- **Never silently promote `No` / `Stale` → `Yes`.** Only `/read-plan`, or an approved SHA-in-sync `/explain-plan` HTML (its peer visual path), flips a row to `Yes` — both on user-confirmed completion. If the user states inline that they've reviewed a plan, point them at `/read-plan` (or `/explain-plan` if they reviewed the HTML) to record it — don't shortcut the promotion here.
+- **Never silently promote `No` / `Stale` → `Yes`.** There is exactly **one** promotion path: an
+  approved explainer whose content hash matches the plan. `/read-plan` no longer promotes anything
+  — Phil does not read markdown, so opening the markdown is not a review. If he says inline that
+  he reviewed a plan, ask which artifact he read; if it was the explainer, record it, and if the
+  explainer is out of sync, regenerate it first.
 - **No plan-tracking index exists, but `docs/plans/` (or equivalent) does**: bootstrap a `README.md` with `Plan | Status | Reviewed | Description` columns and populate `Reviewed: No` for all existing plan docs.
 - **No `docs/plans/` directory at all**: skip this step.
 
 Surface unreviewed plans (`No` or `Stale`) in the Step 9 summary so the next session can pick them up.
 
-## Step 3 — Tracking-doc hygiene (`next.md` or equivalent)
+## Step 3 — Board hygiene (this repo's status board on the mount)
 
-Find the project's "next steps" tracking doc — commonly `docs/next.md`, `TODO.md`, `BACKLOG.md`, or similar. If multiple exist or the canonical one is unclear, ask.
+The repo's board is the authoritative statement of what is live here:
+`/mnt/su-vista-uscentral1/chaudhari_lab/phil/planning/boards/<repo>.md`. It lives on the mount, so
+one file serves every checkout of the repo and the Mac. Edit it directly — it is not in git, so
+this costs no review.
 
-In that doc:
+Upsert the entry for whatever you touched this session, in the board's own format:
 
-- Remove completed items. Note in the commit message where each was promoted to (plan doc, journal entry, spec).
-- Add new items discovered this session.
-- **Enforce pointer style**: each item is a 1–3 line reminder + a link to a plan/journal/spec for substance. If an item runs longer than ~3 lines, the detail belongs in a sub-doc — promote it and leave a pointer.
-- Update "Last updated" date if the doc has one.
+```
+<short name> · program <brief-slug> stage N/M · <state> · <MM-DD>
+next: <one line> → <path to the plan, or "no plan doc">
+```
+
+- **Only active items.** When something finishes, take it **off** the board — its status lives in
+  the brief's stage table, which is the historical record. A board that accumulates finished work
+  is the failure this replaced.
+- **States**: `▶` in flight, `⛔` blocked (say on what in the `next:` line), `○` not started,
+  `⚠` ran but the result cannot be trusted yet.
+- **Hard cap: one screen, under 100 lines.** If it does not fit, something on it is finished or was
+  never really active.
+- **Also update the brief** when the stage moved: set the stage row's status, and if the user made
+  a real decision this session, append one dated line to the brief's `Decided already` ledger. That
+  ledger is what stops the same decision being re-argued next month, and this step is its only
+  writer.
+- **Don't grow the in-repo `docs/next.md`.** It is legacy: a committed file edited inside many
+  checkouts, which is why vista-eval's existed in 8 different versions across 9 checkouts. If it
+  still holds real content, move that content to the board rather than updating both.
 
 ## Step 4 — Backlog hygiene (`backlog.md` or equivalent)
 
@@ -65,37 +92,27 @@ If a separate backlog file exists (e.g., `docs/backlog.md`), apply the same poin
 
 If no backlog file exists but the immediate-tracking doc has a "Deferred / Backlog" or similar section that has grown unwieldy, bootstrap a separate backlog file by migrating that section out. Note the migration in the commit message so it's traceable. Per the asking discipline, only raise a question if the right destination file is genuinely ambiguous (e.g., the project has multiple plausible homes for it).
 
-**Contract for both `next.md` and `backlog.md`**: short, structured indexes. Substance lives in `docs/plans/`, `docs/journal/`, `docs/specs/`, or wherever the project keeps it. If you're writing more than ~3 lines per item, promote the detail and leave a pointer.
+**Contract for both the board and `backlog.md`**: short, structured indexes. Substance lives in `docs/plans/`, `docs/journal/`, `docs/specs/`, or wherever the project keeps it. If you're writing more than ~3 lines per item, promote the detail and leave a pointer.
 
 ## Step 5 — Auto-memory pass
 
 Update `MEMORY.md` to reflect the current project state, open items, and any new preferences or facts learned this session. Evict stale entries. Save new memories per the auto-memory rules in the system prompt — do not duplicate facts already covered by `CLAUDE.md` or derivable from the code.
 
-## Step 6 — Cross-repo resume index (vista-pm)
+## Step 6 — Cross-repo view (nothing to maintain)
 
-Keep one cross-repo "in-flight work" index current so the next session can resume the *right* recent work without re-deriving it from git. This is the hub-level rollup of the per-repo `next.md` hygiene in Step 3 — it answers "which of my several worktrees do I pick back up?"
+**There is no separate cross-repo index any more, and nothing to do in this step beyond Step 3.**
 
-**Mac only — never on the VM.** This index is a local-only, git-ignored, Mac-only artifact: the `vista-pm/personal/` tree is never pushed, so there is nothing to pull at session start and it does not exist on the VM. Run this step ONLY on the Mac; skip it entirely on the VM (`phil-sllm-01`) or any host where `vista-pm/personal/` is absent. Per claude_ops Which machine to run on you already know the machine from the session-start `hostname` — `vista-pm/personal/` existing is the operative check.
+This used to be `vista-pm/personal/in-flight.md` — Mac-only, git-ignored, and absent on the VM, so
+the cross-repo view did not exist on this machine at all. It is now the set of per-repo boards on
+the mount, which both machines read. Step 3 already upserted this repo's board, so the cross-repo
+picture is current the moment that write lands.
 
-**Where**: `vista-pm/personal/in-flight.md` (same place the personal to-dos live). Find `vista-pm` as a sibling of the current repo (its parent dir / the `code/` workspace root). Also **skip** for sessions that didn't advance a branch/worktree (pure-doc tweaks, vista-pm-only work, trivial fixes).
+Deliberately *not* a single combined file. One file covering ten programs is exactly how the old
+tracker reached 706 lines. To read across projects, list the boards directory; to answer "which of
+my checkouts do I pick back up", read the boards and the briefs they name.
 
-**Incremental — do NOT run a cross-repo git sweep.** A wrapup runs inside one repo's session and only cheaply knows *that* repo's work. Upsert only the branch/worktree(s) you touched this session; leave every other repo's entries alone. (Re-deriving the whole index from a full `git worktree list` + push-state sweep across all repos is a separate, occasional reconcile — not this step.)
-
-**Per touched branch/worktree, upsert one entry** under a `## <repo>` heading:
-
-```
-## <repo>
-- <branch-or-worktree> · <state> · <MM-DD>
-  <one line: what it is>
-  next: <one line> → <pointer to the repo's docs/next.md or the plan doc>
-```
-
-- **`<state>`** — read cheaply from this session's own git knowledge (no sweep): `pushed` (committed and on `origin/<branch>`), `⚠ UNPUSHED` (committed locally, not on origin — lost if the clone/worktree is gone), or `⚠ UNCOMMITTED` (dirty / draft not yet committed). Quick check: `git -C <wt> status -sb` plus whether an `origin/<branch>` ref exists.
-- **Order** newest-first within a repo; keep repos most-recently-touched first.
-- **Prune on landing**: if the branch merged to main or was abandoned this session, remove its entry (note the removal in the Step 9 summary).
-- **Pointer style** (same contract as `next.md`): ≤3 lines per entry; substance lives in the plan doc / `next.md` it points at.
-
-**Editing mechanics**: the file is git-ignored — edit it in place. In a guarded background session where direct edits to a sibling checkout are blocked, write the updated file to scratch and `cp` it in (Bash isn't guarded). Never commit this file.
+If `vista-pm/personal/in-flight.md` still exists on the Mac, it is retired — stop updating it, and
+say so once in the Step 9 summary so it does not quietly drift alongside the boards.
 
 ## Step 7 — Global skills sync (separate repo)
 
@@ -159,13 +176,13 @@ For each in-flight task advanced this session, write (or update) a state doc at 
 
 - **Shipped this session**: what concretely landed (1–3 bullets).
 - **Doc changes worth flagging**: any moderate-or-higher reorgs from Step 1 — file splits, cross-doc moves, doc merges, major section reorders, new files bootstrapped. Skip if all doc work was inline tightening.
-- **Plans needing review**: any rows currently `No` or `Stale` in the plan-tracking index after Step 2 — name the path so the next session can run `/read-plan <path>`. Skip if all plans are `Yes` or no plan-tracking index exists.
+- **Plans needing review**: any rows currently `No` or `Stale` in the plan-tracking index after Step 2 — name the path so the next session can run `/explain-plan <path>` — the only thing that can record a review. Skip if all plans are `Yes` or no plan-tracking index exists.
 - **Next**: what comes after this session (1–3 bullets).
 - **Blocked on user**: things the next session can't unblock itself (1–3 bullets).
 
 **Then raise an `AskUserQuestion` at the commit gate** with three structured options. Commit is **opt-in** — the default is to skip it and let the resume block + `docs/session/` docs carry state forward. Only offer commit as the recommended choice when this session's changes reached a **finished, shareable state** (per `claude_ops.md` → When to commit): an approved plan, a completed and verified implementation, or results ready to hand off. For the common mid-workflow / budget-out close, skip.
 
-1. **"Skip commit" (Recommended for a mid-workflow close)** — don't commit; leave changes in the working tree. State is preserved by `MEMORY.md`, `next.md`, `docs/session/`, and the resume block. Nothing is staged, so no commit-time PHI gate fires.
+1. **"Skip commit" (Recommended for a mid-workflow close)** — don't commit; leave changes in the working tree. State is preserved by the board, the brief, `MEMORY.md`, `docs/session/`, and the resume block. Nothing is staged, so no commit-time PHI gate fires.
 2. **"Commit and push"** — commit the changes and push to the tracking remote in one action. Choose this when the work is finished and worth sharing.
 3. **"Commit only (no push)"** — create the commit locally; defer the push.
 
@@ -180,27 +197,40 @@ Do not auto-commit. Do not run `git commit` inline — always go through `commit
 
 ### Resume block — print last, always
 
-After the commit gate resolves (whether or not you committed), the **final output** is a copy-paste **resume block** — the coordinates the next session uses to pick the work back up without re-deriving it from git. Most sessions close **uncommitted** (commit is opt-in), so the block defaults to pointing at the working tree and `docs/session/` docs in this checkout; the pushed-SHA form applies only when this session committed at a milestone. Print one block per in-flight branch/worktree you touched this session (reuse the Step 6 entries — usually just one):
+**Open it with the program and the stage**, then the repo and branch — e.g.
+`per-CT landmark tasks · stage 5 of 9 · vista_bench · feat/foo`. That is the line that survives
+into the next session, and "which program, which stage" is the question worth answering first.
+Name the brief's path too, so the next session can read the why without re-deriving it.
+
+After the commit gate resolves (whether or not you committed), the **final output** is a copy-paste **resume block** — the coordinates the next session uses to pick the work back up without re-deriving it from git. Most sessions close **uncommitted** (commit is opt-in), so the block defaults to pointing at the working tree and `docs/session/` docs in this checkout; the pushed-SHA form applies only when this session committed at a milestone. Print one block per in-flight branch/worktree you touched this session (reuse the Step 3 board entries — usually just one):
 
 **Uncommitted close (the common case):**
 ```
-Resume ▸ research-skills
-  REPO   research-skills
-  BRANCH feat/foo   [WORKTREE .claude/worktrees/foo]
-  DOC    docs/plans/foo.md (plan) · docs/session/foo-readback.md (state)
-  STATE  ⚠ uncommitted — resume from the working tree in this checkout
-  OPEN   cd <checkout> && cat docs/session/foo-readback.md   # substance + what's next
+Resume ▸ per-CT landmark tasks · stage 5 of 9
+  PROGRAM per-CT landmark tasks — stage 5 of 9
+  BRIEF   <mount>/planning/programs/per-ct-landmark-tasks.md
+  REPO    research-skills
+  BRANCH  feat/foo   [WORKTREE .claude/worktrees/foo]
+  DOC     docs/plans/foo.md (plan) · docs/session/foo-readback.md (state)
+  STATE   ⚠ uncommitted — resume from the working tree in this checkout
+  OPEN    cd <checkout> && cat docs/session/foo-readback.md   # substance + what's next
 ```
 
 **Committed-and-pushed close (milestone):**
 ```
-Resume ▸ research-skills
-  REPO   research-skills
-  BRANCH feat/foo   [WORKTREE .claude/worktrees/foo]
-  DOC    docs/plans/foo.md (plan)
-  SHA    <pushed short sha>
-  SYNC   git fetch origin && git checkout feat/foo && git pull --ff-only   # run FIRST; verify: git rev-parse --short HEAD → <sha>
+Resume ▸ per-CT landmark tasks · stage 5 of 9
+  PROGRAM per-CT landmark tasks — stage 5 of 9
+  BRIEF   <mount>/planning/programs/per-ct-landmark-tasks.md
+  REPO    research-skills
+  BRANCH  feat/foo   [WORKTREE .claude/worktrees/foo]
+  DOC     docs/plans/foo.md (plan)
+  SHA     <pushed short sha>
+  SYNC    git fetch origin && git checkout feat/foo && git pull --ff-only   # run FIRST; verify: git rev-parse --short HEAD → <sha>
 ```
+
+If the work maps to no program, write `PROGRAM (none — not on any board)` rather than dropping the
+line. A blank is indistinguishable from forgetting; an explicit "none" is a finding the next session
+can act on.
 
 - **BRANCH / WORKTREE** — the branch/worktree the work sits on (`main` or a `feat/…`), plus `[WORKTREE <path>]` when you're in a non-primary checkout.
 - **DOC** — the plan doc this session advanced and/or the `docs/session/` doc carrying its substance and next steps. Omit for a pure-hygiene session with no doc to resume from.

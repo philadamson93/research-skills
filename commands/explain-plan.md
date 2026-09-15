@@ -1,6 +1,6 @@
 ---
 name: explain-plan
-description: Convert a plan doc into a self-contained interactive HTML explanation (Mermaid diagrams, blast-radius map, step accordion, inline feedback widgets, clipboard-export button) and then run a drift-verification pass that reconciles the HTML against the source markdown. Use when a plan is too long or repo-wide for prose review to be productive, or when the user invokes `/explain-plan <path>`. Pairs with `/read-plan` (which opens the source markdown) — `/explain-plan` opens the visual companion. Also offered proactively after substantial plan-doc work as an alternative to `/read-plan`, gated by AskUserQuestion. SKIP for trivial plans, typo-fix passes, or completed plans (this is a planning aid, not a historical record).
+description: Convert a plan doc into a self-contained interactive HTML explanation (Mermaid diagrams, blast-radius map, step accordion, inline feedback widgets, clipboard-export button) and then run a drift-verification pass that reconciles the HTML against the source markdown. Use when a plan is too long or repo-wide for prose review to be productive, or when the user invokes `/explain-plan <path>`. Opens with a program panel built from the plan's `Program:` brief — why the program exists, which stage this plan is, what is done, what it waits on, and which decisions are already settled — because a plan read alone never answers "why are we doing this at all". NOT opt-in: every plan written or substantively edited is handed over with its explainer already generated, and an approved explainer that is in sync with the plan's content hash is the ONLY route to `Reviewed: Yes` (`/read-plan` no longer promotes anything, since opening markdown is not a review for a user who does not read markdown). SKIP only when there is no plan doc at all, or the plan is already Completed.
 ---
 
 # explain-plan
@@ -10,15 +10,23 @@ Convert a plan doc into an interactive HTML explanation. Plans for repo-wide cha
 ## When to use
 
 - User invokes `/explain-plan <path-to-plan>` or `/explain-plan` (auto-detect the most-recently-referenced plan in conversation).
-- Right after `/review-plan` finishes substantive edits, as an alternative to `/read-plan` for plans the user reports losing track of.
+- Right after `/review-plan` finishes substantive edits — automatically, not as an alternative to anything. A revised plan is handed back with its explainer regenerated.
 - When the user says "I'm losing the thread" / "show me visually" / "let me see this as a diagram" about a plan doc.
 - **The user pastes back the clipboard export** — a blob starting `# Resume: apply explain-plan feedback` or `# Feedback on <plan>`. Route to *Feedback ingestion* below; resolve the plan from the resume header first (fresh session → read the plan doc + related context, `/next`-style; already in flight → apply against the plan you already hold).
 
+**This is no longer opt-in.** Every plan doc written or substantively edited is handed over *with*
+its explainer already generated — don't wait to be asked. The explainer is the artifact Phil
+actually reads, and an approved in-sync explainer is the **only** route to `Reviewed: Yes`, so a
+plan without one cannot be reviewed at all. The old trivial-plan exception takes care of itself:
+trivial changes don't get plan docs in the first place.
+
 ## When NOT to use
 
-- Plan is trivial (single-file edit, ≤3 steps, no cross-file blast radius).
-- Plan is already `Completed` — this is a planning aid for live work, not a historical artifact.
-- User has explicitly asked for prose review or is mid-implementation.
+- **There is no plan doc.** A trivial change that went straight to main never became a document, so
+  there is nothing to explain. This is now essentially the only case.
+- Plan is already `Completed` — a planning aid for live work, not a historical artifact.
+- The user is mid-implementation and asked a narrow question. Answer the question; the explainer is
+  still owed at the next substantive plan edit, just not right now.
 - The plan is itself a *doc reorg* plan whose payload is mostly text restructuring (HTML adds no visual signal).
 
 ## Writing voice — plain English, and questions about the design not the machinery
@@ -61,9 +69,39 @@ What survives both filters is worth asking. Those questions are about:
 
 ## What to generate
 
-A single self-contained HTML file. **Default output path: sibling to the plan** — `<plan-dir>/<plan-stem>.html`. The HTML is checked into the repo for traceability (NOT gitignored) unless the user overrides. Other locations only if requested.
+A single self-contained HTML file. **Default output path: sibling to the plan** —
+`<plan-dir>/<plan-stem>.html`.
 
-The HTML embeds:
+For a plan on the shared mount (`/mnt/su-vista-uscentral1/chaudhari_lab/phil/planning/<repo>/`) —
+where plans are authored from 2026-09-15 on — that sibling path *is* the deliverable: the mount is
+readable from the Mac, so Phil opens it directly and nothing needs copying. For a plan still in a
+repo's `docs/plans`, write the HTML beside it as before (checked in for traceability, not
+gitignored) **and** copy it to the mount so he can open it without a checkout.
+
+Either way it must end up somewhere he can open. An explainer that exists only inside a VM checkout
+has not been delivered.
+
+**Above everything below — the program panel.** A plan doc explains one slice of a larger effort,
+and read alone it answers "what are we building" while leaving "why are we doing this at all"
+unanswered. So the first thing on screen, before the header card and before any diagram, is a panel
+built from the brief named in the plan's `Program:` header:
+
+- **Why this program exists** — the brief's `Why` paragraph, trimmed to 2–3 sentences. Plain
+  English, no file or function names.
+- **Where this plan sits** — `stage 5 of 9`, with that stage's own one-line description from the
+  brief's `Stages` table.
+- **What is already done, and what this waits on** — the landed stages as a compact done-strip; the
+  blocking ones named together with what blocks them. This is the part a plan doc can never tell
+  you about itself.
+- **Settled — don't re-open** — if the brief's `Decided already` ledger has entries touching this
+  stage, list them as dated one-liners. A reader about to give feedback needs to know which calls
+  are already made, and this is the cheapest place to stop a decision being re-argued.
+- A link to the brief itself.
+
+If the plan has no `Program:` header, or the brief it names does not exist, say so in the panel in
+one plain line. An unplaced plan is a real finding, not something to paper over with blank space.
+
+The HTML then embeds:
 
 1. **Header card** — title, status, owner, branch, source-doc link, source-doc SHA-256 (for drift detection), generated timestamp.
 2. **TL;DR** — 2–4 sentences on what this plan is for and why it's worth doing, distilled from the plan's "What you're building" / status preamble. Plain English (see *Writing voice* above) — no jargon, no preamble, no file or function names. Lead with the goal, not the mechanism: a reader who stops after the TL;DR should know what question this work answers.
@@ -84,6 +122,17 @@ The HTML embeds:
 - **Before/after diagrams** — include ONLY when the change reshapes data flow (e.g., a refactor that moves a query layer between repos, an API migration where the call graph changes, an architectural extraction). SKIP for mechanical token substitutions (e.g., "regex literal → Jinja variable in 3 templates") — two near-identical diagrams differing only in node labels have low signal density. The behavioral diff in those cases lives in the verification step's diff queries (Step 6 EXCEPT-DISTINCT, etc.), not in a static visual. When in doubt, ask the user via AskUserQuestion — phrased as what they get, e.g. "Want a side-by-side of how the data flows today vs after?", not "Include before/after blast-radius renderings?" (see *Writing voice → Questions*).
 - **Step-detail sub-flowcharts** — include when any single step has ≥4 sequenced substeps (like Step 6's 6a–6f); don't bother otherwise.
 - **Review history table** — include when the plan has been through one or more independent reviewer passes (detectable from a "Provenance" / "Review history" section in the markdown, or from sibling `docs/plans/reviews/<plan-stem>-*.md` artifacts). Render a table near the top (right after TL;DR) with columns `Pass | Reviewer | Verdict | Key findings surfaced | Applied to plan`, one row per pass, linking each reviewer artifact. Surface user-driven architectural pivots (e.g., a decision that supersedes a prior RD) as their own row with a distinct "Pivot" verdict chip. This is the highest-signal section for a reader trying to understand *how the plan reached its current shape* — a plan revised across 3+ passes is otherwise opaque about which decisions are settled vs fresh. SKIP for plans with no reviewer history (a freshly-scoped plan has nothing to tabulate). Keep each cell terse; the reviewer artifacts hold the detail.
+
+### Ordering constraint — motivation before machinery
+
+The first screen answers **why**, not **how**. In order: program panel, header card, TL;DR, review
+history if any, then diagrams and machinery. Phil's standing criticism of these HTMLs was that they
+showed one plan in isolation with the motivation buried under mechanism — so if a reader has to
+scroll past a blast-radius diagram to learn what question the work answers, the generation is wrong
+however good the diagrams are.
+
+Cut machinery to make this true. A knobs card, a contracts table or a sub-flowchart that pushes the
+motivation below the fold gets moved down or dropped, not shrunk.
 
 ### Visual design constraints
 
@@ -464,7 +513,18 @@ After writing the HTML, run a drift-reconciliation step. The user explicitly ask
 
 On the headless VM (`phil-sllm-01`) there is no display, so step 7's `open`/`xdg-open` can't render the HTML — and the VM's local disk (repo checkout, git worktree) is invisible to Phil's Mac. The **only** surface both machines share is the `/mnt/su-vista-uscentral1` gcsfuse bucket. So on the VM, *delivery* means copying the explainer there for Phil to open on the Mac.
 
-**When this branch applies.** Both must hold: (a) you're on the VM — `hostname` is `phil-sllm-01` (or an unfamiliar host where local open fails); and (b) the mount destination exists — `/mnt/su-vista-uscentral1/chaudhari_lab/phil/plan-explainers/` is present. If either is false, fall back to the normal local `open` (or, if there's genuinely no way to surface it, just report the local path).
+**First: is the plan already on the mount?** If the plan lives under
+`/mnt/su-vista-uscentral1/chaudhari_lab/phil/planning/<repo>/` — every plan authored from
+2026-09-15 on — then the explainer was written beside it and **delivery is already done.** Report
+the path and stop. Do not copy it anywhere, and do not offer to commit it: a mount-authored plan
+and its explainer never enter git, which is the point.
+
+**Otherwise** — the plan is a frozen in-git plan under a repo's `docs/plans` — the copy branch below
+applies. Both must hold: (a) you're on the VM — `hostname` is `phil-sllm-01` (or an unfamiliar host
+where local open fails); and (b) the mount destination exists —
+`/mnt/su-vista-uscentral1/chaudhari_lab/phil/plan-explainers/` is present. If either is false, fall
+back to the normal local `open` (or, if there's genuinely no way to surface it, just report the
+local path).
 
 **The bundle — copy all three so the page's in-links resolve** (mirrors the repo layout: source + feedback sit beside the HTML):
 - `<stem>.html` → `plan-explainers/<stem>.html`
@@ -476,7 +536,7 @@ On the headless VM (`phil-sllm-01`) there is no display, so step 7's `open`/`xdg
 2. When ready to deliver, `cp` the bundle to the mount directly.
 3. Report the mount path and tell Phil to open it from the Mac (via that same bucket's mount point there). Mention the VM-local path too, so a later commit to the git home can find it.
 
-**Git home is unchanged.** The mount copy is an interim review surface, not the canonical location. The explainer's git home is still `docs/plans/<stem>.html` sibling to the plan, committed at `/read-plan` / `/explain-plan` approval (see *Completion* below). Re-delivering after edits re-copies the bundle (re-vet only if the content changed since the last vetted copy).
+**Where the canonical copy lives depends on where the plan lives.** For a plan authored on the mount (everything from 2026-09-15 on), the mount copy *is* canonical — it never enters git, which is the point. For a plan still in a repo's `docs/plans`, the explainer's git home is `docs/plans/<stem>.html` beside it, committed at `/explain-plan` approval (see *Completion* below), and the mount copy is the review surface. Re-delivering after edits re-copies the bundle (re-vet only if the content changed since the last vetted copy).
 
 ## Feedback ingestion (when the user pastes back from the clipboard button)
 
@@ -539,24 +599,54 @@ Write every response in the plain voice (see *Writing voice*): answer the questi
 
 **Then re-open** the HTML (`open <path>`) so the user sees the annotations in place, per the open-is-required rule above.
 
-## Completion — recording review approval (peer to `/read-plan`)
+## Completion — recording review approval (the only path to `Reviewed: Yes`)
 
-`/explain-plan` is a peer of `/read-plan`: an approved, in-sync HTML review is an equally valid path to `Reviewed: Yes` in the plans index (`/review-plan` already offers the two as interchangeable visual-vs-prose review paths). When the user signals the visual review is **done / approved** — an explicit "done", "approved", "reviewed", "looks good, ship it", or unambiguous synonym, **not** a mid-loop "ok" / "looks good" acknowledgment — record the approval, gated on the HTML being SHA-in-sync with the plan:
+**This is the sole promotion path.** `/read-plan` no longer records a review: Phil does not read
+markdown, so opening the markdown never showed him the plan in a form he reads. An approved,
+in-sync explainer is what makes a plan `Reviewed: Yes`, and nothing else does. When the user signals the visual review is **done / approved** — an explicit "done", "approved", "reviewed", "looks good, ship it", or unambiguous synonym, **not** a mid-loop "ok" / "looks good" acknowledgment — record the approval, gated on the HTML being SHA-in-sync with the plan:
 
 1. **Confirm SHA-sync — this is the gate.** Recompute the plan's current hash (`shasum -a 256 <plan-path>`, or `sha256sum` on linux) and compare it to the HTML's embedded `<meta name="plan-sha256">`. They **must** match. A freshly generated or regenerated HTML qualifies (this skill embeds the current SHA on every write); a *stale* HTML — one the user reviewed before a later plan edit — must **not** flip the row, since that would record approval of a version the user never saw. If they differ, the HTML is stale: regenerate it (per *Idempotency and re-runs*), have the user re-confirm against the fresh HTML, then re-check.
    - Response-callout-only annotations deliberately leave the SHA untouched (see *SHA / drift discipline*), so an HTML carrying only `.resp` callouts is still in-sync and may promote.
 2. **Confirm the plan is settled** — no unaddressed feedback, no open questions left dangling. If something is open, surface it once before closing out: "Before I mark this Reviewed — OQ2 is still Pending. Resolve or defer?"
-3. **Mark the plan as Reviewed.** If the project has a plan-tracking index (`docs/plans/README.md` or equivalent with a `Reviewed` column), update this plan's row to `Reviewed: Yes` — the same step as `/read-plan` Phase 5, just reached via the visual path. Confirm inline: "Marked `<plan>` as Reviewed: Yes in `docs/plans/README.md` (HTML in-sync at `<sha-first-12>`)." If no such index exists, skip silently (don't bootstrap one mid-review — that's `/wrapup`'s job).
-4. **Record the approved SHA (for a returning reviewer, not the round-to-round baseline).** The change layer's baseline already advances every generation via the sidecar (see *Baseline snapshot sidecar*), so the next feedback round diffs against the approved plan automatically — you do **not** need to stamp an anchor to make "since last time" work. Do record the just-approved plan SHA (plans-README row note, or the `Reviewed: Yes` commit SHA) purely so a reviewer returning *after* the sign-off can run `/explain-plan <path> --since <approved-sha>` to see "what changed since I approved." Skip if the project has no place to record it — nothing round-to-round depends on it.
-5. Then offer the natural next steps in one line: commit the plan + HTML via `/commit-review`, run `/review-plan` (it checks whether a fresh session could build it without asking questions), or start implementation.
+3. **Mark the plan as Reviewed.** If the project has a plan-tracking index (`docs/plans/README.md` or equivalent with a `Reviewed` column), update this plan's row to `Reviewed: Yes` — this skill is the only thing that may do so. Confirm inline: "Marked `<plan>` as Reviewed: Yes in `docs/plans/README.md` (HTML in-sync at `<sha-first-12>`)." If no such index exists, skip silently (don't bootstrap one mid-review — that's `/wrapup`'s job).
+4. **Record the approved SHA (for a returning reviewer, not the round-to-round baseline).** The change layer's baseline already advances every generation via the sidecar (see *Baseline snapshot sidecar*), so the next feedback round diffs against the approved plan automatically — you do **not** need to stamp an anchor to make "since last time" work. Do record the just-approved version so a reviewer returning *after* sign-off can see what changed
+   since. Record **two** things, because one is not enough: the plan's **content hash**, and a
+   **retrievable snapshot** of the approved text at
+   `<plan-dir>/<plan-stem>/history/<plan-stem>-<YYYY-MM-DD>-approved.md`. A content hash alone
+   cannot serve `--since`: it is a SHA-256 digest, not a git object, so there is no text behind it
+   to diff against — and for a mount-authored plan there is no commit either. With the snapshot in
+   place, a returning reviewer runs `/explain-plan <path> --since <that-snapshot-path>`. Record the
+   hash in the brief's stage row (it is already the stage record). Skip only if there is nowhere to
+   write the snapshot — nothing round-to-round depends on it.
+5. Then offer the natural next steps in one line, **branching on where the plan lives**. Mount-authored
+   plan: run `/review-plan`, or start implementation — there is nothing to commit. Frozen in-git plan:
+   commit the plan + HTML via `/commit-review`, run `/review-plan`, or start implementation.
 
-Like `/read-plan`, this is gated on an **explicit** approval signal — never infer it from a mid-loop "ok" or the user moving on, and never promote on a drifted HTML.
+This is gated on an **explicit** approval signal — never infer it from a mid-loop "ok" or the user
+moving on, and never promote on a drifted HTML. Since this is the only promotion path, a mistake
+here cannot be caught by another route: a row marked `Yes` off a stale explainer records approval of
+a version he never saw.
+
+## Dated snapshots — this skill owns them
+
+Plans on the mount have no git history, so the version record has to be made deliberately. Because
+this skill now runs on **every** substantive plan edit, it is the thing that owns the snapshot:
+
+**On every generation where the plan's content hash differs from the last snapshot**, write a dated
+copy of the plan beside it at `<plan-dir>/<plan-stem>/history/<plan-stem>-<YYYY-MM-DD>.md` before
+generating the HTML. If a snapshot for today already exists and the content has changed again, suffix
+it (`-2`, `-3`) rather than overwriting — losing an intermediate version is the failure this prevents.
+
+Two notes. This is **not** the change-layer baseline sidecar, which is a separate mechanism for the
+"what changed since last review" diff and lives in `.explain-plan/`; the history directory is the
+durable record a human or a later session reads. And the first handed-over version gets a snapshot
+too — not just revisions — so a plan's history is never missing its own starting point.
 
 ## Idempotency and re-runs
 
 - Re-running on the same plan: regenerate HTML in place. Diff the old vs new HTML; if structure changed substantively, surface that as a "structure delta" note before handing off.
 - If the source plan's SHA-256 differs from the HTML's embedded SHA, the HTML is stale. Warn the user before they review it.
-- The HTML is meant to be committed alongside plan revisions; regenerate on every substantive plan edit.
+- Regenerate on every substantive plan edit. For a frozen in-git plan the HTML is committed alongside the plan revision; for a mount-authored plan nothing is committed — the mount copy is canonical.
 - **A re-run is the moment the change-since-last-review layer earns its keep** — resolve the baseline, author the `CHANGES` object **fresh**, and advance the baseline sidecar on every regeneration, not just the first (see `## Change-since-last-review layer` → *Baseline snapshot sidecar*). The baseline is the *previous generation's* plan snapshot, so each round's delta is that round's edits alone — it never accumulates across rounds. Recompute `CHANGES` from the diff every time; never carry prior-round notes forward. The "structure delta" note above is the coarse version; the change layer is the section-level, reader-facing form of the same idea.
 
 ## Iteration mode

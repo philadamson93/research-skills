@@ -142,6 +142,23 @@ PHI scan catches data leakage; it does not catch editorialization, private worki
 
 **Critical rule**: Claude having read the file during the PHI scan does NOT satisfy this step. Claude already reads every staged file in Step 2 (the threat-catalog pass); that's a PHI scan, not the user's appropriateness review. The user's eyes on the prose are the load-bearing check here — for editorialization, tone, private-context leakage, and "did Claude write something I wouldn't have said myself." Never answer the AskUserQuestion on the user's behalf; never infer ack from earlier conversation; never proceed because "the file looks fine" — only proceed when the user has clicked "Yes, I read it" (or supplied the explicit skip rationale).
 
+**Plans and reviews are no longer part of this set — as long as they stay where they now belong.**
+From 2026-09-15 plans, reviews and rendered explainers are authored on the shared mount
+(`/mnt/su-vista-uscentral1/chaudhari_lab/phil/planning/<repo>/`), not in the repo's `docs/plans`.
+The mount is inside the secure environment, so writing there is not publishing and needs no review
+— which is the whole point, since those documents carry no patient data and there are well over a
+thousand of them. So the set of docs the user must personally read shrinks to the ones that
+genuinely reach git: `README`s, `docs/` prose, `CLAUDE.md`, and anything else committed.
+
+Two things this does **not** change, and do not claim otherwise:
+
+- **`docs/plans` is still tracked in every repo.** Nothing was untracked and no `.gitignore` was
+  edited — the existing plans were *copied* to the mount and left frozen in git. So a staged file
+  under `docs/plans` still costs the user a read, exactly as before. The saving is on new work.
+- **The keyword gate still fires on any staged markdown**, whatever it contains. That behaviour is
+  unchanged. If a commit is nothing but a plan doc, the cheaper move is to author it on the mount
+  instead of committing it at all.
+
 Doc files = anything in: `*.md`, `*.markdown`, `*.rst`, `*.txt`, `*.html`. Get the list:
 
 ```bash

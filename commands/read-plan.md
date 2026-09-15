@@ -1,6 +1,6 @@
 ---
 name: read-plan
-description: Use when the user signals they're ready to read/review a plan doc themselves — phrases like "I'll review", "ready to read it", "let me look", "open it for me", "I'll take a look", or affirmative agreement ("yes", "ok") right after Claude has offered/named a plan doc for review. Also invoked explicitly via `/read-plan [path]`. Runs `open <path>` so the plan launches in the user's default `.md` app (Marked, Typora, Obsidian, VS Code, etc.). Identifies the path from recent conversation context (most-recently-referenced plan doc) or asks via AskUserQuestion if ambiguous. SKIP when the user is asking Claude to read, summarize, or audit the plan — this skill is for handing the plan over to the user to read themselves, not for Claude-side analysis. SKIP if no plan doc has been referenced recently and the user hasn't supplied a path.
+description: Use when the user signals they're ready to read/review a plan doc themselves — phrases like "I'll review", "ready to read it", "let me look", "open it for me", "I'll take a look", or affirmative agreement ("yes", "ok") right after Claude has offered/named a plan doc for review. Also invoked explicitly via `/read-plan [path]`. Runs `open <path>` so the plan launches in the user's default `.md` app (Marked, Typora, Obsidian, VS Code, etc.). Identifies the path from recent conversation context (most-recently-referenced plan doc) or asks via AskUserQuestion if ambiguous. This skill opens a file and nothing more — it does NOT record a review; only an approved, in-sync `/explain-plan` HTML can do that. SKIP when the user is asking Claude to read, summarize, or audit the plan — this skill is for handing the plan over to the user to read themselves, not for Claude-side analysis. SKIP if no plan doc has been referenced recently and the user hasn't supplied a path.
 ---
 
 # read-plan
@@ -11,7 +11,7 @@ The skill exists because Claude reading the plan ≠ the user reading the plan. 
 
 ## Phase 0 — Codex review prerequisite (typically already happened)
 
-For critical plans, the typical flow is `/review-plan` → `/read-plan`. By the time `/read-plan` fires, a Codex critique at `docs/plans/reviews/<plan-stem>-feedback.md` may already have been processed (findings adjudicated, plan revised). If the user invokes `/read-plan` on a plan that has unprocessed feedback (a feedback file exists but Phase 4–6 of `/review-plan` was never run), surface that once before opening: *"Heads up — there's an unprocessed Codex critique at `<path>`. Process it first via `/review-plan`, or open the plan as-is?"*. Don't block; let the user choose.
+For critical plans the typical flow is `/review-plan` → `/explain-plan`; this skill just opens a file along the way and records nothing. By the time `/read-plan` fires, a Codex critique at `docs/plans/reviews/<plan-stem>-feedback.md` may already have been processed (findings adjudicated, plan revised). If the user invokes `/read-plan` on a plan that has unprocessed feedback (a feedback file exists but Phase 4–6 of `/review-plan` was never run), surface that once before opening: *"Heads up — there's an unprocessed Codex critique at `<path>`. Process it first via `/review-plan`, or open the plan as-is?"*. Don't block; let the user choose.
 
 For non-critical plans where Codex review was deliberately skipped, this phase is a no-op.
 
@@ -32,7 +32,11 @@ In all other cases, prompt.
 
 Scan recent turns (and `git log -10 --name-only -- '*plans/*'` if needed) for plan-doc candidates:
 
-- Anything under `docs/plans/`, `plans/`, `design/`, `rfcs/`, `proposals/`
+- **The mount first** — `/mnt/su-vista-uscentral1/chaudhari_lab/phil/planning/<repo>/`. Live plans
+  are authored there and it holds every repo's plans in one place, including ones that exist only on
+  a feature branch. Scanning only the repo is how an unqualified invocation misses the current plan.
+- Then anything under `docs/plans/`, `plans/`, `design/`, `rfcs/`, `proposals/` in the repo — frozen
+  history for plans that predate the move
 - Files named `PLAN.md`, `DESIGN.md`, `RFC.md`, `IMPLEMENTATION.md`, `PROPOSAL.md` at any depth
 - Markdown files Claude has explicitly framed as a plan/spec/RFC in recent turns
 
@@ -100,8 +104,18 @@ When the user does say "done":
 
 - Confirm the plan is in its final state (no unaddressed comments, no open questions left dangling).
 - If anything is still unresolved, surface it once before treating the plan as complete: "Before I close this out — comment in section X about Y is still open. Resolve or defer?"
-- **Mark the plan as Reviewed.** If the project has a plan-tracking index (`docs/plans/README.md` or equivalent with a `Reviewed` column), update this plan's row to `Reviewed: Yes`. Confirm inline: "Marked `<plan>` as Reviewed: Yes in `docs/plans/README.md`." A plan reaches `Yes` only through human review — this path, or an approved, SHA-in-sync `/explain-plan` HTML (the peer visual path, which records approval the same way); `/wrapup` will never auto-promote on its own. If no such index exists, skip silently (don't bootstrap one mid-review-loop; that's `/wrapup`'s job).
-- Then offer the natural next steps in one line: commit the plan via `/commit-review`, run `/review-plan` (it checks whether a fresh session could build the plan without asking questions), or start implementation.
+- **Do not mark the plan as Reviewed.** This skill no longer promotes anything. Phil does not read
+  markdown, so opening the markdown is not the review — the only route to `Reviewed: Yes` is an
+  approved explainer that is in sync with the plan's content. If he says "done" here and wants the
+  review recorded, say so in one line and offer `/explain-plan`: "Opening the markdown doesn't
+  record a review — want the explainer generated so it can be approved?"
+
+  This retires the second promotion path on purpose. Two routes to `Yes` meant the artifact he
+  actually reads was the optional one, and a row could be promoted by a path that never showed him
+  the plan in a form he reads.
+- Then offer the natural next steps in one line: generate the explainer via `/explain-plan` (the
+  only thing that can record the review), run `/review-plan` (it checks whether a fresh session
+  could build the plan without asking questions), or start implementation.
 
 ## Permission prompts
 

@@ -1,13 +1,21 @@
 ---
 name: next
-description: Use when the user opens a session asking "what's next?", "where did we leave off?", "what should I work on?", "any next steps?", or similar — and there's no obvious in-flight task already named. Also invoked explicitly via `/next`. FIRST enumerates git worktrees, fetches, and fast-forwards every checkout from remote so it never surveys stale local refs or misses parallel work (a parallel session may have pushed a milestone commit; sibling worktrees hold in-flight work the main checkout can't see), THEN surveys tracking docs (NEXT.md / docs/next.md / TODO.md / BACKLOG.md / docs/plans/README.md / MEMORY.md / docs/session/ readbacks / recent commits / current branch / all local+remote branches + all worktrees for unmerged or uncommitted work), classifies as "clear next" vs "need direction" vs "genuinely empty", surfaces 2-4 candidate tasks with a recommendation via AskUserQuestion when there's a fork, then deep-dives the chosen task (plan doc + memory + recent code) before handing off a concrete first action. SKIP when the user has already named a specific task to work on, or mid-session when context for the current task is already loaded.
+description: Use when the user opens a session asking "what's next?", "where did we leave off?", "what should I work on?", "any next steps?", or similar — and there's no obvious in-flight task already named. Also invoked explicitly via `/next`. FIRST enumerates git worktrees, fetches, and fast-forwards every checkout from remote so it never surveys stale local refs or misses parallel work (a parallel session may have pushed a milestone commit; sibling worktrees hold in-flight work the main checkout can't see), THEN reads this repo's status board and the program briefs it names on the shared mount — those are the authoritative statement of what is live, since they are one file per repo rather than one per checkout — and only then the in-repo trackers (docs/next.md / NEXT.md / TODO.md / BACKLOG.md / docs/plans/README.md / MEMORY.md / docs/session/ readbacks / recent commits / current branch / all local+remote branches + all worktrees for unmerged or uncommitted work), classifies as "clear next" vs "need direction" vs "genuinely empty", surfaces 2-4 candidate tasks with a recommendation via AskUserQuestion when there's a fork, then deep-dives the chosen task (plan doc + memory + recent code) before handing off a concrete first action. SKIP when the user has already named a specific task to work on, or mid-session when context for the current task is already loaded.
 ---
 
 # next
 
 Session-opener triage. The user is back at the keyboard and wants to know what to do — your job is to survey, surface options, let them steer, then deep-dive the chosen task.
 
-**Lead your first response with a one-line context header naming the repo and current branch** — e.g. `research-skills · main` (add the worktree path when you're in a non-primary checkout: `research-skills · feat/foo · .claude/worktrees/foo`). Phil launches sessions across ~50 repos and multiple worktrees of the same repo, so stating *where you are* up front prevents surveying — or recommending work on — the wrong checkout. Derive it from Phase 0's `git worktree list` + `git branch --show-current`.
+**Lead your first response with the program and the stage, then where you are** — e.g.
+`per-CT landmark tasks · stage 5 of 9 · vista_bench · feat/foo`. Program and stage come from this
+repo's board (Phase 1 step 1); repo and branch still appear, because Phil runs sessions across ~50
+repos and several checkouts of the same repo, so saying *where you are* prevents surveying the
+wrong one — but they are no longer the headline. He asks "why are we doing this" far more often
+than "which branch am I on".
+
+If nothing on the board matches the live work here, say that plainly rather than inventing a
+program. Work that maps to no program is itself a finding worth raising.
 
 Five phases (0–4). Don't skip ahead — **Phase 0 is not optional**; surveying stale refs (or missing a sibling worktree's in-flight work) is the single most common way this skill recommends already-finished or already-in-progress work.
 
@@ -23,16 +31,31 @@ Two things go stale between sessions and both make the survey recommend the wron
 
 ## Phase 1 — Survey the candidates (breadth, not depth)
 
-Read these in parallel — whichever exist:
+Read these in parallel — whichever exist. **The first two outrank everything below them**; they
+live on the shared mount, so one file serves every checkout of the repo and the Mac, where the
+in-repo trackers exist once per checkout and disagree with each other.
 
-1. **`NEXT.md`, `docs/next.md`, `TODO.md`, `BACKLOG.md`** at repo root or under `docs/` — explicit next-step trackers. Highest-priority signal.
-2. **`docs/plans/README.md`** (or `plans/README.md`, `docs/plans.md`) — index of plan docs; look for "In Progress", "Planned", "Next", or similar status entries.
-3. **`MEMORY.md`** — auto-memory pointers, especially `project_*.md` entries flagging current focus, blockers, or in-flight work.
-4. **`docs/session/`** — git-ignored structured session docs (readbacks, VM-verify writeups, "what's next" state) from prior sessions in this checkout. This is where the freshest uncommitted state usually lives; skim the most recently modified files (`ls -t docs/session/ 2>/dev/null`).
-5. **Recent commits**: `git log --oneline -20` and `git status` — what was last touched, what's uncommitted, what branch is checked out.
-6. **Current branch name** — often encodes the in-flight feature (`feat/foo-bar` → "foo bar" is probably the active task).
-7. **All existing branches** (local *and* remote): `git branch -a --sort=-committerdate` — surface any non-merged feature branches so in-flight work doesn't get lost. For any branch that looks active (recent commits, not merged into main), note it as a candidate. Cross-check against `git log main..<branch>` to confirm there's unmerged work.
-8. **All worktrees** (from Phase 0's `git worktree list`): treat each as a candidate source. A branch checked out in a sibling worktree is active in-flight work even if its newest commit isn't recent — especially one with uncommitted changes (Phase 0 step 4). Don't let the main checkout's branch crowd these out; parallel work across worktrees is exactly what gets dropped otherwise.
+1. **The board** — `/mnt/su-vista-uscentral1/chaudhari_lab/phil/planning/boards/<repo>.md`. One
+   block per live item: name, program, stage, state, date, and a `next:` line pointing at the
+   plan. This is the authoritative answer to "what is live here". A repo with no board means no
+   active work has been recorded for it yet — say so, don't guess.
+2. **The brief each board entry names** —
+   `/mnt/su-vista-uscentral1/chaudhari_lab/phil/planning/programs/<name>.md`. Read the `Why` and
+   the `Decided already` ledger before anything else. The ledger is what stops a decision being
+   re-litigated: if a candidate you are about to raise contradicts a dated entry, that is a flag
+   to surface, not a fresh question to ask.
+3. **`NEXT.md`, `docs/next.md`, `TODO.md`, `BACKLOG.md`** at repo root or under `docs/` —
+   legacy next-step trackers. Still worth skimming for detail the board omits, but **treat them
+   as possibly stale**: they are committed files edited inside many checkouts, and measured
+   2026-09-15, vista-eval's existed in 8 different versions across 9 checkouts. Where a tracker
+   and the board disagree, the board wins and the tracker is the thing to fix.
+4. **`docs/plans/README.md`** (or `plans/README.md`, `docs/plans.md`) — index of plan docs; look for "In Progress", "Planned", "Next", or similar status entries.
+5. **`MEMORY.md`** — auto-memory pointers, especially `project_*.md` entries flagging current focus, blockers, or in-flight work.
+6. **`docs/session/`** — git-ignored structured session docs (readbacks, VM-verify writeups, "what's next" state) from prior sessions in this checkout. This is where the freshest uncommitted state usually lives; skim the most recently modified files (`ls -t docs/session/ 2>/dev/null`).
+7. **Recent commits**: `git log --oneline -20` and `git status` — what was last touched, what's uncommitted, what branch is checked out.
+8. **Current branch name** — often encodes the in-flight feature (`feat/foo-bar` → "foo bar" is probably the active task).
+9. **All existing branches** (local *and* remote): `git branch -a --sort=-committerdate` — surface any non-merged feature branches so in-flight work doesn't get lost. For any branch that looks active (recent commits, not merged into main), note it as a candidate. Cross-check against `git log main..<branch>` to confirm there's unmerged work.
+10. **All worktrees** (from Phase 0's `git worktree list`): treat each as a candidate source. A branch checked out in a sibling worktree is active in-flight work even if its newest commit isn't recent — especially one with uncommitted changes (Phase 0 step 4). Don't let the main checkout's branch crowd these out; parallel work across worktrees is exactly what gets dropped otherwise.
 
 Skim, don't read in full. The goal here is to *identify* candidates, not understand them deeply. Run the file reads in parallel.
 
@@ -61,9 +84,15 @@ Don't deep-dive any candidate yet. The whole point of this phase is to let the u
 
 ## Phase 4 — Deep-dive the chosen task
 
-Once a task is chosen (whether via Phase 2 "clear next" or Phase 3 selection), **first pin where it lives** — the current checkout, a sibling worktree path (from Phase 0's `git worktree list`), or a remote-only branch — and run every read below against *that* source, not the invocation checkout. A task that won via Phase 1 step 7 lives in another worktree; reading `HEAD` here would inspect the wrong branch. Then gather full context:
+Once a task is chosen (whether via Phase 2 "clear next" or Phase 3 selection), **first pin where it lives** — the current checkout, a sibling worktree path (from Phase 0's `git worktree list`), or a remote-only branch — and run every read below against *that* source, not the invocation checkout. A task that won via Phase 1 step 9 lives in another worktree; reading `HEAD` here would inspect the wrong branch. Then gather full context:
 
-- **Plan doc** — read in full if it exists (`docs/plans/<task>.md` or wherever the project keeps them).
+- **The brief** — if the task belongs to a program, re-read that brief's stage row and ledger for
+  this specific stage. It tells you what the stage is waiting on and what has already been decided.
+- **Plan doc** — read in full if it exists. Look on the mount first
+  (`/mnt/su-vista-uscentral1/chaudhari_lab/phil/planning/<repo>/<task>.md`), which holds every
+  repo's plans in one place including ones that live only on a feature branch; fall back to
+  `docs/plans/<task>.md` in the repo. A plan copied to the mount carries a `Program:` line naming
+  its brief and stage.
 - **Session doc** — read the task's `docs/session/` readback / state doc in full if one exists; it carries the substance and next steps the resume block pointed at.
 - **Memory entries** — grep `MEMORY.md` for the task name and read any matching `*.md` files in the memory directory.
 - **Journal / decision entries** — if the project has `docs/journal/`, `docs/decisions/`, or similar, check for recent entries naming the task.
@@ -86,5 +115,9 @@ End with a hand-off line: "Ready to start with <action>, or want to dig into som
 - **Don't deep-dive multiple candidates in Phase 1.** That wastes context before the user has steered.
 - **Don't recommend a task that's already shipped.** Verify status against `git log` and plan-doc state — trackers lag behind reality.
 - **Don't skip AskUserQuestion when there are 2+ candidates.** Inline "should I do X or Y?" is the wrong shape here.
+- **Don't lead with the repo and branch.** Program and stage come first now; a repo-and-branch
+  headline answers a question Phil rarely asks.
+- **Don't trust an in-repo tracker over the board.** They fork per checkout, the board cannot.
+- **Don't re-ask a question the brief's ledger already answered.** Surface the contradiction instead.
 - **Don't bootstrap a NEXT.md if it doesn't exist.** That's a wrapup-skill concern. Just note its absence.
 - **Don't run this mid-session** when the user is already deep in a task and asks a tangentially-related question. This skill is for the session-opener case.

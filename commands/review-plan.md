@@ -42,14 +42,14 @@ Args: `/review-plan <plan-path> [<output-path>] [--reviewer codex|claude]`.
   - *Codex (Recommended — cross-model independence)* — unless one of the "recommend Claude" conditions in "When to offer" applies, in which case the Claude option leads with `(Recommended)` instead.
   - *Fresh Claude Code subagent (same model, no conversation context)*
   Don't silent-default — the choice has cost/blind-spot tradeoffs and the user should make it explicitly. The only exception: if the proactive offer (the four-option AskUserQuestion above) already produced the reviewer choice in the same turn, carry it forward without re-asking.
-- **output-path** — optional. **Default is a `reviews/` directory beside the plan**, wherever the
-  plan lives. For a plan on the shared mount that means
-  `/mnt/su-vista-uscentral1/chaudhari_lab/phil/planning/<repo>/reviews/<plan-stem>-feedback.md` —
-  writing it back into the repo's `docs/plans/reviews/` would put a brand-new review into git and
-  re-incur the review cost that authoring on the mount exists to remove. Use the in-repo path only
-  when the plan itself is a frozen in-git plan. Default by reviewer:
-  - `codex` → `<plan-dir>/reviews/<plan-stem>-feedback.md`
-  - `claude` → `docs/plans/reviews/<plan-stem>-feedback-claude.md`
+- **output-path** — optional.
+  **Default is a `reviews/` directory beside the plan.** For a plan on the shared mount that is
+  `/mnt/su-vista-uscentral1/chaudhari_lab/phil/planning/<repo>/reviews/`. For a plan that still
+  lives in a repo's `docs/plans`, use that repo's mount tree at the same path rather than writing
+  beside it — an in-repo review either costs a document read at commit time, or, where
+  `docs/plans` is gitignored, is a file with no copy anywhere. Default by reviewer:
+  - `codex` → `<reviews-dir>/<plan-stem>-feedback.md`
+  - `claude` → `<reviews-dir>/<plan-stem>-feedback-claude.md`
   Create the parent dir if missing. The distinct filenames matter — running both reviewers on the same plan should not overwrite each other's output.
 - **Repo-local checklist** — look for `.claude/references/plan-review-checklist.md`. If found, include in the reviewer prompt. If not found, proceed with the generic prompt and warn once that a repo-grounded checklist would yield a sharper review. The checklist is authoritative for repo-specific specifics: sibling-repo contracts, schema/dataset versions, materialized output shapes, precedents for splitting code into reusable pieces. The always-checked items below (sibling-repo contracts, and building-too-early) run whether or not a checklist exists.
 - **Sibling repo docs** — if `docs/claude_ops.md` and/or `docs/lessons.md` exist, include them as required reads in the prompt. Otherwise omit those references.
@@ -64,7 +64,7 @@ Branch on reviewer. Both branches produce a feedback file at `<output-path>` mat
 Build the prompt; pipe via stdin (cleaner than escaping a multi-line argv string):
 
 ```bash
-codex exec -s workspace-write - <<'PROMPT'
+codex exec -s workspace-write --add-dir /mnt/su-vista-uscentral1/chaudhari_lab/phil/planning - <<'PROMPT'
 You are doing a read-only design audit of a plan doc. Do not implement. Do not edit the plan file.
 
 Plan: <plan-path>
@@ -107,7 +107,11 @@ Notes on flags:
 
 - `-s workspace-write` selects the sandbox policy (`codex exec -s <read-only|workspace-write|danger-full-access>`).
   **`workspace-write`, not `read-only`, is correct even for a read-only *audit***: the reviewer never edits
-  code, but it does have to write its own feedback file into `docs/plans/reviews/`.
+  code, but it does have to write its own feedback file.
+- **`--add-dir` is required, not optional.** `workspace-write` makes only the repo writable, so a
+  feedback file destined for the mount fails with a permission error and no file is produced — the
+  run looks like it worked and nothing is there. `--add-dir /mnt/su-vista-uscentral1/chaudhari_lab/phil/planning`
+  is what makes the destination writable. Do not drop it.
 - **Verify the feedback FILE, never the exit code.** When the invocation is piped (`... | tail`), the shell
   reports the *pipeline's* status, so a failed `codex` can still look like exit 0 while having written
   nothing. Always confirm the output file exists and is non-empty before reading it.
@@ -123,7 +127,7 @@ If `codex exec` fails mid-run (not the pre-check above — an actual exec error)
 
 Use the `Agent` tool with `subagent_type: "general-purpose"`. The subagent inherits the parent's model but has no conversation context — that's the independence. Prefer foreground (so the user sees progress) unless the user has explicitly asked for background.
 
-**Permission prerequisite:** the subagent must be able to `Write` to the output path. By default subagents can't write outside their allowlist. Before the first invocation in a project, ensure `Write(docs/plans/reviews/**)` is allowlisted in `~/.claude/settings.local.json` (user-level, applies to all repos) or the project's `.claude/settings.local.json`. If the subagent reports Write denials, that's the missing allowlist — surface this and offer to add it via `/update-config`.
+**Permission prerequisite:** the subagent must be able to `Write` to the output path, which is outside the repo. If it reports a Write denial, add the planning root to `permissions.additionalDirectories` in `~/.claude/settings.json` — `"/mnt/su-vista-uscentral1/chaudhari_lab/phil/planning"` — and offer to do it via `/update-config`. Don't pre-emptively grant it: try the run first, since the denial may not occur.
 
 Critical instructions to include in the prompt:
 
@@ -132,7 +136,7 @@ Critical instructions to include in the prompt:
 - Working directory and absolute paths for plan + output, since subagents start with no working-directory context from the parent.
 - "Stop after writing the feedback file. Do not implement. Do not edit the plan. Do not commit."
 - Tell the subagent to reply with one sentence noting the feedback file path and the verdict — the harness surfaces the rest, and verbose reply burns the parent's context.
-- The `general-purpose` subagent's system prompt may include a rule against writing report/summary/findings/analysis .md files. That rule has an exception for **structured plan-review artifacts at controlled paths under `docs/plans/reviews/*-feedback*.md`** — instruct the subagent to write the feedback file regardless of the no-summary rule, since the path and structure are part of the skill's contract.
+- The `general-purpose` subagent's system prompt may include a rule against writing report/summary/findings/analysis .md files. That rule has an exception for **structured plan-review artifacts at the controlled `reviews/*-feedback*.md` path resolved above** — instruct the subagent to write the feedback file regardless of the no-summary rule, since the path and structure are part of the skill's contract.
 
 The prompt body otherwise mirrors the Codex prompt: required reads, mapping step, source precedence, verification of specific plan claims (the parent should pre-list which assumptions to spot-check, since the subagent has no other source for "what to look closely at"), and the Feedback file structure block below.
 

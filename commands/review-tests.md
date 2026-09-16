@@ -41,13 +41,18 @@ Args: `/review-tests <plan-path> [<output-path>] [--reviewer codex|claude]`.
 
 - **plan-path** — required. Verify it exists. If invoked without args, ask via `AskUserQuestion` using the same plan-doc detection logic as `/read-plan` Phase 1.
 - **reviewer** — required, but never silently defaulted. If `--reviewer codex` or `--reviewer claude` was passed in args, use that. **Otherwise, ask via `AskUserQuestion`** before doing anything else (unless the proactive offer already produced the choice in the same turn — carry it forward).
-- **output-path** — optional. Default depends on reviewer:
-  - `codex` → `docs/plans/reviews/<plan-stem>-test-coverage-feedback.md`
-  - `claude` → `docs/plans/reviews/<plan-stem>-test-coverage-feedback-claude.md`
+- **output-path** — optional.
+  **Default is a `reviews/` directory beside the plan.** For a plan on the shared mount that is
+  `/mnt/su-vista-uscentral1/chaudhari_lab/phil/planning/<repo>/reviews/`. For a plan that still
+  lives in a repo's `docs/plans`, use that repo's mount tree at the same path rather than writing
+  beside it — an in-repo review either costs a document read at commit time, or, where
+  `docs/plans` is gitignored, is a file with no copy anywhere. Default by reviewer:
+  - `codex` → `<reviews-dir>/<plan-stem>-test-coverage-feedback.md`
+  - `claude` → `<reviews-dir>/<plan-stem>-test-coverage-feedback-claude.md`
   Create the parent dir if missing. Distinct filenames matter — running both reviewers should not overwrite.
 - **Repo-local checklist** — look for `.claude/references/test-review-checklist.md`. If found, include in the reviewer prompt. If not found, proceed with the generic prompt and warn once that a repo-grounded checklist would yield a sharper review.
 - **Sibling repo docs** — if `docs/claude_ops.md` and/or `docs/lessons.md` exist, include them as required reads. Otherwise omit those references.
-- **Prior implementation feedback** — look for `docs/plans/reviews/<plan-stem>-implementation-feedback.md`. If found, include in the prompt with explicit instructions: "do not re-flag items already adjudicated here." This avoids the reviewer rediscovering gaps the user already kept-or-dismissed.
+- **Prior implementation feedback** — look for `<plan-stem>-implementation-feedback.md` in the same `reviews/` directory resolved above, then fall back to the repo's `docs/plans/reviews/` for older reviews written before the move. If found, include in the prompt with explicit instructions: "do not re-flag items already adjudicated here." This avoids the reviewer rediscovering gaps the user already kept-or-dismissed.
 - **Diff scope** — capture the current uncommitted state via `git status` and `git diff` (both staged and unstaged) plus a list of untracked files. Include the diff stat (`git diff --stat`) and untracked filenames in the prompt; let the reviewer read full file contents itself.
 - **Codex availability check** — if reviewer = `codex`, run `command -v codex` first. If absent, surface and offer to switch to the fresh Claude subagent (the one auto-fallback path; user-visible).
 
@@ -66,7 +71,7 @@ Branch on reviewer. Both branches produce a feedback file at `<output-path>` mat
 Build the prompt; pipe via stdin:
 
 ```bash
-codex exec -s workspace-write - <<'PROMPT'
+codex exec -s workspace-write --add-dir /mnt/su-vista-uscentral1/chaudhari_lab/phil/planning - <<'PROMPT'
 You are doing a read-only test-coverage audit. Scope: tests only. Identify code paths, branches, edge cases, and contracts added by this plan's uncommitted changes that are NOT exercised by any test. Do not edit any code (the implementer will apply your suggestions if agreed).
 
 Plan: <plan-path>
@@ -163,7 +168,11 @@ Notes on flags:
 
 - `-s workspace-write` selects the sandbox policy (`codex exec -s <read-only|workspace-write|danger-full-access>`).
   **`workspace-write`, not `read-only`, is correct even for a read-only *audit***: the reviewer never edits
-  code, but it does have to write its own feedback file into `docs/plans/reviews/`.
+  code, but it does have to write its own feedback file.
+- **`--add-dir` is required, not optional.** `workspace-write` makes only the repo writable, so a
+  feedback file destined for the mount fails with a permission error and no file is produced — the
+  run looks like it worked and nothing is there. `--add-dir /mnt/su-vista-uscentral1/chaudhari_lab/phil/planning`
+  is what makes the destination writable. Do not drop it.
 - **Verify the feedback FILE, never the exit code.** When the invocation is piped (`... | tail`), the shell
   reports the *pipeline's* status, so a failed `codex` can still look like exit 0 while having written
   nothing. Always confirm the output file exists and is non-empty before reading it.

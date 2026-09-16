@@ -11,7 +11,7 @@ The skill exists because Claude reading the plan ≠ the user reading the plan. 
 
 ## Phase 0 — Codex review prerequisite (typically already happened)
 
-For critical plans the typical flow is `/review-plan` → `/explain-plan`; this skill just opens a file along the way and records nothing. By the time `/read-plan` fires, a Codex critique at `docs/plans/reviews/<plan-stem>-feedback.md` may already have been processed (findings adjudicated, plan revised). If the user invokes `/read-plan` on a plan that has unprocessed feedback (a feedback file exists but Phase 4–6 of `/review-plan` was never run), surface that once before opening: *"Heads up — there's an unprocessed Codex critique at `<path>`. Process it first via `/review-plan`, or open the plan as-is?"*. Don't block; let the user choose.
+For critical plans the typical flow is `/review-plan` → `/explain-plan`; this skill just opens a file along the way and records nothing. By the time `/read-plan` fires, a Codex critique at `<plan-stem>-feedback.md` — look in the `reviews/` directory beside the plan (for a plan in a repo's `docs/plans`, that repo's mount tree), falling back to the repo's `docs/plans/reviews/` for reviews written before the move — may already have been processed (findings adjudicated, plan revised). If the user invokes `/read-plan` on a plan that has unprocessed feedback (a feedback file exists but Phase 4–6 of `/review-plan` was never run), surface that once before opening: *"Heads up — there's an unprocessed Codex critique at `<path>`. Process it first via `/review-plan`, or open the plan as-is?"*. Don't block; let the user choose.
 
 For non-critical plans where Codex review was deliberately skipped, this phase is a no-op.
 

@@ -32,7 +32,12 @@ implementation → /review-implementation → /commit-review → push
 Args: `/review-implementation <plan-path> [<output-path>]`.
 
 - **plan-path** — required. Verify it exists. If invoked without args, ask via `AskUserQuestion` using the same plan-doc detection logic as `/read-plan` Phase 1 (most-recently-referenced plan in this session, or scan `docs/plans/`).
-- **output-path** — optional. Default: `docs/plans/reviews/<plan-stem>-implementation-feedback.md`. Create the parent dir if missing.
+- **output-path** — optional.
+  **Default is a `reviews/` directory beside the plan.** For a plan on the shared mount that is
+  `/mnt/su-vista-uscentral1/chaudhari_lab/phil/planning/<repo>/reviews/`. For a plan that still
+  lives in a repo's `docs/plans`, use that repo's mount tree at the same path rather than writing
+  beside it — an in-repo review either costs a document read at commit time, or, where
+  `docs/plans` is gitignored, is a file with no copy anywhere. Default: `<reviews-dir>/<plan-stem>-implementation-feedback.md`. Create the parent dir if missing.
 - **Repo-local checklist** — look for `.claude/references/implementation-review-checklist.md`. If found, include in the Codex prompt. If not found, proceed with the generic prompt and warn once that a repo-grounded checklist would yield a sharper review.
 - **Sibling repo docs** — if `docs/claude_ops.md` and/or `docs/lessons.md` exist, include them as required reads.
 - **Diff scope** — capture the current uncommitted state via `git status` and `git diff` (both staged and unstaged) plus a list of untracked files. Codex needs to know exactly what code it's auditing. Include the diff stat (`git diff --stat`) and the names of untracked files in the prompt; let Codex read full file contents itself for anything it needs to inspect deeply.
@@ -47,7 +52,7 @@ Verify there is *something* to review:
 Build the prompt; pipe via stdin (cleaner than escaping a multi-line argv string):
 
 ```bash
-codex exec -s workspace-write - <<'PROMPT'
+codex exec -s workspace-write --add-dir /mnt/su-vista-uscentral1/chaudhari_lab/phil/planning - <<'PROMPT'
 You are doing a read-only implementation audit. The user has implemented a plan; verify the uncommitted code matches the plan's spec. Do not edit any code or docs. Do not commit.
 
 Plan: <plan-path>
@@ -122,7 +127,11 @@ Notes on flags:
 
 - `-s workspace-write` selects the sandbox policy (`codex exec -s <read-only|workspace-write|danger-full-access>`).
   **`workspace-write`, not `read-only`, is correct even for a read-only *audit***: the reviewer never edits
-  code, but it does have to write its own feedback file into `docs/plans/reviews/`.
+  code, but it does have to write its own feedback file.
+- **`--add-dir` is required, not optional.** `workspace-write` makes only the repo writable, so a
+  feedback file destined for the mount fails with a permission error and no file is produced — the
+  run looks like it worked and nothing is there. `--add-dir /mnt/su-vista-uscentral1/chaudhari_lab/phil/planning`
+  is what makes the destination writable. Do not drop it.
 - **Verify the feedback FILE, never the exit code.** When the invocation is piped (`... | tail`), the shell
   reports the *pipeline's* status, so a failed `codex` can still look like exit 0 while having written
   nothing. Always confirm the output file exists and is non-empty before reading it.

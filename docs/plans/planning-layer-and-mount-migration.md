@@ -3,7 +3,7 @@ Program: `<mount>/chaudhari_lab/phil/planning/programs/planning-layer.md` — st
 
 # A planning layer above plan docs, and moving plans off git
 
-**Status: APPROVED 2026-09-14 (Phil), Reviewed: Yes (SHA `fc335cc1603e`). Stage 0 landed on `main` @892ffb5; Stage 1 landed on `main` @22ae467 (paper-trail symlink half @09f8905). Stages 2-6 remain.**
+**Status: Completed** (2026-09-16) — all seven stages landed. Stage 0 @892ffb5 · Stage 1 @22ae467 (paper-trail symlink @09f8905) · Stages 2-4 on the mount (7 briefs, 12 boards, 1,377 plan files copied, 30 plans stamped) · Stage 5 @788882e · Stage 6 @6e1afc2. Approved 2026-09-14 (Phil), Reviewed: Yes. Live status now lives in the program brief at `/mnt/su-vista-uscentral1/chaudhari_lab/phil/planning/programs/planning-layer.md`, not here.
 
 ## Goal
 

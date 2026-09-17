@@ -48,6 +48,9 @@ desk to someone who knows the research cold and has never opened the repo.
   record it. (The tiers for what's worth asking are under *Standing rules*.)
 - Any multiple-choice question goes through the `AskUserQuestion` tool, not inline prose.
 
+**When you need me to run something**, hand me one line I can paste, never instructions to follow.
+The format and the tmux rules it has to survive are under *Which machine to run on*.
+
 The test: read it back as if a person wrote it in a hurry but knew the material cold. If it sounds
 like a press release, cut it down. If I answer a question with "what does that mean?", that's a
 writing failure, not a misunderstanding.
@@ -145,8 +148,9 @@ How we'll know it worked:
   advance ("above 0.8 do A, otherwise B") so it resolves while you work instead of costing a
   pause. A finding that contradicts the plan is not a handoff: rethink it, write down what
   changed, keep going.
-- If a step needs hardware with no Claude Code on it, name its script under *Files to Modify*
-  and give that script its own success criteria here.
+- If a step needs hardware with no Claude Code on it, name its script under *Files to Modify*,
+  give that script its own success criteria here, and write out the one-line command I paste to
+  run it (see *Which machine to run on*).
 
 ## Landing & cleanup
 - The branch this lands on, or "straight on main" for docs and small fixes.
@@ -261,18 +265,47 @@ have, so those steps run on whichever box has it.
   on this machine. Check the repo's own `uv` environment. That's a setup question, not a ban.
 - Data paths may be local or specific to one VM. Confirm a path exists before reading or writing.
 
-**When a step needs hardware that has no Claude Code session on it**, the deliverable is one
-script I can paste onto that box and run. Nobody is watching it, so it has to judge itself.
+**When a step needs a machine you can't run it on yourself** — the GPU box, a host whose
+credentials only I have, anywhere without a Claude Code session — the hand-off is **a command I
+paste**, not prose telling me what to do. "Log into the GPU box and re-run the embedding job" is
+not a hand-off. One line I can paste is. Same rule for anything on this machine you can't do
+either, like an interactive `gcloud auth login`.
 
-- Self-contained: environment setup (`uv sync`, any exports) and the run, in a single command.
+- **Commit the script, hand over its invocation.** `bash scripts/check_motor_cache.sh`, or
+  `SAMPLE=200 uv run scripts/probe_embeddings.py`. The script is versioned, reviewable and
+  re-runnable; a block of shell in a chat message is none of those. This is already the pattern —
+  `scripts/check_run_vista_02_extract.sh` in `femr-private` is one.
+- **Self-contained**: environment setup (`uv sync`, any exports) and the run, in that one command.
+  Nobody is watching it, so it judges itself — exit codes, files that must exist and be non-empty,
+  numbers in range. Tell me in one line what a pass looks like.
+- **Say where to run it.** Hostname first, then the line, then the pass condition.
 - It writes results to the shared bucket mount (`su-vista-uscentral1`, mounted on the Mac and on
   the Claude-capable VMs), not into a document. Whichever session needs the numbers reads them
   off the mount.
-- It checks its own results: exit codes, files that must exist and be non-empty, numbers in range.
 - Read the results off the mount and write the narrative yourself. For eval runs that means the
   generated HTML at `<results-root>/<version>/<modality>/<dataset>/reports/<model>_<dataset>.html`
   plus the per-task and per-example parquet files. A one-line pointer to results in a backlog or
   `next.md` entry is fine.
+
+### What "pasteable" actually means — I run tmux
+
+Every command you hand me lands in an interactive bash prompt inside tmux. That prompt is not
+inert and a multi-line paste does not arrive intact. All four of these have already cost us time:
+
+- **No heredocs and no trailing-backslash continuations.** tmux submits lines early or runs them
+  together, and the error that comes back looks like a bug in the work rather than in the paste.
+  That burned several rounds of debugging non-problems (2026-09-17).
+- **Every line stands alone.** `cd X && cmd` is fine. Setting a variable on one line and using it
+  on the next is not — that is where an "unbound variable" error came from. Environment variables
+  are a good way to make one line configurable; put them on the same line as the command.
+- **No backticks inside double quotes.** In a shell string those are command substitution, not
+  markdown quoting, so a progress message that names `git add -A` in backticks actually runs it,
+  silently. Single-quote command names, or drop the quotes.
+- **No `!!` in a message.** Interactive bash history-expands it even inside double quotes and
+  splices my previous command into your text, which only shows up on the day something already
+  went wrong. Write `ERROR:` instead, or start the block with `set +H`.
+
+If it won't fit on one line, that is the signal it should have been a committed script.
 
 ---
 

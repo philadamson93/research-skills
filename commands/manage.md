@@ -1,6 +1,6 @@
 ---
 name: manage
-description: The one long-running session that holds the big picture across the eight-to-ten sessions running at once, none of which can see each other. Joins running sessions × repo boards × program briefs so every session resolves to a program, a stage and a plan-doc location; watches read-only for cross-repo drift and stage-order mistakes; advances mechanical steps to the next real gate; nudges a session that has drifted from the standing rules; and routes questions to Phil through a board-state queue, answering none of them. TRIGGER only when Phil explicitly starts or resumes the manager — "/manage", "start the manager", "what's everything doing", "run the manager loop". SKIP entirely inside a working session: a task session never runs this, it just keeps its own board entry current. HARD CONSTRAINT — the manager never decides anything a task raised for Phil, and never resolves a conflict between sessions.
+description: The one long-running session that holds the big picture across the eight-to-ten sessions running at once, none of which can see each other. Joins running sessions × repo boards × program briefs so every session resolves to a program, a stage and a plan-doc location; watches read-only for cross-repo drift and stage-order mistakes; restarts a session that stopped short of an obvious procedural next step, by sending it that command, and advances mechanical steps only as far as the next real gate; nudges a session that has drifted from the standing rules; and routes questions to Phil through a board-state queue, answering none of them. TRIGGER only when Phil explicitly starts or resumes the manager — "/manage", "start the manager", "what's everything doing", "run the manager loop". SKIP entirely inside a working session: a task session never runs this, it just keeps its own board entry current. HARD CONSTRAINT — the manager never decides anything a task raised for Phil, and never resolves a conflict between sessions.
 ---
 
 # manage
@@ -33,21 +33,48 @@ resource. So:
 
 - The map comes from **transcript metadata and mount files only** — never from asking a session
   what it is doing.
-- A peer session's context is touched **only** when sending it a confirmed finding or a guideline
-  nudge aimed at that one session. Never a broadcast. Never a status request.
+- A peer session's context is touched **only** for one of three reasons, each aimed at that one
+  session: a confirmed finding, a guideline nudge, or an advance (Phase 2). Never a broadcast.
+  Never a status request.
 - If a tick sends no messages, it cost the fleet nothing. That is the normal case.
+
+**`ListAgents` is free and does not touch anyone.** It reports each background session's name and
+its state — `busy`, `shell`, `idle`, `waiting`. Those states are the manager's cheapest and most
+direct signal, and they are not available from any file:
+
+- **`idle`** — the session finished its turn and stopped. This is what "parked" means (Phase 2).
+- **`waiting`** — the session is sitting on a question for Phil. Straight into the Phase 4 queue,
+  whether or not its board entry says so.
+
+Call it every tick. Names from `ListAgents` are also the addresses `SendMessage` needs. A session
+Phil is driving himself in a terminal will not appear there; that is fine, it has a human watching.
 
 ## Phase 0 — Build the map (the lead value)
 
 Join three sources. All three are cheap and none involve a session.
 
 **Running sessions** — `~/.claude/projects/<cwd-slug>/<session-id>.jsonl`. Each line carries `cwd`,
-`gitBranch`, `sessionId` and `timestamp`; `message.usage.output_tokens` accumulates the spend; the
-file's **mtime is last activity**. A session is live if its transcript was touched inside the tick
-window. Take `cwd` and `gitBranch` from the **newest** line that has them, not the first — a session
+`gitBranch`, `sessionId` and `timestamp`; the file's **mtime is last activity**.
+Take `cwd` and `gitBranch` from the **newest** line that has them, not the first — a session
 that switched worktrees mid-run would otherwise be placed where it started. `gitBranch` frequently
 reads `HEAD` (detached, or a worktree); when it does, read the branch off the checkout itself
 rather than reporting `HEAD` as if it were a branch name.
+
+> ⚠ **A fresh transcript does NOT mean a live session.** A session's last write lands when it
+> shuts down, so one that just exited looks maximally fresh. On 2026-09-17 three of eleven
+> "live" sessions had already ended; one had exited nine minutes into a thirty-minute window and
+> still sat in the same checkout as a genuinely live session — which fired *two sessions, one
+> worktree*, the scariest finding here, falsely, on the first tick that used it.
+>
+> **Liveness is `~/.claude/jobs/<session-id-8>/` still existing.** That directory is removed when
+> the job ends. Cross-check against `ListAgents`, which under-counts (background jobs only) rather
+> than over-counting. Never report two sessions as concurrent on mtime alone.
+
+**Context occupancy per session.** Parse the **last** `message.usage` block in the transcript and
+sum `input_tokens + cache_creation_input_tokens + cache_read_input_tokens + output_tokens`. That is
+how full the window is *now* — it drops after a compaction, which is the behaviour you want. It is
+not cumulative spend, and `output_tokens` alone is not a budget signal. Read the whole JSON line;
+a `[^}]*` regex truncates on the nested `output_tokens_details` object and silently under-reports.
 
 > ⚠ **`find` on this VM is bfs, not GNU findutils, and it rejects relative `-newermt`.**
 > `find … -newermt '30 minutes ago'` *errors*, and with `2>/dev/null` that looks identical to "no
@@ -86,7 +113,7 @@ live item, each naming its program and stage.
 Emit one row per live session:
 
 ```
-<session-id-8>  <repo> · <branch>  →  <program> stage N/M  →  <plan path>   [<tokens>k, last <MM-DD HH:MM>]
+<session-id-8>  <repo> · <branch>  →  <program> stage N/M  →  <plan path>   [<ctx>k, <state>, last <MM-DD HH:MM>]
 ```
 
 Resolve each session by matching its `cwd` and `gitBranch` against the board entries, then the
@@ -116,6 +143,8 @@ Each check answers yes or no about a file or a process. No code, no diffs, no ju
 | **session maps to no program** | A live session that resolves to no board entry. Untracked work, and exactly the higher-level thing worth catching. |
 | **board over cap** | A board past 100 lines, or carrying an item marked landed. Means finished work is accumulating where only live work belongs. |
 | **brief pointer broken** | `planning/check-brief-links.py` exits non-zero. Cheap, mechanical, and it catches a plan that moved or a stage number that drifted. |
+| **plan handed over with no explainer** | A plan doc named by a **live board item** has no `<stem>.html` beside it on the mount. Phil does not read markdown, so that plan has not actually been handed over. Scope this to live items only — see below. |
+| **session parked with room left** | A session `ListAgents` reports as `idle`, whose context is under ~300k, and whose next step is one of the procedural ones in Phase 2. This is the trigger that feeds Phase 2; on its own it is a finding, not an action. |
 
 **Two checks are deliberately NOT implemented**, because both are false-positive factories and
 would train Phil to ignore the digest:
@@ -125,6 +154,19 @@ would train Phil to ignore the digest:
 - ~~"uncommitted work with no live session"~~ — fires on every `docs/session/` note, which is
   git-ignored by design.
 
+**Scope the explainer check to live items, and test existence only.** Swept across every plan on
+the mount it is worthless: measured 2026-09-17, **411 of 413 plans** would flag. Two numbers
+explain why, and both are traps worth remembering:
+
+- 220 have no `.html` at all — most are frozen plans nobody will ever reread.
+- 191 have an `.html` older than the `.md`. That number is an artifact: copying a file onto the
+  mount resets its mtime, so "`.md` newer than `.html`" measures the last copy, not staleness.
+  **Do not use mtime for the explainer check.** Existence is a fact; mtime here is noise. That is
+  the second way mtime lies on this setup — see the liveness warning in Phase 0.
+
+Scoped to plans a live board item actually points at, it fires on a handful, and each one is a
+plan Phil has been handed and cannot read.
+
 **Retire a check by measured usefulness, not by one bad firing.** Keep a tally per check —
 fired / useful — in the digest. Below about 90% useful over 20 firings, retire *that check* and say
 so; do not retire the manager. Zero tolerance selects for checks that never fire, which is its own
@@ -132,13 +174,69 @@ failure.
 
 ## Phase 2 — Advance (mechanical only)
 
-For a session whose next step is procedural, advance it. Judgement is not procedural.
+A session that has stopped short of an obvious procedural next step is the most common thing worth
+fixing here, and the cheapest. Restarting it costs one short message. Leaving it parked costs a
+whole tick of nothing happening, and Phil finds out when he next looks.
 
-| State | Advance to |
+**The trigger is a parked session.** All three must hold:
+
+1. `ListAgents` reports it **`idle`** — it finished its turn and stopped. Not `busy`, not `shell`,
+   and never `waiting` (that one is blocked on Phil — Phase 4, and advancing it is forbidden).
+2. Its **context is under ~300k**, measured as in Phase 0. It has room to keep going.
+3. Its next step is **procedural** — one of the rows below. Judgement is not procedural.
+
+A session that is `busy` is not parked, however long it has been running. Never interrupt one.
+
+### What to advance to
+
+Each row's condition is an **observable fact about a file or a process**, because the manager may
+not read code or diffs and may not ask a session what it is doing.
+
+| What you can see | Advance to |
 |---|---|
-| Uncommitted implementation, tests green | `/review-implementation` |
-| Reviewed and clean, plan approved, stage open | build the next stage |
-| Over context budget | `/wrapup` |
+| A plan doc saved in `docs/plans/` with no review beside it in `docs/plans/reviews/` | `/review-plan <plan>` |
+| A plan doc with no `<stem>.html` on the mount | `/explain-plan <plan>` |
+| Uncommitted changes, and a review file for this plan already exists | `/review-implementation <plan>` |
+| A review file exists and the change added new behaviour worth protecting | `/review-tests <plan>` |
+| Review clean, plan approved, a later stage still open in the brief | build the next stage |
+| Context over budget | `/wrapup` |
+
+**"Tests green" and "reviewed and clean" are not things the manager can see.** The old wording
+asked for both and was therefore unusable — it required either reading the diff or polling the
+session, and both are banned. What you can see is that a *review artefact exists*. If whether the
+review passed actually decides the next step, that is not a mechanical advance: put it in the
+digest instead.
+
+### How to advance — the mechanism
+
+`SendMessage`, addressed to the name `ListAgents` prints for that session. One session, one
+message, and the message is the command and nothing else:
+
+```
+SendMessage({to: "motor note embedding phase 1",
+             message: "/review-implementation docs/plans/eval-run-vista-02-vistabench-ehr_code.md"})
+```
+
+Rules for the message:
+
+- **Send the command, not an instruction to think about it.** "You look parked, consider
+  reviewing" wastes a turn. `/review-implementation <plan>` starts the work.
+- **Name the plan path explicitly.** The session may have compacted and lost it.
+- **One advance per session per tick**, the same cap as a nudge.
+- **Never explain the manager to the session.** It does not need to know this exists.
+- **If the session is not in `ListAgents`** — Phil is driving it in a terminal — do not try to
+  reach it. Put one line in the digest naming the session, the command, and the plan, so he can
+  paste it.
+
+### The safety rule that makes this safe
+
+**Only advance to a step whose output is a file.** Reviews write feedback into
+`docs/plans/reviews/`, `/explain-plan` writes HTML to the mount, building writes code into a
+working tree, `/wrapup` writes a session note. None of them touch git history, so the worst case
+of a wrong advance is a wasted review, not a bad commit.
+
+That is why `/commit-review` is **not** in the table even though it is often genuinely the next
+step. It commits. It is gate 2, below.
 
 **Stop and notify at exactly these gates**, and never advance past one:
 
@@ -184,6 +282,13 @@ That shape is deliberate. It cannot scroll away under concurrent pings; it survi
 dying, because the state lives in the mount file and not in a context window; and it clears the
 moment the asking session flips its own entry out of blocked.
 
+**`ListAgents` finds the ones the board missed.** A session reported as **`waiting`** is stopped on
+a question for Phil right now, whether or not it remembered to flip its board entry. Treat that
+state as a queue entry in its own right: name the session, say the board does not show it, and
+never advance it. The board is still the durable queue — it survives the manager dying and
+`ListAgents` does not — but a session that asked and forgot to write it down is exactly the kind of
+silent block this whole design exists to surface.
+
 The manager's job is a **filter over board states** — nothing more:
 
 - The digest **leads with the open-question count and the questions themselves**. Status goes below
@@ -200,7 +305,8 @@ The manager's job is a **filter over board states** — nothing more:
 Overwrite one known path every tick: `…/planning/manager-digest.md`. One file, never appended, so
 there is one place to look and no history to wade through.
 
-**Lead with a heartbeat** — `last ran <time> · <N> checks · <M> suppressed · <K> sessions live` —
+**Lead with a heartbeat** — `last ran <time> · <N> checks · <M> suppressed · <K> sessions live ·
+<A> advanced` —
 so silence is never mistaken for all-clear. A digest with no findings and no heartbeat is
 indistinguishable from a manager that died.
 
@@ -212,6 +318,10 @@ fired/useful tally per check.
 - **Don't answer a question raised for Phil.** The single hard rule.
 - **Don't resolve a conflict between two sessions.** Name it and stop.
 - **Don't poll the sessions.** The boards already say it, and their context is the scarce resource.
+  `ListAgents` is not polling — it costs them nothing and you should call it every tick.
+- **Don't interrupt a `busy` session**, however long it has been running. Only `idle` is parked.
+- **Don't advance a `waiting` session.** It is stopped on a question for Phil. That is gate 5.
+- **Don't advance into git.** Every advance must produce a file, never a commit, push, or merge.
 - **Don't broadcast.** Every message targets one session for a confirmed reason.
 - **Don't read code or diffs.** If a finding needs a diff to confirm, it is not a manager finding.
 - **Don't advance past a gate** because the next step looks obvious.

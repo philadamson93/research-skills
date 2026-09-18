@@ -47,11 +47,37 @@ the same hash the explainer records in its own header, so the two agree by const
 
 - **New plan doc created this session** → ensure README row exists with `Reviewed: No`.
 - **Existing plan doc substantively edited this session** ("substantive" = content/section changes; *not* typo fixes, formatting, dead-link cleanup, or whitespace): if the row is currently `Yes`, demote to `Stale`. If `No` or `Stale`, leave as-is.
+
+  **Three more things that are NOT substantive**, written down because leaving them unwritten
+  demoted two plans that nobody had re-designed (`cohort-chat-ui` and `cohort-mcp-free-sql`,
+  2026-09-14; restored by Phil 2026-09-18):
+
+  - a `Program:` header line added by the planning-layer migration;
+  - a dated **migration or redirect note** — it says where moved code now lives and how to read
+    the old paths, and changes nothing about what gets built;
+  - **transcription of a decision already approved elsewhere.** Phil ruled this way on
+    2026-09-11 for `cohort-chat-ui`: the edits only wrote down rulings he had already made, so he
+    kept the row `Yes` rather than spend a re-read on a 432-line plan.
+
+  A note that changes what gets built is substantive however it is labelled — the test is whether
+  a reader would build something different, not whether the bytes moved.
+
+  **Before demoting, diff against the approved text rather than trusting the file's own account of
+  itself.** For a plan with banked snapshots that is `<plan-dir>/history/`. For one migrated off a
+  repo, the pre-migration version is still in that repo's git — both plans above were recoverable
+  from `vista_bench` at `docs/plans/<stem>.md`, which is how the wrong demotion was caught. A
+  demotion costs a real review gate, so it is worth the one diff.
 - **Never silently promote `No` / `Stale` → `Yes`.** There is exactly **one** promotion path: an
   approved explainer whose content hash matches the plan. `/read-plan` no longer promotes anything
   — Phil does not read markdown, so opening the markdown is not a review. If he says inline that
   he reviewed a plan, ask which artifact he read; if it was the explainer, record it, and if the
   explainer is out of sync, regenerate it first.
+
+  **The one exception, and it is not silent: a demotion that should never have happened.** If a
+  diff against the approved text shows only the non-substantive edits listed above, say so, show
+  what actually changed, and let Phil restore the row — then record in the cell what was diffed
+  and against which revision. That is a correction to the bookkeeping, not a review, so it needs
+  his word but not a fresh explainer. Do not restore on your own reading of the diff alone.
 - **No plan-tracking index exists, but `docs/plans/` (or equivalent) does**: bootstrap a `README.md` with `Plan | Status | Reviewed | Description` columns and populate `Reviewed: No` for all existing plan docs.
 - **No `docs/plans/` directory at all**: skip this step.
 

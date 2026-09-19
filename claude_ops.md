@@ -76,6 +76,19 @@ writing failure, not a misunderstanding.
   out a named branch or commit, and before you tell me it doesn't exist. "Can't find the branch"
   means fetch again. It never means "nobody wrote it, so I'll substitute something similar."
 
+- **Searching a repo may not find its plan docs.** Where `docs/plans` has been moved out of git
+  it is an ignored symlink to the shared mount, so `rg` skips it (ignored) and does not follow it
+  (a link), and plain `grep -r` and `find` miss it too. `vista-cohort` is there now and the other
+  repos are following, so treat this as true everywhere rather than checking per repo. Measured on
+  vista-cohort: searching the checkout for a term returns 4 files when the content is really in
+  14. An agent that greps and finds nothing concludes the plan does not exist, which is the same
+  failure as not fetching.
+
+  **Search the mount, not the checkout** — `rg <term> /mnt/su-vista-uscentral1/chaudhari_lab/phil/planning/`
+  has no ignore rule and no links in it, and one search covers every repo at once plus the plans
+  that only ever lived on the mount. Inside a checkout you need `rg --no-ignore -L`. The in-repo
+  path is for *opening a plan you can already name*, never for finding one.
+
 - **Check whether another session is already working in this folder.** VISTA repos are shared
   checkouts: several sessions may sit in the same directory, sharing one working tree and one
   HEAD, so one session's branch switch or reset is instantly visible to the others.

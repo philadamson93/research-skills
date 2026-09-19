@@ -79,7 +79,10 @@ Required reads (in order):
 
 Then:
 - Map what modules / docs / tests / configs / output contracts the plan affects.
-- Read the touched files deeply; verify the plan's assumptions with rg and file reads.
+- Read the touched files deeply; verify the plan's assumptions with rg and file reads. When a
+  claim turns on what other plan docs say, search the mount
+  (`/mnt/su-vista-uscentral1/chaudhari_lab/phil/planning/`) rather than the checkout — a repo's
+  `docs/plans` is an ignored symlink, so `rg` silently returns nothing from it.
 - Source precedence when sources disagree: current code > tests > docs > plan text. Flag conflicts.
 - **Cross-repo contracts (always checked)**: identify sibling repos the plan touches (the per-repo checklist enumerates which siblings matter in this codebase). For each, name the specific API / schema / manifest / output contract at stake and verify the plan addresses it: what version pin, what columns/keys/labels, what migration story if breaking. Flag undocumented or broken contracts as Contract Checks. The per-repo checklist is authoritative for which sibling repos exist and what their contracts are.
 - **Re-use vs. building something you don't need yet (always checked)**: when the plan introduces complexity that *could* be modularized (config knobs, registries, helper extractions, parameterizations, layer splits), assess whether the modular shape would serve a realistic use case the user / project actually has — not a hypothetical one. Bias modular when realistic use is identifiable (a sibling task, a planned migration, a cohort the user has named). Flag as a question for the user when realistic use is unclear. Do NOT quietly assume the one-off is right just because the immediate task only needs one shape; the user explicitly wants the reusable option surfaced rather than collapsed by default. The per-repo checklist captures the modularity precedents that already exist in the repo so the reviewer can ground recommendations in them.

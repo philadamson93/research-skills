@@ -22,3 +22,7 @@ hooks/lib/phi-free-machines.local
 # explain-plan baseline snapshots (review scratch) — never committed
 .explain-plan/
 docs/plans/.explain-plan/
+
+# running scripts/plans_offgit.py leaves bytecode here
+__pycache__/
+*.pyc

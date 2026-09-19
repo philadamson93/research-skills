@@ -138,8 +138,29 @@ ln -s /mnt/su-vista-uscentral1/chaudhari_lab/phil/reports    "$symd/plans_link"
 ln -s /mnt/su-vista-uscentral1/chaudhari_lab/phil/planning   "$symd/zone_link"
 expect_bash "$MNT" ask    "rm -rf through symlink onto /mnt" "rm -rf $symd/plans_link"
 expect_bash "$MNT" ask    "rm a child BELOW a symlink onto /mnt" "rm -rf $symd/plans_link/sub"
-expect_bash "$MNT" silent "rm through symlink into a zone"   "rm -rf $symd/zone_link/x"
+expect_bash "$MNT" ask    "rm a whole repo plan tree via zone symlink" "rm -rf $symd/zone_link/x"
+expect_bash "$MNT" silent "rm ONE plan doc via zone symlink" "rm -rf $symd/zone_link/x/one-old-plan.md"
 rm -rf "$symd"
+
+echo "== mnt-delete-gate: planning tree is NOT blanket-PASS (docs/plans is a symlink now) =="
+# Before 2026-09-18 the whole planning zone was allow-listed, so a delete that resolved into it
+# passed silently. Once a repo's docs/plans became a symlink to planning/<repo>, that made
+# `rm -rf docs/plans/` -- the catastrophe this gate exists to stop -- silent. Verified
+# 2026-09-14 that the command really does destroy the tree (four files gone).
+PLN=/mnt/su-vista-uscentral1/chaudhari_lab/phil/planning
+expect_bash "$MNT" ask    "wipe the ENTIRE planning tree"    "rm -rf $PLN"
+expect_bash "$MNT" ask    "wipe one repo's plan history"     "rm -rf $PLN/vista_bench"
+expect_bash "$MNT" ask    "wipe a repo plan tree, trailing /" "rm -rf $PLN/vista_bench/"
+expect_bash "$MNT" silent "delete ONE superseded plan"       "rm $PLN/vista_bench/old-plan.md"
+expect_bash "$MNT" silent "delete one review doc"            "rm -rf $PLN/vista_bench/reviews/x.md"
+expect_bash "$MNT" silent "boards and programs still routine" "rm $PLN/boards/old.md"
+
+# The whole point: the same delete written through a repo checkout's symlink.
+lnkd="$(mktemp -d)"; mkdir -p "$lnkd/docs"
+ln -s "$PLN/vista_bench" "$lnkd/docs/plans"
+expect_cwd  "$MNT" ask    "rm -rf docs/plans/ from inside a migrated repo" 'rm -rf docs/plans/' "$lnkd"
+expect_cwd  "$MNT" silent "rm one plan from inside a migrated repo" 'rm docs/plans/old-plan.md' "$lnkd"
+rm -rf "$lnkd"
 
 echo "== mnt-delete-gate: destructive verb, target unparseable -> ask (fail closed) =="
 # Codex audit caught these going SILENT under the first rewrite: a wrapper or a

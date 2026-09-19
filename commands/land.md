@@ -69,6 +69,35 @@ Never force-push. Never merge past an unresolved Phase 1 red without the user ex
 
 Only after a merge actually landed (skip entirely for **Hold** / PR-not-yet-merged):
 
+- **Check the merge did not put plan docs back into git.** Run
+  `git ls-files docs/plans` on `main` straight after the merge. In a migrated repo the answer must
+  be nothing. If it is not, the branch **created** plan docs while it was alive and the merge added
+  them back as tracked files — with no conflict and no warning, because `.gitignore` never applies
+  to a file a merge is adding. (Tested 2026-09-18: a doc the branch *edited* conflicts loudly and
+  is safe; one it *created* comes back silently.) Left alone this undoes the migration one branch
+  at a time and the next edit costs Phil a PHI read again.
+
+  It is worse than re-tracking alone: to write that file git has to **replace the symlink with a
+  real directory**, so every other plan on the mount goes invisible from this checkout until the
+  link is restored. Observed, not inferred — a `docs/plans` that is no longer a symlink right
+  after a merge is the tell.
+
+  Repair it in the same breath, before anything is committed on top. From `~/code/research-skills`,
+  **push first, then relink** — the branch's new plans exist nowhere but git, so copying them to
+  the mount has to happen before the tree is replaced by a link:
+
+      ./scripts/plans_offgit.py push   <repo> --apply --ref HEAD
+      ./scripts/plans_offgit.py relink <repo> --apply --ref HEAD
+
+  `--ref HEAD` matters: the script compares against `origin/main` by default, which does not yet
+  carry the merge you just made locally, so without it the check looks clean and repairs nothing.
+  Then amend the merge commit so the fix lands with the merge rather than as a mystery follow-up.
+  Name the files in the close-out block — they are the plans that branch wrote, and they now live
+  only on the mount.
+
+  Skip this bullet for a repo whose `docs/plans` is still tracked (not yet migrated) — there the
+  files are supposed to be there.
+
 - **Prune the branch** — delete local (`git branch -d <branch>`) and remote (`git push origin --delete <branch>`) once merged. Use `-d` (safe, refuses if unmerged), not `-D`.
 - **Remove the worktree** — if the branch lived in a worktree, `git worktree remove <path>` (or `ExitWorktree` if landing from inside it). A stale worktree on a deleted branch is exactly the litter `/next` Phase 0 later trips over.
 - **Mark the plan doc done** — `**Status: Completed** (<date>)` at the top of the plan doc; flip its `docs/plans/README.md` row to Completed / `Reviewed: Yes` as appropriate (per `/wrapup` Step 2 rules — don't silently promote review-status; the merge itself is the completion signal, not a review).

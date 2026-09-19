@@ -70,6 +70,31 @@ in_write_zone() {
   return 1
 }
 
+# Two paths inside the planning write-zone are ASK, not PASS. Since a repo's docs/plans became
+# a SYMLINK to planning/<repo>, `rm -rf docs/plans/` resolves straight into the allow-listed zone
+# and used to pass SILENTLY -- the exact catastrophe this gate exists to stop (verified
+# 2026-09-14: four files gone). Deleting the whole planning root passed silently too.
+#
+#   <planning>                -> ASK   (every repo's plan history)
+#   <planning>/<repo>         -> ASK   (one repo's entire plan history)
+#   <planning>/<repo>/a.md    -> PASS  (one superseded document; routine, stays silent)
+#
+# Both `rm -rf docs/plans/` (deletes the tree behind the link) and `rm docs/plans` (removes only
+# the link) ASK. Distinguishing them would mean trusting a trailing slash to decide whether an
+# irreplaceable tree is at risk, and this gate is fail-closed everywhere else; a rare extra
+# prompt when un-linking a repo is the cheaper error.
+PLANNING_ROOT=/mnt/su-vista-uscentral1/chaudhari_lab/phil/planning
+
+is_plan_tree() {
+  local r="$1"
+  [ "$r" = "$PLANNING_ROOT" ] && return 0
+  case "$r" in
+    "$PLANNING_ROOT"/*/*) return 1 ;;   # deeper than a repo: an individual document
+    "$PLANNING_ROOT"/*)   return 0 ;;   # a whole repo's plan tree
+  esac
+  return 1
+}
+
 # classify_target <raw-path>  -> echoes "deny" or "ask" (nothing = pass/off-mount)
 # Resolves relative paths against $cwd and follows symlinks via realpath -m. A
 # resolution FAILURE is fail-closed to ASK (we don't know where it points).
@@ -81,6 +106,7 @@ classify_target() {
   [ -n "$R" ] || { echo ask; return 0; }
   is_on_mount "$R" || return 0            # off-mount: not this gate's concern
   if is_protected_root "$R"; then echo deny; return 0; fi
+  if is_plan_tree "$R"; then echo ask; return 0; fi   # before the write-zone allowlist
   in_write_zone "$R" && return 0          # scratch zone: pass
   echo ask
 }

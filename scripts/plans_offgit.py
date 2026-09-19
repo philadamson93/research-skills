@@ -49,6 +49,10 @@ from pathlib import Path
 MOUNT = Path(os.environ.get("PLANS_MOUNT",
                             "/mnt/su-vista-uscentral1/chaudhari_lab/phil/planning"))
 CODE = Path(os.environ.get("CODE_ROOT", Path.home() / "code"))
+# Where to look for CLONES. Worktrees are then discovered from each clone found here, so
+# this only has to list places a clone is created, not every checkout. ~ is on the list
+# because paper-trail keeps two clones directly in it.
+SCAN_ROOTS = [CODE, CODE.parent]
 IGNORE_RULE = "docs/plans"  # NO trailing slash: with one, git does not ignore a symlink
 PLAN_DIR = "docs/plans"
 
@@ -308,30 +312,43 @@ def worktrees_of(root: Path) -> list[Path]:
 def checkouts_of(repo_name: str) -> list[Path]:
     """Every checkout on this machine whose origin is this repo -- worktrees AND separate clones.
 
-    Two sources, unioned, because neither alone is complete:
+    THREE sources, unioned, because no two of them are enough. Each was added only after it was
+    caught missing a checkout that a session was actually working in.
 
-      - `git worktree list`, run from each clone. This is the ONLY thing that finds a worktree
-        that is not a direct child of ~/code, and most of them are not: measured 2026-09-19,
-        91 of this machine's 143 worktrees sit at <repo>/.claude/worktrees/*, and 5 more live
-        outside ~/code altogether (~/.paper-trail/engine-*, a worktrees-manual/ folder, /tmp).
-      - a scan of ~/code/*. This is the ONLY thing that finds a SEPARATE CLONE, which shares no
-        worktree list with its siblings -- vista_bench_fresh and the two *-mcp-runtime clones.
+      1. a scan of ~/code/*  -- the only thing that finds a SEPARATE CLONE, which shares no
+         worktree list with its siblings (vista_bench_fresh, the two *-mcp-runtime clones).
+      2. a scan of ~/*       -- the only thing that finds a clone that is not under ~/code at all.
+         paper-trail has two: ~/paper-trail, which holds the live isolation plan and 52 tracked
+         plan files against main's 20, and its worktree ~/paper-trail-planA.
+      3. `git worktree list`, run from every clone found by 1 and 2 -- the only thing that finds a
+         NESTED worktree. 91 of this machine's 143 worktrees sit at <repo>/.claude/worktrees/*,
+         and three agentic-label-opt worktrees live under ~/.paper-trail/.
 
-    Scanning ~/code/* alone, which is what this did until 2026-09-19, found 50 checkouts when
-    there were 146. The 96 it missed are not harmless: each one loses its real docs/plans files
-    the moment it moves onto the migrated main, and with no link created nothing in it can open
-    a plan doc by its repo path. That is exactly the state vista-cohort-frontend is in today.
+    Source 1 alone -- what this did until 2026-09-19 -- found 50 checkouts of the 146 that exist.
+    Adding 3 found 146 but still missed paper-trail's two outside ~/code, which is why 2 is here.
+    The misses are not harmless: a checkout loses its real docs/plans files the moment it moves
+    onto the migrated main, and with no link created nothing in it can open a plan doc by its repo
+    path. That is the state vista-cohort-frontend is in today.
+
+    Known limit: a clone nested deeper than one level below ~ or ~/code is still invisible. There
+    is none today (verified by a depth-4 sweep of ~ on 2026-09-19). If one appears, add its parent
+    to SCAN_ROOTS rather than widening the sweep -- walking all of ~ is slow and picks up junk.
     """
     seen: dict[Path, Path] = {}
-    for d in sorted(CODE.iterdir()):
-        if not (d / ".git").exists():
+    roots: list[Path] = []
+    for root in SCAN_ROOTS:
+        if not root.is_dir():
             continue
-        url = git(d, "remote", "get-url", "origin", check=False).strip()
-        if not url or Path(url.rstrip("/")).name.removesuffix(".git") != repo_name:
-            continue
-        for p in [d, *worktrees_of(d)]:
-            if (p / ".git").exists():
-                seen.setdefault(p.resolve(), p)
+        for d in sorted(root.iterdir()):
+            if not (d / ".git").exists():
+                continue
+            url = git(d, "remote", "get-url", "origin", check=False).strip()
+            if url and Path(url.rstrip("/")).name.removesuffix(".git") == repo_name:
+                roots.append(d)
+    for d in roots:
+        for q in [d, *worktrees_of(d)]:
+            if (q / ".git").exists():
+                seen.setdefault(q.resolve(), q)
     return [seen[k] for k in sorted(seen)]
 
 

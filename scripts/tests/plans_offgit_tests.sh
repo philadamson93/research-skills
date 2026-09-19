@@ -12,6 +12,9 @@
 #   $CODE/paper-trail/.claude/worktrees/wt-nested      a NESTED worktree   (was missed)
 #   $OUTSIDE/wt-outside                                a worktree outside ~/code (was missed)
 #   $CODE/paper-trail-extra                            a SEPARATE CLONE, no shared worktree list
+#   $TMP/paper-trail-home                              a clone NOT UNDER ~/code at all (was missed;
+#                                                      the real one is ~/paper-trail, which holds
+#                                                      the live isolation plan)
 #
 # Everything runs against a scratch CODE_ROOT and PLANS_MOUNT. No real repo and no real mount
 # folder is touched; the run aborts if either variable escapes the temp directory.
@@ -60,6 +63,9 @@ q "$MAIN" worktree add -b nested  "$MAIN/.claude/worktrees/wt-nested"
 q "$MAIN" worktree add -b outside "$OUTSIDE/wt-outside"
 git clone -q "$TMP/remote/$REPO.git" "$CODE_ROOT/$REPO-extra"
 EXTRA="$CODE_ROOT/$REPO-extra"
+# a clone that is NOT under CODE_ROOT -- found only by scanning CODE_ROOT's parent
+git clone -q "$TMP/remote/$REPO.git" "$TMP/$REPO-home"
+HOMECLONE="$TMP/$REPO-home"
 
 # the mount holds the canonical tree, plus one file that exists ONLY there
 mkdir -p "$PLANS_MOUNT/$REPO"
@@ -81,16 +87,16 @@ echo "plans_offgit doctor -- checkout discovery"
 
 # ---------------------------------------------------------------- 1. discovery
 OUT="$(run_doctor)"
-for shape in "$MAIN" "$MAIN/.claude/worktrees/wt-nested" "$OUTSIDE/wt-outside" "$EXTRA"; do
+for shape in "$MAIN" "$MAIN/.claude/worktrees/wt-nested" "$OUTSIDE/wt-outside" "$EXTRA" "$HOMECLONE"; do
   if printf '%s' "$OUT" | grep -qF " $shape "; then ok "doctor sees ${shape#$TMP/}"
   else bad "doctor never mentions ${shape#$TMP/}"; fi
 done
-check "all four checkouts listed" \
-      "$(printf '%s' "$OUT" | grep -cE 'not yet|linked|would link|REAL DIR')" "4"
+check "all five checkouts listed" \
+      "$(printf '%s' "$OUT" | grep -cE 'not yet|linked|would link|REAL DIR')" "5"
 
 # ---------------------------------------------------------------- 2. pre-migration = left alone
 check "a checkout still tracking docs/plans is reported 'not yet'" \
-      "$(printf '%s' "$OUT" | grep -c 'not yet')" "3"
+      "$(printf '%s' "$OUT" | grep -c 'not yet')" "4"
 if [ -f "$MAIN/.claude/worktrees/wt-nested/docs/plans/a.md" ]; then
   ok "its real plan files are untouched"
 else
@@ -101,21 +107,22 @@ fi
 q "$MAIN/.claude/worktrees/wt-nested" merge main
 q "$OUTSIDE/wt-outside"               merge main
 q "$EXTRA" pull
+q "$HOMECLONE" pull
 
 check "git deleted the real files in the nested worktree" \
       "$([ -e "$MAIN/.claude/worktrees/wt-nested/docs/plans" ] && echo present || echo gone)" "gone"
 
 OUT="$(run_doctor)"
-check "dry run offers to link all three, and writes nothing" \
-      "$(printf '%s' "$OUT" | grep -c 'would link')" "3"
+check "dry run offers to link all four, and writes nothing" \
+      "$(printf '%s' "$OUT" | grep -c 'would link')" "4"
 check "dry run really is dry" \
       "$([ -e "$MAIN/.claude/worktrees/wt-nested/docs/plans" ] && echo present || echo gone)" "gone"
 
 OUT="$(run_doctor --apply)"
-check "apply links all three" "$(printf '%s' "$OUT" | grep -c 'LINKING')" "3"
+check "apply links all four" "$(printf '%s' "$OUT" | grep -c 'LINKING')" "4"
 
 # ---------------------------------------------------------------- 4. the link actually works
-for c in "$MAIN/.claude/worktrees/wt-nested" "$OUTSIDE/wt-outside" "$EXTRA"; do
+for c in "$MAIN/.claude/worktrees/wt-nested" "$OUTSIDE/wt-outside" "$EXTRA" "$HOMECLONE"; do
   n="$(basename "$c")"
   if [ -L "$c/docs/plans" ]; then ok "$n has a symlink"; else bad "$n has no symlink"; fi
   check "$n opens a file that exists only on the mount" \
@@ -126,7 +133,7 @@ done
 # ---------------------------------------------------------------- 5. idempotent
 OUT="$(run_doctor --apply)"
 check "a second apply relinks nothing" "$(printf '%s' "$OUT" | grep -c 'LINKING')" "0"
-check "and reports all four as linked"  "$(printf '%s' "$OUT" | grep -c 'linked')" "4"
+check "and reports all five as linked"  "$(printf '%s' "$OUT" | grep -c 'linked')" "5"
 
 echo
 echo "$PASS passed, $FAIL failed"

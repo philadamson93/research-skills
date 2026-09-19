@@ -288,16 +288,51 @@ def mode_relink(repo_name: str, apply: bool, ref: str = "origin/main") -> int:
     return 0
 
 
+def worktrees_of(root: Path) -> list[Path]:
+    """The paths `git worktree list` reports for one clone, skipping prunable entries."""
+    paths: list[Path] = []
+    cur: Path | None = None
+    prunable = False
+    for line in git(root, "worktree", "list", "--porcelain", check=False).splitlines():
+        if line.startswith("worktree "):
+            if cur is not None and not prunable:
+                paths.append(cur)
+            cur, prunable = Path(line[len("worktree "):]), False
+        elif line.startswith("prunable "):
+            prunable = True
+    if cur is not None and not prunable:
+        paths.append(cur)
+    return paths
+
+
 def checkouts_of(repo_name: str) -> list[Path]:
-    """Every checkout on this machine whose origin is this repo -- worktrees AND separate clones."""
-    found = []
+    """Every checkout on this machine whose origin is this repo -- worktrees AND separate clones.
+
+    Two sources, unioned, because neither alone is complete:
+
+      - `git worktree list`, run from each clone. This is the ONLY thing that finds a worktree
+        that is not a direct child of ~/code, and most of them are not: measured 2026-09-19,
+        91 of this machine's 143 worktrees sit at <repo>/.claude/worktrees/*, and 5 more live
+        outside ~/code altogether (~/.paper-trail/engine-*, a worktrees-manual/ folder, /tmp).
+      - a scan of ~/code/*. This is the ONLY thing that finds a SEPARATE CLONE, which shares no
+        worktree list with its siblings -- vista_bench_fresh and the two *-mcp-runtime clones.
+
+    Scanning ~/code/* alone, which is what this did until 2026-09-19, found 50 checkouts when
+    there were 146. The 96 it missed are not harmless: each one loses its real docs/plans files
+    the moment it moves onto the migrated main, and with no link created nothing in it can open
+    a plan doc by its repo path. That is exactly the state vista-cohort-frontend is in today.
+    """
+    seen: dict[Path, Path] = {}
     for d in sorted(CODE.iterdir()):
         if not (d / ".git").exists():
             continue
         url = git(d, "remote", "get-url", "origin", check=False).strip()
-        if url and Path(url.rstrip("/")).name.removesuffix(".git") == repo_name:
-            found.append(d)
-    return found
+        if not url or Path(url.rstrip("/")).name.removesuffix(".git") != repo_name:
+            continue
+        for p in [d, *worktrees_of(d)]:
+            if (p / ".git").exists():
+                seen.setdefault(p.resolve(), p)
+    return [seen[k] for k in sorted(seen)]
 
 
 def mode_doctor(repo_names: list[str], apply: bool) -> int:
@@ -308,21 +343,24 @@ def mode_doctor(repo_names: list[str], apply: bool) -> int:
             print(f"  {name:<38} no mount folder at {target} -- skipped")
             continue
         for d in checkouts_of(name):
+            # the bare leaf name is ambiguous now that nested worktrees are included -- several
+            # repos have one called e.g. "vertex-gate" -- so show the path instead.
+            lbl = str(d).replace(str(Path.home()), "~")
             plans = d / PLAN_DIR
             tracked = git(d, "ls-files", "--", PLAN_DIR, check=False).strip()
             if tracked:
                 # this checkout is on a commit that predates the migration -- its real files are
                 # correct for the commit it has. Leave it completely alone.
-                print(f"  {d.name:<38} not yet (still tracks {len(tracked.splitlines())} files)")
+                print(f"  {lbl:<64} not yet (still tracks {len(tracked.splitlines())} files)")
                 continue
             if plans.is_symlink() and Path(os.readlink(plans)) == target:
-                print(f"  {d.name:<38} linked")
+                print(f"  {lbl:<64} linked")
                 continue
             if plans.exists() and not plans.is_symlink():
-                print(f"  {d.name:<38} REAL DIR but nothing tracked -- left alone, look at it")
+                print(f"  {lbl:<64} REAL DIR but nothing tracked -- left alone, look at it")
                 bad += 1
                 continue
-            print(f"  {d.name:<38} {'LINKING' if apply else 'would link'}")
+            print(f"  {lbl:<64} {'LINKING' if apply else 'would link'}")
             if apply:
                 if plans.is_symlink():
                     plans.unlink()

@@ -112,11 +112,24 @@ fi
 # ---- 4. block, instructing Claude to run /phi-vet -------------------------
 
 staged_count="$(git -C "$git_root" diff --cached --name-only | wc -l | tr -d ' ')"
-doc_count="$(git -C "$git_root" diff --cached --name-only -- '*.md' '*.markdown' '*.rst' '*.txt' '*.html' 2>/dev/null | wc -l | tr -d ' ')"
 
-reason="PHI gate: this commit lands in a medical-data research repo (\`$repo_base\`), and the staged tree \`$tree_sha\` has not been signed off by \`/phi-vet\`. Staged: $staged_count file(s), of which $doc_count are docs requiring the human user to read and acknowledge.
+# A DELETED doc needs no read. The read exists to catch editorialization and private content
+# in prose that is ENTERING the repo; removing a file puts no new words anywhere. Counting a
+# deletion as a doc needing a read is what would make taking ~1,080 plan docs out of git cost
+# ~1,080 appropriateness reads -- the very cost that migration exists to remove.
+# Lower-case `d` in --diff-filter EXCLUDES deleted paths. A rename still shows its added side,
+# and a modification still counts, so nothing entering the repo escapes the read.
+doc_count="$(git -C "$git_root" diff --cached --name-only --diff-filter=d -- '*.md' '*.markdown' '*.rst' '*.txt' '*.html' 2>/dev/null | wc -l | tr -d ' ')"
+doc_deleted="$(git -C "$git_root" diff --cached --name-only --diff-filter=D -- '*.md' '*.markdown' '*.rst' '*.txt' '*.html' 2>/dev/null | wc -l | tr -d ' ')"
 
-Required: invoke \`/phi-vet\` to (a) scan the staged content for PHI red flags per its threat catalog, (b) surface every doc file in the commit and require the HUMAN USER (not Claude) to explicitly confirm they have personally opened and read it — Claude having read the file during the scan does NOT satisfy this step; the user's appropriateness check is separate from the PHI scan, (c) on full approval, write a sign-off marker at \`<git-common-dir>/phi-vet/${tree_sha}.signed-off\` (the common git dir, resolved via \`git rev-parse --path-format=absolute --git-common-dir\` — same path from main checkout and any worktree). Once the marker exists, re-attempting \`git commit\` will pass this gate.
+deleted_note=""
+if [ "$doc_deleted" -gt 0 ]; then
+  deleted_note=" A further $doc_deleted doc file(s) are being DELETED by this commit; a deletion adds no content, so it needs no read and must not be turned into an acknowledgement request."
+fi
+
+reason="PHI gate: this commit lands in a medical-data research repo (\`$repo_base\`), and the staged tree \`$tree_sha\` has not been signed off by \`/phi-vet\`. Staged: $staged_count file(s), of which $doc_count are docs requiring the human user to read and acknowledge.$deleted_note
+
+Required: invoke \`/phi-vet\` to (a) scan the staged content for PHI red flags per its threat catalog, (b) surface every doc file the commit ADDS OR MODIFIES (not ones it deletes) and require the HUMAN USER (not Claude) to explicitly confirm they have personally opened and read it — Claude having read the file during the scan does NOT satisfy this step; the user's appropriateness check is separate from the PHI scan, (c) on full approval, write a sign-off marker at \`<git-common-dir>/phi-vet/${tree_sha}.signed-off\` (the common git dir, resolved via \`git rev-parse --path-format=absolute --git-common-dir\` — same path from main checkout and any worktree). Once the marker exists, re-attempting \`git commit\` will pass this gate.
 
 Skip path: if the user explicitly says 'skip the PHI check' or 'bypass phi-vet' in this turn, write the marker with the rationale appended and proceed — never bypass silently. Never answer the per-doc acknowledgement on the user's behalf, even under context pressure."
 

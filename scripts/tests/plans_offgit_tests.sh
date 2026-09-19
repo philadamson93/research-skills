@@ -177,6 +177,39 @@ OUT="$(PLANS_MOUNT="$GM" CODE_ROOT="$G" uv run --script "$SCRIPT" relink "$REPO"
 check "on the ref, relink runs" "$rc" "0"
 check "and links" "$([ -L "$GR/docs/plans" ] && echo yes || echo no)" "yes"
 
+# ---------------------------------------------------------------- 7. a repo with NO plan docs
+# femr-private's main carries no plan docs at all, yet 16 live on the mount that its checkouts
+# should be able to open. `git rm` errors on an empty pathspec and rmtree errors on a missing
+# directory, so relink used to die on a traceback for exactly this repo.
+echo
+echo "plans_offgit relink -- a repo that tracks no plan docs at all"
+
+E="$TMP/empty"; EM="$TMP/emptymount"; mkdir -p "$E" "$EM/$REPO"
+git init --bare -b main -q "$TMP/remote3/$REPO.git"
+git clone -q "$TMP/remote3/$REPO.git" "$E/$REPO" 2>/dev/null
+ER="$E/$REPO"
+q "$ER" config user.email test@example.com
+q "$ER" config user.name  Test
+mkdir -p "$ER/src"; echo "code" > "$ER/src/x.py"          # a repo with no docs/ at all
+q "$ER" add -A; q "$ER" commit -m base; q "$ER" push -u origin main
+echo "only ever on the mount" > "$EM/$REPO/orphan-plan.md"
+
+check "fixture really has no docs/plans" "$([ -e "$ER/docs/plans" ] && echo yes || echo no)" "no"
+OUT="$(PLANS_MOUNT="$EM" CODE_ROOT="$E" uv run --script "$SCRIPT" relink "$REPO" --apply 2>&1)"; rc=$?
+check "relink succeeds with nothing tracked" "$rc" "0"
+if printf '%s' "$OUT" | grep -q 'Traceback'; then bad "it died on a traceback"; else ok "no traceback"; fi
+check "the link is created" "$([ -L "$ER/docs/plans" ] && echo yes || echo no)" "yes"
+check "a mount-only doc opens through the repo path" \
+      "$(cat "$ER/docs/plans/orphan-plan.md" 2>/dev/null)" "only ever on the mount"
+check "the ignore rule is added" "$(grep -c '^docs/plans$' "$ER/.gitignore")" "1"
+# .gitignore itself is expected to show -- relink just wrote it, and it is what gets committed.
+# What must NOT show is the symlink: that is the no-trailing-slash rule doing its job, and with a
+# slash every checkout in the estate would sit permanently dirty.
+check "the only thing dirty is .gitignore" \
+      "$(git -C "$ER" status --short | awk '{print $2}' | tr '\n' ' ')" ".gitignore "
+check "the symlink itself is ignored, not dirty" \
+      "$(git -C "$ER" status --short -- docs/plans | wc -l)" "0"
+
 echo
 echo "$PASS passed, $FAIL failed"
 [ "$FAIL" -eq 0 ]

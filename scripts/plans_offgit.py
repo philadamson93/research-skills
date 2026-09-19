@@ -314,10 +314,20 @@ def mode_relink(repo_name: str, apply: bool, ref: str = "origin/main") -> int:
         print(f"\nwould untrack {PLAN_DIR}, set the ignore rule, and link it to "
               f"{link_target(repo_name)}\ndry run -- re-run with --apply")
         return 0
-    print(f"\nuntracking {PLAN_DIR} in {repo_name} (index only, files stay)")
-    git(repo, "rm", "-r", "--cached", "-q", PLAN_DIR)
+    # A repo can have NOTHING tracked under docs/plans and still need migrating -- femr-private's
+    # main carries no plan docs at all, yet 16 live on the mount that its checkouts should be able
+    # to open. `git rm` errors on an empty pathspec and rmtree errors on a missing directory, so
+    # both are conditional. Without this the whole mode died on a traceback for that repo.
+    tracked_now = git(repo, "ls-files", "--", PLAN_DIR, check=False).strip()
+    if tracked_now:
+        print(f"\nuntracking {PLAN_DIR} in {repo_name} (index only, files stay)")
+        git(repo, "rm", "-r", "--cached", "-q", PLAN_DIR)
+    else:
+        print(f"\n{repo_name}: nothing tracked under {PLAN_DIR} -- ignore rule and link only")
     ensure_ignore_rule(repo)
-    shutil.rmtree(plans)                       # real dir; the mount copy is verified above
+    if plans.exists() and not plans.is_symlink():
+        shutil.rmtree(plans)                   # real dir; the mount copy is verified above
+    plans.parent.mkdir(parents=True, exist_ok=True)
     plans.symlink_to(link_target(repo_name))
     print(f"linked {PLAN_DIR} -> {link_target(repo_name)}")
     left = git(repo, "ls-files", "--", PLAN_DIR).strip()

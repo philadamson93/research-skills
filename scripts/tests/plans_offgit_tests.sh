@@ -263,6 +263,66 @@ check "a differing mount copy is refused too" "$rc" "1"
 if printf '%s' "$OUT" | grep -q 'differs from the mount copy'; then ok "and says why"; else bad "wrong reason given"; fi
 check "the repo copy survives" "$(grep -c 'the real one' "$G2R/docs/plans/reviews/draft.patch")" "1"
 
+# ---------------------------------------------------------------- 9. --accept-mount
+# The plan decided this class up front: "a both-differ file whose repo side is only stale ->
+# mount wins, proceed". The gate had no way to express that, and the alternative -- pasting a
+# known-stale line back into a tracker just to satisfy a check -- corrupts the document. So the
+# decision is recordable, but ONLY once the ref's losing version is preserved verbatim, which is
+# what keeps "mount wins" from ever meaning "content gone".
+echo
+echo "plans_offgit --accept-mount -- record a mount-wins decision without losing the other side"
+
+A="$TMP/acc"; AM="$TMP/accmount"; mkdir -p "$A" "$AM/$REPO"
+git init --bare -b main -q "$TMP/remote6/$REPO.git"
+git clone -q "$TMP/remote6/$REPO.git" "$A/$REPO" 2>/dev/null
+AR="$A/$REPO"
+q "$AR" config user.email test@example.com
+q "$AR" config user.name Test
+mkdir -p "$AR/docs/plans"
+printf 'shared line\na line only main has\n' > "$AR/docs/plans/a.md"
+q "$AR" add -A; q "$AR" commit -m base; q "$AR" push -u origin main
+printf 'shared line\na line only the mount has\n' > "$AM/$REPO/a.md"     # differs BOTH ways
+
+run_acc() { PLANS_MOUNT="$AM" CODE_ROOT="$A" uv run --script "$SCRIPT" "$@" 2>&1; }
+
+OUT="$(run_acc check "$REPO")"; rc=$?
+check "plain check blocks on both-differ" "$rc" "1"
+
+OUT="$(run_acc check "$REPO" --accept-mount a.md)"; rc=$?
+check "accept-mount alone still refuses" "$rc" "1"
+if printf '%s' "$OUT" | grep -q 'accept-mount REFUSED'; then ok "and says why"; else bad "no refusal reason"; fi
+check "the mount copy was not touched" "$(grep -c 'only the mount has' "$AM/$REPO/a.md")" "1"
+
+mkdir -p "$AM/$REPO/superseded-by-mount"
+printf 'shared line\na line only main has\n' > "$AM/$REPO/superseded-by-mount/a.md"
+OUT="$(run_acc check "$REPO" --accept-mount a.md)"; rc=$?
+check "once preserved, check passes" "$rc" "0"
+if printf '%s' "$OUT" | grep -q 'accepted: mount wins'; then ok "and reports it as a decision, not a pass"; else bad "not reported as accepted"; fi
+
+# a preserved copy that does NOT match the ref must not satisfy it
+printf 'shared line\nsomething else entirely\n' > "$AM/$REPO/superseded-by-mount/a.md"
+OUT="$(run_acc check "$REPO" --accept-mount a.md)"; rc=$?
+check "a non-verbatim preserved copy is refused" "$rc" "1"
+printf 'shared line\na line only main has\n' > "$AM/$REPO/superseded-by-mount/a.md"
+
+# and a file NOT named stays blocked
+printf 'shared\nmain only b\n' > "$AR/docs/plans/b.md"
+q "$AR" add -A; q "$AR" commit -m b; q "$AR" push origin main
+printf 'shared\nmount only b\n' > "$AM/$REPO/b.md"
+OUT="$(run_acc check "$REPO" --accept-mount a.md)"; rc=$?
+check "an unnamed both-differ file still blocks" "$rc" "1"
+if printf '%s' "$OUT" | grep -q 'b.md'; then ok "and names it"; else bad "does not name b.md"; fi
+
+# relink honours the same decision
+mkdir -p "$AM/$REPO/superseded-by-mount"
+printf 'shared\nmain only b\n' > "$AM/$REPO/superseded-by-mount/b.md"
+OUT="$(run_acc relink "$REPO" --accept-mount a.md --accept-mount b.md --apply)"; rc=$?
+check "relink proceeds with both decisions recorded" "$rc" "0"
+check "and links" "$([ -L "$AR/docs/plans" ] && echo yes || echo no)" "yes"
+check "the mount copy is what you now read" "$(grep -c 'only the mount has' "$AR/docs/plans/a.md")" "1"
+check "and the superseded version is still there" \
+      "$(grep -c 'only main has' "$AM/$REPO/superseded-by-mount/a.md")" "1"
+
 echo
 echo "$PASS passed, $FAIL failed"
 [ "$FAIL" -eq 0 ]

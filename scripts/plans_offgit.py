@@ -55,6 +55,9 @@ CODE = Path(os.environ.get("CODE_ROOT", Path.home() / "code"))
 SCAN_ROOTS = [CODE, CODE.parent]
 IGNORE_RULE = "docs/plans"  # NO trailing slash: with one, git does not ignore a symlink
 PLAN_DIR = "docs/plans"
+# Where an --accept-mount decision files the ref's losing version. Keeping it means the
+# decision is reversible and nothing is deleted to make a gate pass.
+SUPERSEDED = "superseded-by-mount"
 
 # research-skills is excluded on purpose (2026-09-14): it is public and PHI-free, and there the
 # plans are the product. scripts/copy-plans-to-mount.sh excludes it for the same reason.
@@ -65,6 +68,7 @@ REPOS = [
 ]
 
 IDENTICAL, AHEAD, REPO_ONLY, BOTH = "identical", "mount-ahead", "repo-only", "both-differ"
+ACCEPTED = "accepted-mount-wins"
 
 
 def git(repo: Path, *args: str, check: bool = True) -> str:
@@ -97,6 +101,7 @@ class Report:
     ref: str = "origin/main"
     entries: list[Entry] = field(default_factory=list)
     untracked: list[str] = field(default_factory=list)
+    unpreserved: list[str] = field(default_factory=list)
 
     def of(self, state: str) -> list[Entry]:
         return [e for e in self.entries if e.state == state]
@@ -121,10 +126,12 @@ def plan_blobs(repo: Path, ref: str = "origin/main") -> list[tuple[str, str]]:
     return rows
 
 
-def compare(repo_name: str, ref: str = "origin/main") -> Report:
+def compare(repo_name: str, ref: str = "origin/main",
+            accept: set[str] | None = None) -> Report:
     repo = CODE / repo_name
     mount = MOUNT / repo_name
     rep = Report(repo=repo_name, ref=ref)
+    accept = accept or set()
 
     for blob, rel in plan_blobs(repo, ref):
         m = mount / rel
@@ -144,7 +151,17 @@ def compare(repo_name: str, ref: str = "origin/main") -> Report:
         wset, gset = set(want), set(got)
         adds = sum(1 for ln in got if ln not in wset)
         drops = sum(1 for ln in want if ln not in gset)
-        rep.entries.append(Entry(rel, blob, AHEAD if drops == 0 else BOTH, adds, drops))
+        state = AHEAD if drops == 0 else BOTH
+        if state is BOTH and rel in accept:
+            # The plan decided this class in advance: "a both-differ file whose repo side is only
+            # stale --> mount wins, proceed". Allow it ONLY once the ref's losing version is
+            # preserved verbatim on the mount, so mount-wins never means content-gone.
+            kept = mount / SUPERSEDED / rel
+            if kept.is_file() and git(repo, "hash-object", str(kept)).strip() == blob:
+                state = ACCEPTED
+            else:
+                rep.unpreserved.append(rel)
+        rep.entries.append(Entry(rel, blob, state, adds, drops))
 
     # Untracked plan files in the working tree are invisible to ls-tree and have no git copy at
     # all. relink deletes the tree, so any of these not on the mount would be lost outright.
@@ -162,27 +179,35 @@ def print_report(rep: Report) -> None:
     n = len(rep.entries)
     print(f"\n{rep.repo}: {n} plan files on {rep.ref}")
     for state, label in ((IDENTICAL, "identical"), (AHEAD, "mount ahead (safe)"),
+                         (ACCEPTED, "accepted: mount wins, ref version preserved"),
                          (REPO_ONLY, "repo only (push copies these up)"),
                          (BOTH, "BOTH DIFFER -- needs a human")):
         items = rep.of(state)
         print(f"  {label:<34} {len(items)}")
-        if state in (REPO_ONLY, BOTH):
+        if state in (REPO_ONLY, BOTH, ACCEPTED):
             for e in items:
                 extra = (f"   mount-only {e.mount_adds} / repo-only {e.repo_only_lines}"
                          f" (distinct lines)"
-                         if state == BOTH else "")
+                         if state in (BOTH, ACCEPTED) else "")
                 print(f"      {e.rel}{extra}")
     if rep.untracked:
         print(f"  UNTRACKED and not on the mount        {len(rep.untracked)}"
               "   <- no git copy; push these up first")
         for r in rep.untracked:
             print(f"      {r}")
+    if rep.unpreserved:
+        print(f"  --accept-mount REFUSED                {len(rep.unpreserved)}"
+              "   <- preserve the ref version first")
+        for r in rep.unpreserved:
+            print(f"      {r}   copy the {rep.ref} version to "
+                  f"{MOUNT / rep.repo / SUPERSEDED / r}")
 
 
-def mode_check(repo_name: str, ref: str = "origin/main") -> int:
-    rep = compare(repo_name, ref)
+def mode_check(repo_name: str, ref: str = "origin/main",
+               accept: set[str] | None = None) -> int:
+    rep = compare(repo_name, ref, accept)
     print_report(rep)
-    bad = len(rep.blocked) + len(rep.untracked)
+    bad = len(rep.blocked) + len(rep.untracked) + len(rep.unpreserved)
     if bad:
         print(f"\nBLOCKED: {len(rep.blocked)} file(s) differ in both directions, "
               f"{len(rep.untracked)} untracked file(s) have no mount copy.")
@@ -265,7 +290,8 @@ def link_target(repo_name: str) -> Path:
     return MOUNT / repo_name
 
 
-def mode_relink(repo_name: str, apply: bool, ref: str = "origin/main") -> int:
+def mode_relink(repo_name: str, apply: bool, ref: str = "origin/main",
+                accept: set[str] | None = None) -> int:
     repo = CODE / repo_name
     plans = repo / PLAN_DIR
 
@@ -305,7 +331,7 @@ def mode_relink(repo_name: str, apply: bool, ref: str = "origin/main") -> int:
               f"{repo_name} --apply")
         return 1
 
-    if mode_check(repo_name, ref) != 0:
+    if mode_check(repo_name, ref, accept) != 0:
         return 1
 
     # Nothing may be deleted that was never compared. See unchecked_files().
@@ -483,6 +509,12 @@ def main() -> int:
     ap.add_argument("mode", choices=["check", "push", "relink", "doctor"])
     ap.add_argument("repo", nargs="?", help="repo name; omit with doctor for all")
     ap.add_argument("--apply", action="store_true", help="actually write (default is a dry run)")
+    ap.add_argument("--accept-mount", action="append", default=[], metavar="PATH",
+                    help="for a BOTH DIFFER file, record that the mount copy is the decided "
+                         "winner (the plan's rule: repo side only stale -> mount wins). Path is "
+                         "relative to docs/plans. Repeatable. REFUSED unless the ref's version is "
+                         f"already preserved verbatim at <mount>/<repo>/{SUPERSEDED}/<path>, so "
+                         "the decision never means content is gone.")
     ap.add_argument("--ref", default="origin/main",
                     help="which ref to compare against. Default origin/main, because that is what "
                          "the untrack commit acts on. Use --ref HEAD straight after a local merge, "
@@ -502,9 +534,10 @@ def main() -> int:
     if not (CODE / a.repo / ".git").exists():
         ap.error(f"no git repo at {CODE / a.repo}")
 
-    return {"check": lambda: mode_check(a.repo, a.ref),
+    accept = set(a.accept_mount)
+    return {"check": lambda: mode_check(a.repo, a.ref, accept),
             "push": lambda: mode_push(a.repo, a.apply, a.ref),
-            "relink": lambda: mode_relink(a.repo, a.apply, a.ref)}[a.mode]()
+            "relink": lambda: mode_relink(a.repo, a.apply, a.ref, accept)}[a.mode]()
 
 
 if __name__ == "__main__":

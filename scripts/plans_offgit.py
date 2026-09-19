@@ -307,6 +307,25 @@ def mode_relink(repo_name: str, apply: bool, ref: str = "origin/main") -> int:
 
     if mode_check(repo_name, ref) != 0:
         return 1
+
+    # Nothing may be deleted that was never compared. See unchecked_files().
+    mount = MOUNT / repo_name
+    orphans = []
+    for rel in unchecked_files(repo, ref):
+        src, dest = plans / rel, mount / rel
+        if not dest.is_file():
+            orphans.append((rel, "not on the mount"))
+        elif src.is_file() and git(repo, "hash-object", str(src)).strip() != \
+                git(repo, "hash-object", str(dest)).strip():
+            orphans.append((rel, "differs from the mount copy"))
+    if orphans:
+        print(f"\n{repo_name}: BLOCKED -- {len(orphans)} file(s) under {PLAN_DIR} are neither "
+              f".md nor .html, so check never compared them, and relink would delete them:")
+        for rel, why in orphans:
+            print(f"      {rel}   <- {why}")
+        print(f"  Copy each to {mount}/ (or delete it deliberately), then re-run relink.")
+        return 1
+
     if plans.is_symlink():
         print(f"\n{repo_name}: already a symlink -> {os.readlink(plans)}")
         return 0
@@ -337,6 +356,29 @@ def mode_relink(repo_name: str, apply: bool, ref: str = "origin/main") -> int:
     print("verified: 0 files tracked, link resolves, "
           f"{len(list(link_target(repo_name).rglob('*.md')))} plan docs reachable")
     return 0
+
+
+def unchecked_files(repo: Path, ref: str) -> list[str]:
+    """Files relink will DELETE that check never compared.
+
+    compare() only looks at .md and .html -- it is comparing prose. But relink removes the whole
+    tree, so anything else tracked under docs/plans, or sitting there untracked, is deleted without
+    ever being held against the mount. Measured 2026-09-19: across the ten repos this class held
+    exactly two files, and they were not alike. vista-ct's was `reviews/.gitkeep`, a 1-byte
+    placeholder nobody would miss. vista-eval's was
+    `reviews/fusion-phase4b-leaderboard-callsite-draft.patch`, 3,062 bytes of real work that was
+    NOT on the mount. Counting the class is not the same as looking at it.
+    """
+    out: list[str] = []
+    for line in git(repo, "ls-tree", "-r", "--name-only", ref, "--", PLAN_DIR,
+                    check=False).splitlines():
+        if line and not line.endswith((".md", ".html")):
+            out.append(line[len(PLAN_DIR) + 1:])
+    for line in git(repo, "ls-files", "--others", "--exclude-standard", "--", PLAN_DIR,
+                    check=False).splitlines():
+        if line and not line.endswith((".md", ".html")):
+            out.append(line[len(PLAN_DIR) + 1:])
+    return sorted(set(out))
 
 
 def worktrees_of(root: Path) -> list[Path]:

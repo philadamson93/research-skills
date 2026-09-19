@@ -210,6 +210,59 @@ check "the only thing dirty is .gitignore" \
 check "the symlink itself is ignored, not dirty" \
       "$(git -C "$ER" status --short -- docs/plans | wc -l)" "0"
 
+# ---------------------------------------------------------------- 8. nothing deleted uncompared
+# check only compares .md and .html -- it is comparing prose. relink deletes the whole tree. So a
+# .patch, a .png, a .csv under docs/plans would be destroyed without ever being held against the
+# mount. Real instance: vista-eval tracked a 3,062-byte
+# reviews/fusion-phase4b-leaderboard-callsite-draft.patch that was not on the mount at all.
+echo
+echo "plans_offgit relink -- refuses to delete a file check never compared"
+
+N="$TMP/other"; NM="$TMP/othermount"; mkdir -p "$N" "$NM/$REPO/reviews"
+git init --bare -b main -q "$TMP/remote4/$REPO.git"
+git clone -q "$TMP/remote4/$REPO.git" "$N/$REPO" 2>/dev/null
+NR="$N/$REPO"
+q "$NR" config user.email test@example.com
+q "$NR" config user.name  Test
+mkdir -p "$NR/docs/plans/reviews"
+echo "a plan" > "$NR/docs/plans/a.md"
+printf 'diff --git a/x b/x\n-old\n+new\n' > "$NR/docs/plans/reviews/draft.patch"
+q "$NR" add -A; q "$NR" commit -m base; q "$NR" push -u origin main
+cp "$NR/docs/plans/a.md" "$NM/$REPO/a.md"        # only the .md reaches the mount
+
+OUT="$(PLANS_MOUNT="$NM" CODE_ROOT="$N" uv run --script "$SCRIPT" relink "$REPO" --apply 2>&1)"; rc=$?
+check "check alone calls it clean" "$(printf '%s' "$OUT" | grep -c 'safe to push and relink')" "1"
+check "but relink refuses"         "$rc" "1"
+if printf '%s' "$OUT" | grep -q 'draft.patch'; then ok "and names the file"; else bad "does not name the file"; fi
+check "the .patch still exists"    "$([ -f "$NR/docs/plans/reviews/draft.patch" ] && echo kept || echo DELETED)" "kept"
+check "and nothing was untracked"  "$(git -C "$NR" ls-files docs/plans | wc -l)" "2"
+
+# once it is on the mount, relink proceeds
+cp "$NR/docs/plans/reviews/draft.patch" "$NM/$REPO/reviews/draft.patch"
+OUT="$(PLANS_MOUNT="$NM" CODE_ROOT="$N" uv run --script "$SCRIPT" relink "$REPO" --apply 2>&1)"; rc=$?
+check "with a mount copy, relink runs" "$rc" "0"
+check "and links"                      "$([ -L "$NR/docs/plans" ] && echo yes || echo no)" "yes"
+check "the .patch is still readable through the link" \
+      "$(grep -c '^+new' "$NR/docs/plans/reviews/draft.patch")" "1"
+
+# a file that DIFFERS from its mount copy is refused too, not silently overwritten
+echo
+G2="$TMP/other2"; G2M="$TMP/other2mount"; mkdir -p "$G2" "$G2M/$REPO/reviews"
+git init --bare -b main -q "$TMP/remote5/$REPO.git"
+git clone -q "$TMP/remote5/$REPO.git" "$G2/$REPO" 2>/dev/null
+G2R="$G2/$REPO"
+q "$G2R" config user.email test@example.com
+q "$G2R" config user.name Test
+mkdir -p "$G2R/docs/plans/reviews"; echo "a plan" > "$G2R/docs/plans/a.md"
+echo "the real one" > "$G2R/docs/plans/reviews/draft.patch"
+q "$G2R" add -A; q "$G2R" commit -m base; q "$G2R" push -u origin main
+cp "$G2R/docs/plans/a.md" "$G2M/$REPO/a.md"
+echo "a STALE different copy" > "$G2M/$REPO/reviews/draft.patch"
+OUT="$(PLANS_MOUNT="$G2M" CODE_ROOT="$G2" uv run --script "$SCRIPT" relink "$REPO" --apply 2>&1)"; rc=$?
+check "a differing mount copy is refused too" "$rc" "1"
+if printf '%s' "$OUT" | grep -q 'differs from the mount copy'; then ok "and says why"; else bad "wrong reason given"; fi
+check "the repo copy survives" "$(grep -c 'the real one' "$G2R/docs/plans/reviews/draft.patch")" "1"
+
 echo
 echo "$PASS passed, $FAIL failed"
 [ "$FAIL" -eq 0 ]

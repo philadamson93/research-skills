@@ -268,6 +268,43 @@ def link_target(repo_name: str) -> Path:
 def mode_relink(repo_name: str, apply: bool, ref: str = "origin/main") -> int:
     repo = CODE / repo_name
     plans = repo / PLAN_DIR
+
+    # REFUSE unless this checkout is actually sitting on the ref we compared against.
+    #
+    # check reads `ref` (origin/main by default), but relink deletes the WORKING TREE and untracks
+    # whatever is in THIS checkout's index. On a feature branch those are different sets, and the
+    # difference is unprotected: files tracked on the branch but not on the ref are never compared
+    # to the mount, and a working-tree EDIT to a tracked file is not compared either -- the
+    # untracked sweep does not see it, because the file is tracked.
+    #
+    # Measured 2026-09-19 on crc-extraction-agent, parked on feat/phi-safe-externalized-storage:
+    # origin/main had 2 plan files, the branch tracked 50, the working tree held 61, and 13 were
+    # uncommitted (8 untracked, 5 edits to tracked files). check compares 2 and passes; relink
+    # would then have deleted 61. Migrate from a checkout that IS at the ref -- a scratch worktree
+    # (`git worktree add --detach <path> origin/main`) is the cheap way, and leaves shared
+    # checkouts alone.
+    head = git(repo, "rev-parse", "HEAD", check=False).strip()
+    want = git(repo, "rev-parse", ref, check=False).strip()
+    if not head or not want:
+        print(f"{repo_name}: cannot resolve HEAD or {ref} in {repo}")
+        return 1
+    if head != want:
+        branch = git(repo, "rev-parse", "--abbrev-ref", "HEAD", check=False).strip() or "detached"
+        tracked_here = len(git(repo, "ls-files", "--", PLAN_DIR, check=False).split())
+        tracked_ref = len(plan_blobs(repo, ref))
+        dirty = len(git(repo, "status", "--porcelain", "--", PLAN_DIR, check=False).splitlines())
+        print(f"\n{repo_name}: REFUSING -- this checkout is not at {ref}.")
+        print(f"  {repo} is on '{branch}' ({head[:9]}), {ref} is {want[:9]}.")
+        print(f"  check compared {tracked_ref} file(s) from {ref}, but relink would untrack the "
+              f"{tracked_here} file(s) this branch tracks")
+        print(f"  and delete the whole tree, including {dirty} uncommitted change(s) that were "
+              f"never compared to the mount.")
+        print(f"  Migrate from a checkout that is at {ref}:")
+        print(f"    git -C {repo} worktree add --detach /tmp/offgit/{repo_name} {ref}")
+        print(f"    CODE_ROOT=/tmp/offgit uv run --script scripts/plans_offgit.py relink "
+              f"{repo_name} --apply")
+        return 1
+
     if mode_check(repo_name, ref) != 0:
         return 1
     if plans.is_symlink():

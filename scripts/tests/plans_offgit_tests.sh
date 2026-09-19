@@ -135,6 +135,48 @@ OUT="$(run_doctor --apply)"
 check "a second apply relinks nothing" "$(printf '%s' "$OUT" | grep -c 'LINKING')" "0"
 check "and reports all five as linked"  "$(printf '%s' "$OUT" | grep -c 'linked')" "5"
 
+# ---------------------------------------------------------------- 6. relink refuses off-ref
+# check reads origin/main; relink deletes the WORKING TREE and untracks THIS index. On a feature
+# branch those differ, and the difference is unprotected -- a file tracked on the branch but not on
+# main is never compared to the mount, and an EDIT to a tracked file is not compared either. So
+# relink must refuse unless the checkout is actually sitting on the ref that was compared.
+echo
+echo "plans_offgit relink -- refuses when the checkout is not at the ref"
+
+G="$TMP/guard"; GM="$TMP/guardmount"; mkdir -p "$G" "$GM/$REPO"
+git init --bare -b main -q "$TMP/remote2/$REPO.git"
+git clone -q "$TMP/remote2/$REPO.git" "$G/$REPO" 2>/dev/null
+GR="$G/$REPO"
+q "$GR" config user.email test@example.com
+q "$GR" config user.name  Test
+mkdir -p "$GR/docs/plans"
+echo "on main and on the mount" > "$GR/docs/plans/a.md"
+q "$GR" add -A; q "$GR" commit -m base; q "$GR" push -u origin main
+cp "$GR/docs/plans/a.md" "$GM/$REPO/a.md"          # the mount matches main exactly
+
+# now wander off main: one extra committed plan doc, and one uncommitted edit to a tracked one
+q "$GR" checkout -b feature
+echo "exists only on this branch" > "$GR/docs/plans/branch-only.md"
+q "$GR" add -A; q "$GR" commit -m "a plan doc only this branch has"
+echo "an edit that exists nowhere else" >> "$GR/docs/plans/a.md"
+
+OUT="$(PLANS_MOUNT="$GM" CODE_ROOT="$G" uv run --script "$SCRIPT" relink "$REPO" --apply 2>&1)"; rc=$?
+check "relink exits non-zero off-ref" "$rc" "1"
+if printf '%s' "$OUT" | grep -q 'REFUSING'; then ok "and says it is refusing"; else bad "no refusal in output"; fi
+check "the branch-only plan doc survives" \
+      "$([ -f "$GR/docs/plans/branch-only.md" ] && echo kept || echo DELETED)" "kept"
+check "the uncommitted edit survives" \
+      "$(grep -c 'exists nowhere else' "$GR/docs/plans/a.md")" "1"
+check "nothing was untracked" "$(git -C "$GR" ls-files docs/plans | wc -l)" "2"
+check "no symlink was made" "$([ -L "$GR/docs/plans" ] && echo yes || echo no)" "no"
+
+# and it proceeds once the checkout IS at the ref
+q "$GR" stash
+q "$GR" checkout main
+OUT="$(PLANS_MOUNT="$GM" CODE_ROOT="$G" uv run --script "$SCRIPT" relink "$REPO" --apply 2>&1)"; rc=$?
+check "on the ref, relink runs" "$rc" "0"
+check "and links" "$([ -L "$GR/docs/plans" ] && echo yes || echo no)" "yes"
+
 echo
 echo "$PASS passed, $FAIL failed"
 [ "$FAIL" -eq 0 ]

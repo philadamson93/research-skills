@@ -145,7 +145,25 @@ a loop waiting for something to change; subscribe instead (see *Cadence*). Names
 are also the addresses `SendMessage` needs, both for an advance and for a subscription. A session
 Phil is driving himself in a terminal will not appear there; that is fine, it has a human watching.
 
-## Phase 0 — Build the map (the lead value)
+## Phase 0 — Start from the goals, not the sessions
+
+**Read the briefs before `ListAgents`, every sweep.** Session liveness is a means; stage progress
+is the end. Sweeping the other way round quietly swaps them — three approved stages once sat
+untouched for days while this loop tracked token deltas and transcript mtimes in detail.
+
+1. Read each brief's stage table. List the stages marked in flight.
+2. For each, find the plan governing **the next step** — not the stage row's headline plan — and
+   read its status.
+3. Sort into three buckets and report in this order:
+   - **Approved and in flight** — the queue this loop exists to drain.
+   - **Draft, awaiting Phil** — his queue. Name the plan and how long it has waited.
+   - **Human-gated** — a review, a read, a decision he owes. Phase 4.
+4. *Then* call `ListAgents`, only to see which bucket-one items have a session to nudge.
+
+**Keep liveness work cheap.** A quiet session whose branch is pushed and whose uncommitted files
+are backed up is one line, not an investigation.
+
+## Phase 1 — Build the map (who is working where)
 
 Join three sources. All three are cheap and none involve a session.
 
@@ -290,7 +308,7 @@ That last one nearly had a session tell Phil to treat a finished 13KB document a
 - Before reporting a file missing, say which refs you searched. If you cannot, you have not
   searched.
 
-## Phase 1 — Watch (read-only)
+## Phase 1b — Watch (read-only)
 
 Each check answers yes or no about a file or a process. No code, no diffs, no judgement calls.
 
@@ -445,6 +463,25 @@ above are phrased to avoid needing them. "A review file exists beside the plan" 
 file. "The stage is committed" is a fact about `git log` against the board's stamp — not a diff.
 Whether a review came back *clean* is a judgement, so it is never the trigger: if the substance of
 a review decides the next step, put it in the digest and let Phil judge it.
+
+**Second trigger: an approved stage that is not finished.** The rows above fire only on a
+session's own next step, which misses the case that matters most — an approved plan whose stage is
+still in flight and whose session is about to stop early. Tell that session to carry on: name the
+stage, the plan, and the review steps it owes, `/review-implementation` before `/commit-review`.
+
+⛔ **Never launch a session.** Only tell an agent that is *currently working* to continue. An
+approved stage with no live session is a line in the digest, not a session to start. Fleet size is
+Phil's call.
+
+Two more exclusions:
+- **A human gate** — a review, Phil's own doc read, a decision he owes — is Phase 4.
+- **A stage with no approved plan** is new work, and his call. This trigger finishes what he
+  already approved.
+
+⚠ **"The stage has an approved plan" is not "the next step is approved."** A long stage accretes
+plans: the stage row names the one it opened with, while the work in front of it may be governed
+by a newer doc still in Draft. Find the plan governing the next step — the session's last `Next`
+line names it — and read its status there.
 
 ### How to advance — the mechanism
 

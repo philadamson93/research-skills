@@ -116,6 +116,10 @@ writing failure, not a misunderstanding.
 - A wrong fast answer costs more than a right slow one. Think it through.
 - Go back to planning when the direction changes: the approach won't work, a new constraint turns
   up, the job is bigger than it looked, the design has a problem, or you're simply unsure.
+- Keep a plan short enough to check off. Past about 500 lines, split it at a phase boundary into
+  separate plans, each with its own *Files to Modify* and its own finish. Long plans are where
+  approved items get buried: a sub-phase that lives only in paragraph 40 of a 2,800-line doc is
+  one nobody will check off.
 
 ### Saving a plan
 
@@ -143,7 +147,8 @@ How.
 
 ## Files to Modify
 Each path and what changes there. For a new file, name the directory it goes in, and flag
-any directory that doesn't exist yet.
+any directory that doesn't exist yet. This list is what the plan gets checked off against when
+it's finished, so every deliverable belongs here, including the ones buried in sub-phases.
 
 ## Open Questions
 What's still ambiguous. "None — the defaults below are mine to make" is a valid and often correct
@@ -182,6 +187,12 @@ exists yet — a live plan should resolve to one.
 
 - Land branch work with `/land`, following the plan's landing section. Don't merge or delete
   branches by hand. For work that went straight on `main`, do the three steps below yourself.
+- **Check it off item by item before calling it done.** List every deliverable the plan names —
+  each *Files to Modify* row, each numbered phase *and sub-phase* (1a, 1b, …), each gate it
+  promised — and next to each, the commit or `file:line` that delivers it. Anything with no match
+  keeps the plan open, and the brief's stage stays open with it. Don't roll sub-parts up into
+  "Phase 1 done": that is how an approved sub-phase went unbuilt for weeks while the brief, the
+  board and memory all said "nothing left to build". Put the checked list in the close-out block.
 - Fix the documentation the change invalidated: stale paths, command examples, imports, links.
 - Mark the plan `**Status: Completed** (date)`.
 - Update the table in `docs/plans/README.md`.

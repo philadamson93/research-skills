@@ -26,62 +26,31 @@ For each `docs/` file you touched this session:
 - **Out of scope here**: full-tree consolidation, gathering scattered content from many untouched docs, large architectural reorganizations of `docs/` as a whole. Defer to a separate, deeper-context skill (or note the opportunity on the board / in `backlog.md` for a future pass).
 - Goal: optimize for *future-agent findability*. You're reorganizing for your own sake on the next session, not for a human reader.
 
-**Also glance at any code directory you touched this session** (same recently-touched, no-full-tree scope): if it has drifted into a flat dump of unrelated files, propose a small, in-scope split and update inbound imports/references. Placement should have been settled at plan time (`claude_ops.md` → Writing code) — this is the retrospective safety net, not a substitute for it, so keep the move small and note it in the commit message.
+**Also glance at any code directory you touched this session** (same recently-touched, no-full-tree scope): if it has drifted into a flat dump of unrelated files, propose a small, in-scope split and update inbound imports/references. Placement should have been settled in the spec's *Deliverables* (`claude_ops.md` → Writing code) — this is the retrospective safety net, not a substitute for it, so keep the move small and note it in the commit message.
 
-Update any plan/status tables (e.g., `docs/plans/README.md`) if work shipped or got promoted to a plan doc this session. *Review-status sync is handled separately in Step 2.*
+*Spec and plan status in `docs/plans/README.md` is handled in Step 2.*
 
-## Step 2 — Plan-doc review-status sync
+## Step 2 — Spec and plan status sync
 
-If the project has a plan-tracking index (`docs/plans/README.md` or equivalent), maintain a **Reviewed** column with three values:
+Two formats live in `docs/plans/`: one-page specs written by `/grill` (*Status*, *Goal*, *Done when*,
+*Decided*, *Deliverables*, …) and older long-format plans (*Files to Modify*, *Verification*, …).
+Treat both the same way here, and don't convert an old plan.
 
-- `Yes` — the user approved the plan's **rendered explainer** and that explainer is in sync with
-  the plan's current content.
-- `No` — never reviewed.
-- `Stale` — was `Yes`, but the plan has been substantively edited since.
+- **A `/grill` interview stopped partway** → save it now, so the next session can pick it up rather
+  than re-asking. Write `docs/plans/<what-it-is>.md` in the spec template with
+  `Status: Draft (YYYY-MM-DD)`, fill in what Phil has already answered under *Decided* (dated), and
+  add an `## Still to ask` list naming the open questions on the frontier. The resume block's `OPEN`
+  line is then `/grill docs/plans/<what-it-is>.md`.
+- **Status values**: `Draft` = interview not finished, so the spec is in flight and not yet approved;
+  `Approved (date)` = Phil confirmed the interview, build may be under way; `Completed (date)` =
+  every deliverable ticked, evaluator passed, landed. Old plans keep whatever status line they have.
+- **Index**: make sure `docs/plans/README.md` has a row for every spec or plan created this session,
+  with its status. If `docs/plans/` exists but has no README, bootstrap one with
+  `Plan | Status | Description` columns. There is no review column to maintain any more; leave an
+  existing `Reviewed` column's values alone and don't fill it for new rows. No `docs/plans/` at all →
+  skip this step.
 
-**Staleness is measured against a hash of the plan's own content, not a git SHA.** Plans are now
-authored on the shared mount and never enter git, so most of them have no commit to anchor to. Use
-the same hash the explainer records in its own header, so the two agree by construction.
-
-**Sync rules during wrapup**:
-
-- **New plan doc created this session** → ensure README row exists with `Reviewed: No`.
-- **Existing plan doc substantively edited this session** ("substantive" = content/section changes; *not* typo fixes, formatting, dead-link cleanup, or whitespace): if the row is currently `Yes`, demote to `Stale`. If `No` or `Stale`, leave as-is.
-
-  **Three more things that are NOT substantive**, written down because leaving them unwritten
-  demoted two plans that nobody had re-designed (`cohort-chat-ui` and `cohort-mcp-free-sql`,
-  2026-09-14; restored by Phil 2026-09-18):
-
-  - a `Program:` header line added by the planning-layer migration;
-  - a dated **migration or redirect note** — it says where moved code now lives and how to read
-    the old paths, and changes nothing about what gets built;
-  - **transcription of a decision already approved elsewhere.** Phil ruled this way on
-    2026-09-11 for `cohort-chat-ui`: the edits only wrote down rulings he had already made, so he
-    kept the row `Yes` rather than spend a re-read on a 432-line plan.
-
-  A note that changes what gets built is substantive however it is labelled — the test is whether
-  a reader would build something different, not whether the bytes moved.
-
-  **Before demoting, diff against the approved text rather than trusting the file's own account of
-  itself.** For a plan with banked snapshots that is `<plan-dir>/history/`. For one migrated off a
-  repo, the pre-migration version is still in that repo's git — both plans above were recoverable
-  from `vista_bench` at `docs/plans/<stem>.md`, which is how the wrong demotion was caught. A
-  demotion costs a real review gate, so it is worth the one diff.
-- **Never silently promote `No` / `Stale` → `Yes`.** There is exactly **one** promotion path: an
-  approved explainer whose content hash matches the plan. `/read-plan` no longer promotes anything
-  — Phil does not read markdown, so opening the markdown is not a review. If he says inline that
-  he reviewed a plan, ask which artifact he read; if it was the explainer, record it, and if the
-  explainer is out of sync, regenerate it first.
-
-  **The one exception, and it is not silent: a demotion that should never have happened.** If a
-  diff against the approved text shows only the non-substantive edits listed above, say so, show
-  what actually changed, and let Phil restore the row — then record in the cell what was diffed
-  and against which revision. That is a correction to the bookkeeping, not a review, so it needs
-  his word but not a fresh explainer. Do not restore on your own reading of the diff alone.
-- **No plan-tracking index exists, but `docs/plans/` (or equivalent) does**: bootstrap a `README.md` with `Plan | Status | Reviewed | Description` columns and populate `Reviewed: No` for all existing plan docs.
-- **No `docs/plans/` directory at all**: skip this step.
-
-Surface unreviewed plans (`No` or `Stale`) in the Step 9 summary so the next session can pick them up.
+Surface every `Draft` spec, and every `Approved` one with work left, in the Step 9 summary.
 
 ## Step 3 — Board hygiene (this repo's status board on the mount)
 
@@ -94,7 +63,7 @@ Upsert the entry for whatever you touched this session, in the board's own forma
 
 ```
 <short name> · program <brief-slug> stage N/M · <state> · <MM-DD>
-next: <one line> → <path to the plan, or "no plan doc">
+next: <one line> → <path to the spec or plan, or "no spec">
 ```
 
 - **Only active items.** When something finishes, take it **off** the board — its status lives in
@@ -188,7 +157,7 @@ For each in-flight task advanced this session, write (or update) a state doc at 
 - **Where things stand** — what was done this session and the current state of the work.
 - **What's next** — the recommended first concrete action, plus the remaining steps.
 - **Open questions / blockers** — anything unresolved or waiting on the user.
-- **Key coordinates** — branch / worktree, relevant file paths, the plan-doc pointer, and any verification run + its result.
+- **Key coordinates** — branch / worktree, relevant file paths, the spec or plan-doc pointer, and any verification run + its result.
 
 **Authorship discipline applies unchanged**: never write raw PHI (patient identifiers, sample rows, report text) into the state doc. Git-ignoring controls *commit* exposure, not what may be written — the standing rule that Claude never echoes PHI into any doc applies to git-ignored files exactly as to committed ones (`claude_ops.md` → What gets committed).
 
@@ -202,11 +171,11 @@ For each in-flight task advanced this session, write (or update) a state doc at 
 
 - **Shipped this session**: what concretely landed (1–3 bullets).
 - **Doc changes worth flagging**: any moderate-or-higher reorgs from Step 1 — file splits, cross-doc moves, doc merges, major section reorders, new files bootstrapped. Skip if all doc work was inline tightening.
-- **Plans needing review**: any rows currently `No` or `Stale` in the plan-tracking index after Step 2 — name the path so the next session can run `/explain-plan <path>` — the only thing that can record a review. Skip if all plans are `Yes` or no plan-tracking index exists.
+- **Specs in flight**: each `Draft` spec (name the path; the next session resumes it with `/grill <path>`) and each `Approved` spec or old plan with work left. If a build finished this session, say whether the evaluator passed it and whether the what-changed explainer exists yet. Skip if none.
 - **Next**: what comes after this session (1–3 bullets).
 - **Blocked on user**: things the next session can't unblock itself (1–3 bullets).
 
-**Then raise an `AskUserQuestion` at the commit gate** with three structured options. Commit is **opt-in** — the default is to skip it and let the resume block + `docs/session/` docs carry state forward. Only offer commit as the recommended choice when this session's changes reached a **finished, shareable state** (per `claude_ops.md` → When to commit): an approved plan, a completed and verified implementation, or results ready to hand off. For the common mid-workflow / budget-out close, skip.
+**Then raise an `AskUserQuestion` at the commit gate** with three structured options. Commit is **opt-in** — the default is to skip it and let the resume block + `docs/session/` docs carry state forward. Only offer commit as the recommended choice when this session's changes reached a **finished, shareable state** (per `claude_ops.md` → When to commit): a completed and verified implementation (the spec gets committed with its first code), or results ready to hand off. For the common mid-workflow / budget-out close, skip.
 
 1. **"Skip commit" (Recommended for a mid-workflow close)** — don't commit; leave changes in the working tree. State is preserved by the board, the brief, `MEMORY.md`, `docs/session/`, and the resume block. Nothing is staged, so no commit-time PHI gate fires.
 2. **"Commit and push"** — commit the changes and push to the tracking remote in one action. Choose this when the work is finished and worth sharing.
@@ -237,7 +206,7 @@ Resume ▸ per-CT landmark tasks · stage 5 of 9
   BRIEF   <mount>/planning/programs/per-ct-landmark-tasks.md
   REPO    research-skills
   BRANCH  feat/foo   [WORKTREE .claude/worktrees/foo]
-  DOC     docs/plans/foo.md (plan) · docs/session/foo-readback.md (state)
+  DOC     docs/plans/foo.md (spec) · docs/session/foo-readback.md (state)
   STATE   ⚠ uncommitted — resume from the working tree in this checkout
   OPEN    cd <checkout> && cat docs/session/foo-readback.md   # substance + what's next
 ```
@@ -249,7 +218,7 @@ Resume ▸ per-CT landmark tasks · stage 5 of 9
   BRIEF   <mount>/planning/programs/per-ct-landmark-tasks.md
   REPO    research-skills
   BRANCH  feat/foo   [WORKTREE .claude/worktrees/foo]
-  DOC     docs/plans/foo.md (plan)
+  DOC     docs/plans/foo.md (spec)
   SHA     <pushed short sha>
   SYNC    git fetch origin && git checkout feat/foo && git pull --ff-only   # run FIRST; verify: git rev-parse --short HEAD → <sha>
 ```
@@ -259,9 +228,9 @@ line. A blank is indistinguishable from forgetting; an explicit "none" is a find
 can act on.
 
 - **BRANCH / WORKTREE** — the branch/worktree the work sits on (`main` or a `feat/…`), plus `[WORKTREE <path>]` when you're in a non-primary checkout.
-- **DOC** — the plan doc this session advanced and/or the `docs/session/` doc carrying its substance and next steps. Omit for a pure-hygiene session with no doc to resume from.
+- **DOC** — the spec or plan doc this session advanced and/or the `docs/session/` doc carrying its substance and next steps. Omit for a pure-hygiene session with no doc to resume from.
 - **STATE / SHA** — *uncommitted close:* `STATE` states the work lives in the working tree of this checkout. *Milestone close:* `SHA` is the pushed short SHA.
-- **OPEN / SYNC — the runnable first action.** *Uncommitted close:* the files are already in this checkout, so the next session just opens it and reads the `docs/session/` doc — no fetch. *Milestone close:* the local branch is stale relative to the pushed `<sha>`, so fetch + checkout + pull **before** surveying git — "can't find the branch / doc" means *fetch first*, not *improvise*. Shared / dirty tree or non-ff → `git worktree add ../<repo>-<slug> <sha>` rather than `reset --hard`.
+- **OPEN / SYNC — the runnable first action.** *Uncommitted close:* the files are already in this checkout, so the next session just opens it and reads the `docs/session/` doc — no fetch. *Interview stopped partway:* `OPEN /grill docs/plans/<what-it-is>.md`. *Milestone close:* the local branch is stale relative to the pushed `<sha>`, so fetch + checkout + pull **before** surveying git — "can't find the branch / doc" means *fetch first*, not *improvise*. Shared / dirty tree or non-ff → `git worktree add ../<repo>-<slug> <sha>` rather than `reset --hard`.
 - Skip the resume block only for sessions that advanced no work worth resuming (pure doc-tweak or vista-pm-only sessions).
 
 ---

@@ -1,6 +1,6 @@
 ---
 name: manage
-description: The one long-running session that holds the big picture across the eight-to-ten sessions running at once, none of which can see each other. Joins running sessions × repo boards × program briefs so every session resolves to a program, a stage and a plan-doc location; watches read-only for cross-repo drift and stage-order mistakes; restarts a session that stopped short of an obvious procedural next step, by sending it that command, and advances mechanical steps only as far as the next real gate; nudges a session that has drifted from the standing rules; and routes questions to Phil through a board-state queue, answering none of them. TRIGGER only when Phil explicitly starts or resumes the manager — "/manage", "start the manager", "what's everything doing", "run the manager loop". SKIP entirely inside a working session: a task session never runs this, it just keeps its own board entry current. HARD CONSTRAINT — the manager never decides anything a task raised for Phil, and never resolves a conflict between sessions.
+description: The one long-running session that holds the big picture across the eight-to-ten sessions running at once, none of which can see each other. Joins running sessions × repo boards × program briefs so every session resolves to a program, a stage and a spec or plan doc; watches read-only for cross-repo drift, stage-order mistakes and sessions skipping the spec workflow (bigger work with no spec, an unapproved Expensive step, done with no evaluator verdict); restarts a session that stopped short of an obvious procedural next step (build an approved spec, run the evaluator, tick deliverables, write the what-changed explainer), by sending it that step, and advances mechanical steps only as far as the next real gate; nudges a session that has drifted from the standing rules; and routes questions to Phil through a board-state queue, answering none of them. TRIGGER only when Phil explicitly starts or resumes the manager — "/manage", "start the manager", "what's everything doing", "run the manager loop". SKIP entirely inside a working session; a task session never runs this, it just keeps its own board entry current. HARD CONSTRAINT — the manager never decides anything a task raised for Phil, and never resolves a conflict between sessions.
 ---
 # manage
 
@@ -99,13 +99,26 @@ is the end. Sweeping the other way round quietly swaps them, and approved stages
 days while the loop measures token deltas.
 
 1. Read each brief's stage table. List the stages marked in flight.
-2. For each, find the plan governing **the next step** — not the stage row's headline plan — and
-   read its status.
+2. For each, find the spec or plan governing **the next step** — not the stage row's headline
+   plan — and read its status.
 3. Sort into three buckets and report in this order:
    - **Approved and in flight** — the queue this loop exists to drain.
-   - **Draft, awaiting Phil** — his queue. Name the plan and how long it has waited.
-   - **Human-gated** — a review, a read, a decision he owes. Phase 4.
+   - **Draft, awaiting Phil** — the `/grill` interview is not confirmed yet. Name the spec and how
+     long it has waited.
+   - **Human-gated** — an Expensive step awaiting approval, a commit, a merge, a decision Phil
+     owes. Phase 4.
 4. *Then* call `ListAgents`, only to see which bucket-one items have a session to nudge.
+
+**Two doc formats are live.** A spec (from `/grill`) has *Done when*, *Decided* and *Deliverables*
+and runs to about a page. An older plan has *Approach*, *Files to Modify*, *Open Questions* and
+*Verification*. Both are valid. An older plan finishes on its own terms; never push a session to
+convert it. Wherever this skill says *Done when* or *Deliverables*, read *Verification* or *Files
+to Modify* for an older plan.
+
+The workflow a spec moves through, and what each step leaves behind for you to see:
+
+`/grill` → spec `Status: Draft`, then `Approved` → build → *Done when* checks → evaluator `PASS` →
+*Deliverables* ticked → what-changed explainer on the mount → `/commit-review` → `/land`.
 
 **Keep liveness work cheap.** A quiet session whose branch is pushed and whose uncommitted files
 are backed up is one line, not an investigation.
@@ -189,29 +202,35 @@ Each check answers yes or no about a file or a process.
 | Check | Fires when |
 |---|---|
 | **stage-vs-git** | A board entry's stage disagrees with the newest commit on the branch it names. The block's date is its last-verified stamp; newer commits mean unverified, not wrong. |
-| **branch with no plan doc** | A live branch with commits that no plan doc names. |
+| **bigger work with no spec** | A live branch with commits that no spec or plan names, or a session whose board item or last message names a GPU run, VM hand-off or PHI write with no spec behind it. Small work goes straight on `main` with no spec, so a commit on `main` alone never fires this. |
+| **Expensive step not approved** | A session's board `next:` line or last message is about to run a GPU job, a VM hand-off or a first PHI write that its spec's *Expensive steps* does not list as approved. Route it to Phil's queue (Phase 4). Never approve it, even when it is plainly the next step. |
+| **done with no evaluator verdict** | A board item, closing block or spec says done, ready to commit or ready to land, and no evaluator reply beginning `PASS` exists since the work's last change. Look first for the feedback file `/review-implementation` saves (`reviews/<stem>-implementation-feedback.md` beside the spec or plan), then the session's subagent transcripts (`agent-*.jsonl`). |
+| **Completed with open deliverables** | A spec marked `Status: Completed` that still has an unticked `- [ ]` under *Deliverables*. |
+| **spec over a page** | A spec (it has *Done when*) past about 80 lines. That is two pieces of work, or implementation steps crept in. Older long-format plans are exempt. |
 | **two sessions, one worktree** | Two live sessions sharing a `cwd`. One session's reset destroys the other's uncommitted work. |
 | **session on a Completed plan** | A live session whose plan doc is marked Completed — either the plan is stale or the work is redundant. |
 | **session maps to no program** | A live session resolving to no board entry. Untracked work. |
 | **board over cap** | A board past 100 lines, an item marked landed, or **any line past ~600 characters**. Line count alone measures the wrong thing — every board passes it while single lines run past 3,000 characters and bury anything urgent inside them. Report the line, not just the board. |
 | **a script prints a command Phil would paste** | A line that both prints and carries a backslash continuation, `!!`, or a printing heredoc. Continuations *inside* a script are not a finding — grep for print-and-hazard together or you manufacture false positives. |
 | **brief pointer broken** | `planning/check-brief-links.py` exits non-zero. Read the exit code **directly, never through a pipe**. A miss usually means a row's text was rewritten, not that a file moved — the checker accepts a link-free row only in set wording, so editing prose breaks it with no path change. Always check the target exists before reporting it missing, and never attribute a miss to another session without evidence. |
-| **plan handed over with no explainer** | A plan named by a **live board item** has no `<stem>.html` on the mount. Phil does not read markdown, so that plan has not been handed over. |
+| **finished with no what-changed explainer** | A spec named by a **live board item** has its deliverables ticked, or is marked Completed, with no what-changed explainer linked from the spec, the commit or the PR. Phil does not read markdown, so that work has not been handed over. |
 
 ⚠ **The two-sessions-one-worktree check fires most often on an interactive session Phil launches
-himself, and a `-suffix` in a session name does not create a separate checkout.** Verify with
+by hand, and a `-suffix` in a session name does not create a separate checkout.** Verify with
 `ls -d <repo>*` and by grouping sessions by `cwd`. Report the uncommitted file list and whether
 commits are unpushed — committed history is usually safe, and saying so keeps the warning
 proportionate. The durable fix is at launch time, which is Phil's.
 
 **The explainer check, scoped:**
-- Look in `planning/<repo>/`, **not** `plan-explainers/` — the per-repo directories hold the
-  hundreds; checking the wrong one reports nearly every live plan as missing.
-- **Existence only, never mtime.** Copying to the mount resets mtime, so "`.md` newer than `.html`"
-  measures the last copy, not staleness.
-- **Scope to live board items.** Swept across every plan it flags 411 of 413 and is worthless.
+- **Only at the finish.** Specs get no explainer before the build, so a spec still being built
+  with no HTML is not a gap. Older plans that already have a pre-build explainer keep it; never ask
+  for one.
+- **Follow the link, then check the file exists.** Existence only, never mtime: copying to the
+  mount resets mtime, so it measures the last copy, not staleness.
+- **Scope to live board items.** The old plan-explainer check, swept across every plan, flagged
+  411 of 413 and was worthless.
 - **An explainer Phil told a session to skip is not a gap.** Read the session's last word on the
-  plan first — deliberately parked looks identical from the filesystem to nobody-got-round-to-it.
+  spec first — deliberately parked looks identical from the filesystem to nobody-got-round-to-it.
 
 **Not implemented, deliberately** — each is a false-positive factory that would train Phil to
 ignore the digest: "plan doc with no `Program:` line" (only live plans are stamped), "uncommitted
@@ -242,77 +261,83 @@ the cheapest — one short message.
 
 | What you can see | Advance to |
 |---|---|
-| A plan doc with no `<stem>.html` on the mount, and no record of Phil declining it | `/explain-plan <plan>` |
-| A plan written or substantively edited, with no review file beside it in `reviews/` | `/review-plan <plan> --reviewer codex` |
-| Uncommitted work against an approved plan, with no review file beside that plan | `/review-implementation <plan>` |
-| The stage's work is committed and the brief has a later stage open | build the next stage |
+| A spec at `Status: Approved` with nothing built yet | build it, up to the first Expensive step it has not been approved for |
+| Work built against a spec or plan, with no evaluator verdict since the last change | run the *Done when* checks, then have the `evaluator` agent check the work against the spec |
+| Evaluator `PASS` on record, *Deliverables* still unticked | tick each deliverable against its commit or `file:line` |
+| Deliverables all ticked, no what-changed explainer | `/explain-plan <spec>` (writes the what-changed explainer to the mount) |
+| The stage's work is landed and the brief has a later stage open with an Approved spec | build the next stage |
 | Past half the window **and nothing in flight** | `/wrapup` |
 
-**`/review-implementation` is an advance** and may be sent without asking: it is Codex-only so a
-bare invocation never stalls on a question, its output is a file plus working-tree edits, and it
-ends by handing off to `/commit-review`, which is a gate. Report each firing in the digest as spend.
+**What is not an advance:** a Draft spec (the interview is Phil's), a `NEEDS_WORK` verdict (what
+to fix, or whether to argue with it, is the session's judgement), `/commit-review` and `/land`
+(gates), and `/review-tests` unless the session itself says tests are the open question. Never
+send `/explain-plan` or `/review-plan` to an unbuilt spec, and never push a session toward plan
+mode or `Reviewed: Yes`. The interview is the approval; there is no pre-build review left to owe.
 
-**`/review-plan` fires after any plan is written** — pass `--reviewer codex` or it stalls asking
-who reviews. Do not wait to be asked; a plan reaching Phil unreviewed is what this prevents.
+**An older long-format plan** advances on its own terms: build what *Files to Modify* lists,
+check against *Verification*, follow its *Landing & cleanup*. Its review step is the evaluator now,
+since Codex is down.
 
-**`/review-tests` is effectively never an advance.** Do not send it or suggest it unless a session
-itself says tests are the open question.
-
-**"Tests green" and "reviewed clean" are not things you can see**, and the rows avoid needing them.
-Whether a review came back clean is a judgement — put it in the digest and let Phil judge.
+**"Tests green" is not something you can see**, and the rows avoid needing it. An evaluator reply
+is: it begins with the bare word `PASS` or `NEEDS_WORK`. Report a `NEEDS_WORK` in the digest and
+leave it to the session.
 
 **Trigger two: an approved stage that is not finished.** The rows above fire only on a session's
-own next step and miss the case that matters most — an approved plan whose stage is in flight and
-whose session is about to stop early. Tell that session to carry on: name the stage, the plan, and
-the review steps it owes, `/review-implementation` before `/commit-review`.
+own next step and miss the case that matters most — an approved spec whose stage is in flight and
+whose session is about to stop early. Tell that session to carry on: name the stage, the spec,
+and the finish steps it still owes — *Done when* checks, evaluator, ticked deliverables,
+what-changed explainer — before `/commit-review` and `/land`.
 
 ⛔ **Never launch a session.** Only tell an agent that is *currently working* to continue. An
 approved stage with no live session is a line in the digest, not a session to start. Fleet size is
 Phil's call. The **only** launch this skill permits is the manager's own replacement at handover.
 
 Two exclusions:
-- **A human gate** — a review, Phil's own doc read, a decision he owes — is Phase 4.
-- **A stage with no approved plan** is new work, and his call.
+- **A human gate** — an Expensive step, a commit, a merge, a decision Phil owes — is Phase 4.
+- **A stage with no Approved spec or plan** is new work, and Phil's call.
 
-⚠ **"The stage has an approved plan" is not "the next step is approved."** A long stage accretes
-plans: the stage row names the one it opened with, while the work in front of it may be governed
-by a newer doc still in Draft. Find the plan governing the next step — the session's last `Next`
-line names it — and read its status there.
+⚠ **"The stage has an approved spec" is not "the next step is approved."** A long stage accretes
+docs: the stage row names the one it opened with, while the work in front of it may be governed
+by a newer spec still in Draft. Find the spec governing the next step — the session's last `Next`
+line names it — and read its status there. Approval also stops short of the spec's *Expensive
+steps*: each GPU run, VM hand-off or first PHI write needs its own approval from the interview.
 
 ### How to advance — the mechanism
 
 `SendMessage`, addressed to the name `ListAgents` prints. One session, one message, and the
-message is the command and nothing else:
+message is the step and nothing else:
 
 ```
 SendMessage({to: "motor note embedding phase 1",
-             message: "/explain-plan docs/plans/eval-run-vista-02-vistabench-ehr_code.md"})
+             message: "Run the Done-when checks in docs/plans/eval-run-vista-02-vistabench-ehr_code.md, then have the evaluator agent check the work against it."})
 ```
 
-- **Send the command, not an instruction to think about it.** "You look parked, consider
-  generating the explainer" wastes a turn.
-- **Name the plan path explicitly** — the session may have compacted and lost it.
+- **Send the step, not an instruction to think about it.** "You look parked, consider running
+  the evaluator" wastes a turn.
+- **Name the spec path explicitly** — the session may have compacted and lost it.
 - **One advance per session per tick.**
 - **Never explain the manager to the session.** It does not need to know this exists.
-- **A session not in `ListAgents`** gets a digest line naming the session, the command and the
-  plan, so Phil can paste it. Never a launch.
-- **After a `/wrapup`**, put the hand-off prompt and plan path in the digest so Phil can continue
-  it himself.
+- **A session not in `ListAgents`** gets a digest line naming the session, the step and the
+  spec, so Phil can paste it. Never a launch.
+- **After a `/wrapup`**, put the hand-off prompt and spec path in the digest so Phil can continue
+  it.
 
 ### The safety rule
 
-**An advance must be cheap AND produce only a file.** Both halves matter.
+**An advance must be cheap AND produce at most a file.** Both halves matter.
 
-- **Cheap** — no GPU, no destructive write, no publish, no real spend. One Codex implementation
-  review is the single carve-out; it is not a licence for spend generally.
-- **File-only** — `/explain-plan` writes HTML, building writes into a working tree, `/wrapup`
-  writes a note. None touch git history, so a wrong advance wastes a file, not a commit.
+- **Cheap** — no GPU, no VM hand-off, no destructive or PHI write, no publish, no real spend. One
+  evaluator run is the single carve-out; it is not a licence for spend generally.
+- **File-only** — building writes into a working tree, ticking edits the spec, the explainer
+  writes HTML, the evaluator writes nothing, `/wrapup` writes a note. None touch git history, so a
+  wrong advance wastes a file, not a commit.
 
-`/commit-review` is therefore not in the table even when it is genuinely the next step. It commits.
+`/commit-review` and `/land` are therefore not in the table even when they are genuinely the next
+step. They commit and merge.
 
 ⚠ **`idle` does not mean nothing is running — check two signals.** `state.json`'s `inFlight`
 (`tasks`, `queued`, `kinds`) is trustworthy, and a session has been seen idle while holding a
-running test gate. But `inFlight` is not sufficient: a detached `codex exec` is invisible to it.
+running test gate. But `inFlight` is not sufficient: a detached `codex exec` was invisible to it.
 Look for a live process too, and read the session's last message for a launch it awaits.
 
 ⚠ **Never `pgrep -af` or `ps -ef` to find a session's processes.** `-a` prints the command line,
@@ -328,10 +353,11 @@ procedural.
 
 **Stop and notify at exactly these gates. Never advance past one.**
 
-1. **Plan approval.**
+1. **Spec approval** — Phil confirming the `/grill` interview. A Draft spec is not approved.
 2. **Commit or push** — anything entering git.
-3. **Merge** — anything reaching `main`.
-4. **Anything irreversible or costly** — a GPU launch, a destructive write, a publish, real spend.
+3. **Merge** — anything reaching `main`, including `/land`.
+4. **Anything irreversible or costly** — an Expensive step (GPU run, VM hand-off, first PHI write)
+   the interview did not approve, a destructive write, a publish, real spend.
 5. **A question a task raised for Phil.**
 
 ## Phase 3 — Nudge a session that drifted
@@ -343,7 +369,15 @@ one session — never a broadcast. Worth a nudge:
 - About to escalate a **trivial, reversible** question to Phil. Nudge it to apply the materiality
   filter and decide itself. **The nudge goes to the agent; the decision stays with the agent** —
   never supply the answer.
-- Committing without the review path, or running `git commit` inline instead of `/commit-review`.
+- Building bigger work — spanning sessions, a GPU or VM run, a PHI write — with no spec. Nudge it
+  to stop and run `/grill`. Whether the work is big enough is the session's call to make with Phil.
+- About to run an Expensive step its spec does not approve. Nudge it to stop and raise it with
+  Phil, and index the question in Phase 4. **Never approve it yourself**, however obvious the run.
+- Claiming done, or committing, with no evaluator `PASS`; or running `git commit` inline instead
+  of `/commit-review`.
+- Calling a spec Completed with unticked deliverables, or landing with no what-changed explainer.
+- A spec past about 80 lines. Nudge it to cut implementation steps or split the work. Not for an
+  older long-format plan.
 - Writing a decision or blocker only into a git-ignored `docs/session/` note, where no other
   session can see it. It belongs in the brief's ledger.
 - Working on something the brief's ledger already settled — quote the dated entry.
@@ -356,7 +390,7 @@ The queue is **board state**, not your memory. A session needing Phil sets its o
 
 ```
 <name> · program <brief> stage N/M · ⛔ blocked-on-Phil · <MM-DD>
-next: <the question> — consequence: <what changes either way> — default: <what it does if he shrugs> → <plan>
+next: <the question> — consequence: <what changes either way> — default: <what it does if Phil shrugs> → <spec>
 ```
 
 That shape cannot scroll away under concurrent pings, survives the manager dying, and clears when
@@ -380,6 +414,8 @@ Your job is a filter over board states:
 - When Phil answers here, `SendMessage` the answer to the asking session **verbatim** and flip its
   board entry out of blocked. Route it; do not interpret it.
 - Conflicts between sessions go through the same queue and are never auto-resolved.
+- **An Expensive step the interview did not approve queues like any other question.** Approval
+  comes only from Phil, routed verbatim. A spec's approval does not stretch to cover it.
 
 ## The digest
 
@@ -439,6 +475,7 @@ to Phil. Launch exactly one replacement, and never a second because the first lo
 - **Don't interrupt a `busy` session**, however long it has run.
 - **Don't advance a `waiting` session.** It is stopped for a human.
 - **Don't advance into git** — never a commit, push or merge.
+- **Don't approve an Expensive step.** Queue it for Phil.
 - **Don't guess who a `ListAgents` name is.** Resolve it through `state.json`.
 - **Don't broadcast.** Every message targets one session for a confirmed reason.
 - **Don't read code or diffs.** If a finding needs a diff, it is not a manager finding.

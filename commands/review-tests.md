@@ -1,275 +1,86 @@
 ---
 name: review-tests
-description: Independent test-coverage audit of uncommitted code by Codex CLI or a fresh Claude Code subagent, against a plan doc, then *apply* agreed test stubs by default. Use after `/review-implementation`, BEFORE `/commit-review`, when the implementation introduces new branches / contracts / edge cases that warrant regression-protection tests. Invoked explicitly via `/review-tests <path-to-plan> [<output-path>] [--reviewer codex|claude]`. Also offered proactively at the end of `/review-implementation`. **Reviewer is never silently defaulted** — if not specified in args, the skill asks. Scoped strictly to uncommitted code; aborts when the working tree is clean. Runs the chosen reviewer over the diff + plan + existing test layout + prior implementation feedback, classifies each gap as agree/disagree/uncertain, then by default *applies* test stubs at the suggested locations and runs them. Only surfaces findings for adjudication where Claude genuinely disagrees with the reviewer. Hands off to `/commit-review` on completion. SKIP for typo fixes, doc-only changes, or anything where the existing test suite already gates the change end-to-end.
+description: Test-coverage review of new code by a fresh Claude Code subagent (Codex only if Phil asks), against a spec (Done when + Deliverables) or an older plan doc (Files to Modify + Verification), then *apply* agreed test stubs and run them. Use after /review-implementation, BEFORE /commit-review, when the change adds branches, raise paths, optional parameters or boundary conditions worth protecting against regressions. Invoked via `/review-tests <path-to-spec-or-plan> [<output-path>] [--reviewer claude|codex]`. Also offered at the end of /review-implementation. Classifies each gap agree/disagree/uncertain, writes agreed tests, runs them, and asks Phil only about real disagreements. SKIP for typo fixes, doc-only changes, or when existing tests already cover the change end to end.
 ---
 
 # review-tests
 
-Get an independent audit of test coverage for uncommitted code against the plan it was meant to implement. The reviewer sees the code differently from Claude; the gap between them surfaces silent regression risk — code paths the implementer wrote but didn't think to assert.
-
-This skill is distinct from `/review-implementation`. That skill audits *fidelity* (drift, contracts, missing pieces) and surfaces test gaps as one section among several. `/review-tests` is the deeper version — focused exclusively on coverage, with apply-mode stubs and a re-run gate. Run it after `/review-implementation` when the implementation introduces new branches, raise paths, optional params, or boundary conditions that need regression protection.
-
-Two reviewer options, picked explicitly at invocation:
-
-- **Codex** — cross-model (GPT family). Different blind spots from Claude. Default-recommended.
-- **Fresh Claude Code subagent** — same model family, but spawned without conversation context (so it reads the diff + plan cold). Useful when Codex is unavailable, when running a second-reviewer pass after Codex, or when the user explicitly wants a same-model take.
-
-The skill exists because the author of code reviewing their own test coverage is not independent — Claude wrote the code; Claude already believes the coverage is adequate. Always invoke either Codex via `codex exec` or a fresh subagent via the `Agent` tool — never silently substitute the *current* Claude session as the reviewer.
-
-## When to offer
-
-Proactively offer at the end of `/review-implementation` — Phase 7 of that skill hands off to here when the implementation review surfaced any "Test Gaps" findings or when the diff introduces non-trivial new branches. Gate the offer behind `AskUserQuestion`:
-
-- *Codex test-coverage review (Recommended — cross-model independence)*
-- *Fresh Claude Code subagent (same model, no conversation context)*
-- *I'll run it myself in another tab*
-- *Skip — coverage is adequate as-is*
-
-Do not auto-invoke. Skip the offer for typo fixes, doc-only updates, single-file bug fixes, or refactors where the existing test suite already exercises every branch end-to-end.
-
-**When to recommend the fresh Claude subagent over Codex** (i.e., when to make it the first option):
-
-- Codex isn't installed / authed in this environment (verify with a quick `command -v codex`).
-- The user has *just* run a Codex review on this plan/diff and now wants a second-reviewer pass.
-- The user has explicitly asked for a "Claude" or "fresh agent" review.
-
-In all other cases recommend Codex first — model-family independence is the bigger win.
-
-## Phase 1 — Resolve paths, reviewer, scope
-
-Args: `/review-tests <plan-path> [<output-path>] [--reviewer codex|claude]`.
-
-- **plan-path** — required. Verify it exists. If invoked without args, ask via `AskUserQuestion` using the same plan-doc detection logic as `/read-plan` Phase 1.
-- **reviewer** — required, but never silently defaulted. If `--reviewer codex` or `--reviewer claude` was passed in args, use that. **Otherwise, ask via `AskUserQuestion`** before doing anything else (unless the proactive offer already produced the choice in the same turn — carry it forward).
-- **output-path** — optional.
-  **Default is a `reviews/` directory beside the plan.** For a plan on the shared mount that is
-  `/mnt/su-vista-uscentral1/chaudhari_lab/phil/planning/<repo>/reviews/`. For a plan that still
-  lives in a repo's `docs/plans`, use that repo's mount tree at the same path rather than writing
-  beside it — an in-repo review either costs a document read at commit time, or, where
-  `docs/plans` is gitignored, is a file with no copy anywhere. Default by reviewer:
-  - `codex` → `<reviews-dir>/<plan-stem>-test-coverage-feedback.md`
-  - `claude` → `<reviews-dir>/<plan-stem>-test-coverage-feedback-claude.md`
-  Create the parent dir if missing. Distinct filenames matter — running both reviewers should not overwrite.
-- **Repo-local checklist** — look for `.claude/references/test-review-checklist.md`. If found, include in the reviewer prompt. If not found, proceed with the generic prompt and warn once that a repo-grounded checklist would yield a sharper review.
-- **Sibling repo docs** — if `docs/claude_ops.md` and/or `docs/lessons.md` exist, include them as required reads. Otherwise omit those references.
-- **Prior implementation feedback** — look for `<plan-stem>-implementation-feedback.md` in the same `reviews/` directory resolved above, then fall back to the repo's `docs/plans/reviews/` for older reviews written before the move. If found, include in the prompt with explicit instructions: "do not re-flag items already adjudicated here." This avoids the reviewer rediscovering gaps the user already kept-or-dismissed.
-- **Diff scope** — capture the current uncommitted state via `git status` and `git diff` (both staged and unstaged) plus a list of untracked files. Include the diff stat (`git diff --stat`) and untracked filenames in the prompt; let the reviewer read full file contents itself.
-- **Codex availability check** — if reviewer = `codex`, run `command -v codex` first. If absent, surface and offer to switch to the fresh Claude subagent (the one auto-fallback path; user-visible).
-
-**Strict scope verification — abort if nothing to review:**
-
-- If the working tree is clean (no staged, unstaged, or untracked changes), abort with: "No uncommitted changes — nothing to test-review against the plan. /review-tests audits *uncommitted* implementation work; if the plan was already merged, run on the implementer's branch before merge."
-- If only doc files changed (no production code), warn and ask via `AskUserQuestion` whether to proceed (a doc-only diff is rarely worth a deep test-review).
-- If only test files changed (no production code), warn and ask similarly (tests-only diffs are usually self-evident).
-
-## Phase 2 — Invoke chosen reviewer
-
-Branch on reviewer. Both branches produce a feedback file at `<output-path>` matching the same structure (defined once below) so Phases 3–7 are reviewer-agnostic.
-
-### Phase 2a — Codex (`reviewer = codex`)
-
-Build the prompt; pipe via stdin:
-
-```bash
-codex exec -s workspace-write --add-dir /mnt/su-vista-uscentral1/chaudhari_lab/phil/planning - <<'PROMPT'
-You are doing a read-only test-coverage audit. Scope: tests only. Identify code paths, branches, edge cases, and contracts added by this plan's uncommitted changes that are NOT exercised by any test. Do not edit any code (the implementer will apply your suggestions if agreed).
-
-Plan: <plan-path>
-Output: <output-path>
-Repo-local checklist: <checklist-path-or-"none">
-Diff scope (uncommitted): <git diff --stat output>
-Untracked files: <list>
-Prior implementation feedback: <path-or-"none">
-
-Required reads (in order):
-1. docs/claude_ops.md (if it exists)
-2. docs/lessons.md (if it exists)
-3. The repo-local checklist (if specified)
-4. The target plan
-5. The prior implementation-feedback file (if specified) — note adjudicated items; do NOT re-flag them
-6. The uncommitted diff: run `git diff` (unstaged) and `git diff --staged`; read each untracked file in full
-7. The current `tests/` layout — `ls -R tests/` plus skim of test files matching the touched modules
-
-Then audit test coverage of the diff:
-
-A TEST GAP is a code path / branch / edge case / contract that:
-- Was introduced or materially changed by this diff (must show up in the changes), AND
-- Is not exercised by any test in the current branch (unit / integration / migration), AND
-- Has a plausible regression mode (silent wrong output, mis-routing, schema drift, etc.).
-
-Look for, but do not limit to:
-- New if/elif/match branches with no test hitting each arm.
-- New error-raise paths with no test asserting the raise type AND the message regex.
-- New optional/keyword params that change behavior but aren't parametrized.
-- New protocol implementations whose contract isn't checked end-to-end.
-- Plan-listed "Resolved decisions" baked into code without assertions.
-- Boundary conditions (date windows, slice counts, threshold edges) without exact-boundary tests (the off-by-one cases).
-- New cross-module wires (e.g., manifest → embed → parquet metadata) without round-trip coverage.
-- New default values whose behavior changes when explicitly overridden.
-- **Substring/structural asserts on generated code as primary verification** (the antipattern). Tests of the form `assert 'X' in rendered_sql` (or rendered JSON / config / formatted output) test what's trivially true in source code, not behavior — they pass coincidentally when the substring lives in unrelated fields. Canonical example: `'ABD(OMEN)?' in rendered_sql` passed at vista-ct because the pattern lived in BOTH `ABD_PEL.study_include_patterns` AND `ABD_PEL.series_include_pattern` (semantically distinct fields used by different helpers); a helper-swap refactor would silently pass. Replace with: render-smoke (acceptable but minimal); upstream-contract assert on the registry/config the render depends on (`CHEST.overlap_with == ('abd_pel',)`); end-to-end behavioral (EXCEPT-DISTINCT, row-count parity, schema-set equality, materialize-and-diff); cross-task behavioral consistency (e.g. 2yr-survival labels ⊂ 3yr-survival labels for the same cohort — death is monotonic); domain-knowledge sanity checks (Stage IV 5yr-mortality > Stage I — cancer biology). Diagnostic question for any assertion in the diff: *"What behavior does this prove?"* — if the only honest answer is "imports + render didn't crash," flag it.
-- **Missing cross-task / cross-label logical invariants.** Where data semantics make a relationship logically necessary (2yr survival ⊂ 3yr survival; PFS event ⇒ alive-at-PFS-time; uniqueness on (person_id, task, split); label values ∈ {0, 1, -1}), the absence of an assertion is a gap — these are the highest-leverage tests because they catch label-derivation bugs that branch-coverage misses entirely.
-- **Missing domain-knowledge sanity checks.** Be creative, but **prefer relative invariants over absolute assumptions about the data distribution**. Pinning specific percentages ("5yr-survival positive rate is 40-70%") locks in the current cohort's distribution and breaks under legitimate data drift; use relative orderings, ratios, and self-consistency instead. Good shapes: Stage IV mortality > Stage I (relative across stages); 1yr-survival positive rate ≥ 5yr-survival positive rate for the same cohort (relative across time horizons); treatment end-date ≥ start-date per row; median time from diagnosis to first imaging < median time from diagnosis to first treatment (relative across tasks). Bad shapes: absolute thresholds on positive rates, percentages of patients meeting a condition, or any assertion that pins the data distribution. **When you can't decide whether a domain invariant actually holds, mark the gap as Uncertain** so the user can confirm or refute — the user has the domain expertise. Don't drop these; don't fabricate them.
-
-Out of scope:
-- Bugs, design critiques, code quality (those are /review-implementation territory).
-- Tests for code unchanged by this diff.
-- Style nits in existing tests.
-- Gaps that fundamentally require compute unavailable in this checkout (GPU, high-throughput batch). Flag explicitly with the constraint; do not synthesize a fake test.
-- Items already raised in the prior implementation-feedback file.
-
-Write feedback to <output-path> with this structure:
-
-  Reference: docs/claude_ops.md
-
-  # Test Coverage Feedback: <Plan Title>
-
-  ## Verdict
-  Coverage adequate / Add tests before commit / Coverage gap blocks merge. 1-2 sentence summary citing gap count by severity.
-
-  ## Coverage Map
-  | Slice / module | Branches added | Branches asserted | Gap? |
-  Brief grid; one row per touched module. Use this to ground the rest of the report in measurable terms.
-
-  ## Must-Fix Gaps (block merge)
-  - **What:** one-line description of the uncovered branch/contract
-  - **Where:** `path:line` of the production code
-  - **Why it matters:** plausible regression mode (be specific — "silent CT fallback masks manifest bug", not "could regress")
-  - **Suggested test:** layer (unit / migration Layer N / integration) + 1-3 line stub showing the assertion shape (test name + key assertion)
-  - **Test file location:** existing test file path, or "new: tests/<path>"
-
-  ## Nice-to-Have Gaps
-  - Same shape as Must-Fix, briefer.
-
-  ## Boundary / Edge Cases Worth Pinning
-  - Specific values (zero, exact-window-day, empty-collection, single-element) that aren't asserted. One bullet each: value + why it would flip silently.
-
-  ## Out-of-Scope-but-Noted
-  - Max 5 items: drift, duplicate sources of truth, hard-coded constants. One line each. Surface once, do not synthesize tests.
-
-  ## Confidence Note
-  - One paragraph: what couldn't be verified (BQ-gated, GPU-gated, VM-only fixtures, mounts unavailable). Be specific about which gaps are blocked by which constraint.
-
-  ## Audit Trail
-  - Files inspected (paths only).
-
-Standards:
-- Lead with highest severity.
-- Cite file paths and line numbers for every gap.
-- Quote the production-code branch + show the assertion that would close it.
-- If a code path IS covered, say so in Coverage Map and move on; don't pad findings.
-- Do not write generic feedback like "add more tests" or "improve coverage".
-- Suggested tests must be runnable on this checkout — flag infra-blocked gaps separately.
-
-Stop after writing the feedback file. Do not write any test code. Do not edit production code.
-PROMPT
-```
-
-Notes on flags:
-
-- `-s workspace-write` selects the sandbox policy (`codex exec -s <read-only|workspace-write|danger-full-access>`).
-  **`workspace-write`, not `read-only`, is correct even for a read-only *audit***: the reviewer never edits
-  code, but it does have to write its own feedback file.
-- **`--add-dir` is required, not optional.** `workspace-write` makes only the repo writable, so a
-  feedback file destined for the mount fails with a permission error and no file is produced — the
-  run looks like it worked and nothing is there. `--add-dir /mnt/su-vista-uscentral1/chaudhari_lab/phil/planning`
-  is what makes the destination writable. Do not drop it.
-- **Verify the feedback FILE, never the exit code.** When the invocation is piped (`... | tail`), the shell
-  reports the *pipeline's* status, so a failed `codex` can still look like exit 0 while having written
-  nothing. Always confirm the output file exists and is non-empty before reading it.
-- Superseded flag: `--full-auto` was removed — on codex-cli 0.149.1 it fails immediately with
-  `error: unexpected argument '--full-auto' found`. Use `-s` as above.
-- `-C <repo-root>` if invoked from a subdir — Claude Code generally runs at repo root, so usually unnecessary.
-
-Stream Codex's output so the user sees progress. Codex will exit when the feedback file is written. Verify the output file exists and is non-empty before proceeding.
-
-If `codex exec` fails: surface the failure verbatim. Offer to switch to the fresh Claude subagent. **Do not** fall back to inline Claude doing the audit — that defeats the purpose.
-
-### Phase 2b — Fresh Claude Code subagent (`reviewer = claude`)
-
-Spawn a `general-purpose` subagent via the `Agent` tool. The subagent reads the same inputs as the Codex branch, in the same order, and writes the same feedback structure to the same `<output-path>`. Brief it like a smart colleague who hasn't seen this conversation: include the plan path, output path, prior-feedback path, diff scope, and the full audit prompt body (the section between "Then audit test coverage of the diff:" and "Stop after writing the feedback file" above). Cap the subagent's report at <output-path> only — do not let it summarize back; Phases 3–7 read the file.
-
-Run the subagent in the foreground (you need its result before continuing).
-
-## Phase 3 — Read the critique
-
-Read the feedback file in full. Note each finding's severity and category. Don't summarize yet — go straight to classification.
-
-## Phase 4 — Classify each finding
-
-For each gap (in severity order: Must-Fix → Nice-to-Have → Boundary), classify:
-
-- **Agree** — the gap is real. Draft the test stub.
-- **Disagree** — the code IS covered (by a test the reviewer missed) OR the gap isn't testable in this checkout (verify the cited code with a Read; verify the absence of coverage with a grep across `tests/`). Articulate the rationale: what test the reviewer missed, with cited evidence.
-- **Uncertain** — should be rare. Reserve for high-blast-radius gaps where the test design itself is non-obvious AND you genuinely can't decide. Most gaps cited with file:line evidence resolve to agree/disagree on a quick spot-check.
-
-Bias strongly toward agreement when the reviewer cites specific code/tests with file:line and your spot-check confirms. Disagreement is the highest bar — only if you have stronger evidence than the reviewer did.
-
-*Out-of-Scope-but-Noted* items are not findings to fix — surface them in Phase 6 alongside user-decision questions.
-
-## Phase 5 — Apply Agreed test stubs; surface only genuine disagreements
-
-The user invokes `/review-tests` to get tests *written* before commit. Same gating as `/review-implementation`:
-
-- **Agreed** — `Edit` or `Write` the test file directly at the reviewer's suggested location, using the suggested assertion shape. Don't ask first. Don't batch-confirm.
-- **Disagreed** — surface via `AskUserQuestion` for adjudication. Articulate Claude's rationale (what test the reviewer missed) and the reviewer's claim. User picks: side with Claude (no test added) or side with reviewer (apply the stub).
-- **Uncertain** — surface via `AskUserQuestion`, same shape.
-
-When the reviewer's suggested assertion is genuinely unclear (e.g., what error-message regex is expected, or what the exact expected output should be), do NOT guess — ask the user inline before writing. Tests with wrong assertions are worse than no tests; they pin behavior the user didn't intend.
-
-When applying many related stubs, group them per-file (one `Edit` or `Write` per test file) rather than dozens of micro-edits.
-
-If there are 0 Disagreed and 0 Uncertain (the common case when the reviewer's evidence is solid), skip `AskUserQuestion` for those and proceed directly to the run gate below.
-
-**Run gate (mandatory):** after writing all agreed stubs, run pytest scoped to the new tests in one invocation. If any fail:
-
-- **Do NOT silently fix.** A failing stub on the first run is information.
-- Surface the failure to the user. The cause is one of three:
-  1. **The implementation is broken** — genuine catch. Escalate to a code fix; the test stays.
-  2. **The reviewer's assertion is wrong** — revert the stub; surface for user to confirm.
-  3. **A fixture issue** — fix the fixture and re-run.
-- Ask which via `AskUserQuestion`. Don't assume.
-
-If all stubs pass, proceed.
-
-Do not open the feedback file in an app — that's `/read-plan` territory. Mention the path in the Phase 7 summary.
-
-## Phase 6 — Resolve disagreements; surface deviations and questions
-
-After Phase 5:
-
-- Apply user's adjudication for any disagreements.
-- **Out-of-Scope-but-Noted** — surface to the user via `AskUserQuestion` (or inline if just one or two): "Reviewer noted these as out-of-scope deltas worth tracking. Add to docs/lessons.md / docs/plans/<followup>.md / dismiss." Don't write them anywhere automatically.
-- For "side with Claude" outcomes (user dismissed a reviewer finding), append a one-liner to the feedback file's Audit Trail noting which gap was dismissed and why.
-
-Summarize in one bullet: "Applied: <n> test stubs (passing). Adjudicated: <n>. Dismissed: <n>. Noted-for-followup: <n>."
-
-## Phase 7 — Hand off
-
-If all agreed stubs are passing and no unresolved items remain, the default hand-off is straight to commit:
-
-> Test review complete. <n> tests added, <m> passing. Ready to `/commit-review`?
-
-If unresolved items remain (test stubs failing for unclear reasons, disagreements deferred, or boundary gaps the user wants to address themselves):
-
-> Test review found <n> unresolved items. Address them before `/commit-review`.
-
-Do not auto-invoke `/commit-review`. The user decides when to commit.
-
-## Permission prompts
-
-`Bash(codex exec:*)` will prompt every invocation unless allowlisted. After the first prompt, mention once that the user can allowlist via `/update-config`. Don't re-mention on subsequent runs.
-
-`Bash(pytest:*)` may also prompt for the run-gate step — same advice.
-
-## What NOT to do
-
-- **Don't auto-invoke.** Always gate via `AskUserQuestion`. Reviewer runs cost money and time.
-- **Don't proxy inline Claude as the reviewer.** This skill exists *because* self-review isn't independent. If `codex` isn't available and the user declines the Claude-subagent fallback, surface and stop — don't fall back to the current session.
-- **Don't write the feedback file yourself.** The reviewer writes it.
-- **Don't commit.** This skill stops at "ready to commit"; `/commit-review` owns the commit step.
-- **Don't synthesize tests for compute-blocked gaps** (GPU, high-throughput batch). Flag the constraint and stop — a fake test is worse than no test.
-- **Don't suppress test failures from the run gate.** A failing stub is information; surface it.
-- **Don't skip the boundary-case section.** That's where the highest-leverage gaps usually live (off-by-one, exact-window, empty-collection).
-- **Don't re-flag items already adjudicated** in the prior implementation-feedback file. Read it first.
-- **Don't audit clean working trees.** No diff = nothing to review; abort early per Phase 1.
-- **Don't guess at unclear assertions.** Ask the user. A wrong assertion pins wrong behavior.
+Find code paths the change added that no test exercises, then write the tests. `/review-implementation`
+asks whether the work matches the spec; this asks only whether it's protected against regressions.
+The builder already believes coverage is fine, so a fresh subagent does the review, never the
+current session.
+
+## Phase 1 — Resolve inputs
+
+Args: `/review-tests <path> [<output-path>] [--reviewer claude|codex]`.
+
+- **path** — the spec or older plan. Read *Done when* / *Decided* from a spec, or *Verification* /
+  resolved Open Questions from an older plan: those are the behaviors tests should pin.
+- **Reviewer** — default is a fresh Claude Code subagent. Codex CLI is broken as of 2026-10; use
+  it only when Phil names it, with the same flags and gotchas as `/review-implementation`.
+- **Diff baseline** — merge-base with `main` plus uncommitted changes. Empty: stop. Only docs or
+  only tests changed: ask whether it's worth it.
+- **Prior implementation feedback** — `<plan-stem>-implementation-feedback.md` in the same reviews
+  directory. The reviewer must not re-flag what was already settled there.
+- **output-path** — default `<reviews-dir>/<plan-stem>-test-coverage-feedback-claude.md` (or
+  without `-claude` for Codex), reviews directory as in `/review-implementation`.
+- **Checklist** — include `.claude/references/test-review-checklist.md` if it exists.
+
+## Phase 2 — Run the reviewer
+
+`Agent` tool, `subagent_type: "general-purpose"`, foreground. Give it the paths above, tell it to
+write the feedback file despite its no-report-files rule (this path is the skill's contract), not
+to write tests or edit code, and to reply with one sentence. Its brief:
+
+A gap is a path, branch or contract that this diff added or changed, that no current test
+exercises, and that could regress silently. Look for:
+
+- Branches with an untested arm; raise paths with no test of the exception type and message.
+- Optional or keyword parameters that change behavior; changed defaults.
+- Decisions from the spec baked into code with nothing asserting them.
+- Boundaries: zero, empty, exact window edges, off-by-one.
+- Cross-module wiring (manifest → embedding → parquet metadata) with no round-trip test.
+- **Substring checks on rendered SQL, JSON or config** used as the main test. At vista-ct,
+  `'ABD(OMEN)?' in rendered_sql` passed because the pattern sat in two unrelated fields; a helper
+  swap would have passed too. Ask of each assertion "what behavior does this prove?" Prefer a
+  diff against a baseline, row-count parity, an assert on the registry the render depends on.
+- **Logical invariants the data requires**: 2-year survival positives ⊂ 3-year; one row per
+  (person_id, task, split); labels in {0, 1, -1}.
+- **Domain sanity checks, relative not absolute**: Stage IV mortality > Stage I; end date ≥ start
+  date. Never pin a positive rate or a percentage — that breaks on legitimate data drift. When
+  unsure an invariant holds, mark the gap Uncertain for Phil rather than drop or invent it.
+
+Out of scope: bugs and design (that's `/review-implementation`), unchanged code, style nits in
+existing tests. Gaps that need a GPU or heavy batch compute: name the constraint, don't propose a
+fake test.
+
+Feedback structure: **Verdict** (adequate / add tests before commit / gap blocks merge) →
+**Coverage map** (one row per touched module: branches added, branches asserted) → **Must-fix
+gaps** (what, production `path:line`, how it would regress, test layer and a 1-3 line stub, test
+file) → **Nice-to-have** → **Boundary values** → **Noted, out of scope** (max 5) → **What couldn't
+be checked** (BigQuery, GPU, VM-only fixtures) → **Files inspected**.
+
+Check the file exists and is non-empty before going on.
+
+## Phase 3 — Classify, apply, run
+
+Classify each gap: **Agree** (it's real), **Disagree** (a test the reviewer missed covers it —
+show which, after a grep across `tests/`), **Uncertain** (rare: the test design itself is unclear
+and matters).
+
+- **Agreed** — write the test at the suggested location. One `Edit`/`Write` per test file. If the
+  right assertion is unclear (the error message, the exact expected output), ask Phil before
+  writing it. A wrong assertion pins behavior nobody wanted.
+- **Disagreed / Uncertain** — ask Phil via `AskUserQuestion` only when the answer changes what we
+  can conclude; otherwise decide and note it in the feedback file's last section.
+- **Run the new tests**, in one scoped pytest call. A failing new test is information, not
+  something to quietly fix. Ask Phil which it is: the code is wrong (fix the code, keep the test),
+  the assertion is wrong (revert the test), or the fixture is wrong (fix it and re-run).
+- **Noted, out of scope** items: show them to Phil; don't file them anywhere yourself.
+
+## Phase 4 — Hand off
+
+> Test review: <n> tests added, all passing; <m> decided by Phil. Feedback at <path>. Ready to
+> `/commit-review`?
+
+With unresolved items, list them and stop. Don't commit here.

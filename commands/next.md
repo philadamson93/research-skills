@@ -1,6 +1,6 @@
 ---
 name: next
-description: Use when the user opens a session asking "what's next?", "where did we leave off?", "what should I work on?", "any next steps?", or similar — and there's no obvious in-flight task already named. Also invoked explicitly via `/next`. FIRST enumerates git worktrees, fetches, and fast-forwards every checkout from remote so it never surveys stale local refs or misses parallel work (a parallel session may have pushed a milestone commit; sibling worktrees hold in-flight work the main checkout can't see), THEN reads this repo's status board and the program briefs it names on the shared mount — those are the authoritative statement of what is live, since they are one file per repo rather than one per checkout — and only then the in-repo trackers (docs/next.md / NEXT.md / TODO.md / BACKLOG.md / docs/plans/README.md / MEMORY.md / docs/session/ readbacks / recent commits / current branch / all local+remote branches + all worktrees for unmerged or uncommitted work), classifies as "clear next" vs "need direction" vs "genuinely empty", surfaces 2-4 candidate tasks with a recommendation via AskUserQuestion when there's a fork, then deep-dives the chosen task (plan doc + memory + recent code) before handing off a concrete first action. SKIP when the user has already named a specific task to work on, or mid-session when context for the current task is already loaded.
+description: Use when the user opens a session asking "what's next?", "where did we leave off?", "what should I work on?", "any next steps?", or similar — and there's no obvious in-flight task already named. Also invoked explicitly via `/next`. FIRST enumerates git worktrees, fetches, and fast-forwards every checkout from remote so it never surveys stale local refs or misses parallel work (a parallel session may have pushed a milestone commit; sibling worktrees hold in-flight work the main checkout can't see), THEN reads this repo's status board and the program briefs it names on the shared mount — those are the authoritative statement of what is live, since they are one file per repo rather than one per checkout — and only then the in-repo trackers (docs/next.md / NEXT.md / TODO.md / BACKLOG.md / docs/plans/README.md / MEMORY.md / docs/session/ readbacks / recent commits / current branch / all local+remote branches + all worktrees for unmerged or uncommitted work), classifies as "clear next" vs "need direction" vs "genuinely empty", surfaces 2-4 candidate tasks with a recommendation via AskUserQuestion when there's a fork, then deep-dives the chosen task (spec or plan doc + memory + recent code) before handing off a concrete first action — `/grill` when bigger work has no spec yet. SKIP when the user has already named a specific task to work on, or mid-session when context for the current task is already loaded.
 ---
 
 # next
@@ -11,7 +11,7 @@ Session-opener triage. The user is back at the keyboard and wants to know what t
 `per-CT landmark tasks · stage 5 of 9 · vista_bench · feat/foo`. Program and stage come from this
 repo's board (Phase 1 step 1); repo and branch still appear, because Phil runs sessions across ~50
 repos and several checkouts of the same repo, so saying *where you are* prevents surveying the
-wrong one — but they are no longer the headline. He asks "why are we doing this" far more often
+wrong one — but they are no longer the headline. Phil asks "why are we doing this" far more often
 than "which branch am I on".
 
 If nothing on the board matches the live work here, say that plainly rather than inventing a
@@ -49,7 +49,7 @@ in-repo trackers exist once per checkout and disagree with each other.
    as possibly stale**: they are committed files edited inside many checkouts, and measured
    2026-09-15, vista-eval's existed in 8 different versions across 9 checkouts. Where a tracker
    and the board disagree, the board wins and the tracker is the thing to fix.
-4. **`docs/plans/README.md`** (or `plans/README.md`, `docs/plans.md`) — index of plan docs; look for "In Progress", "Planned", "Next", or similar status entries.
+4. **`docs/plans/README.md`** (or `plans/README.md`, `docs/plans.md`) — index of specs and plan docs. A `Draft` spec is an interview that stopped partway: in flight, resumed with `/grill <path>`. An `Approved` spec, or an old plan marked "In Progress", "Planned" or "Next", is a build candidate.
 5. **`MEMORY.md`** — auto-memory pointers, especially `project_*.md` entries flagging current focus, blockers, or in-flight work.
 6. **`docs/session/`** — git-ignored structured session docs (readbacks, VM-verify writeups, "what's next" state) from prior sessions in this checkout. This is where the freshest uncommitted state usually lives; skim the most recently modified files (`ls -t docs/session/ 2>/dev/null`).
 7. **Recent commits**: `git log --oneline -20` and `git status` — what was last touched, what's uncommitted, what branch is checked out.
@@ -88,16 +88,21 @@ Once a task is chosen (whether via Phase 2 "clear next" or Phase 3 selection), *
 
 - **The brief** — if the task belongs to a program, re-read that brief's stage row and ledger for
   this specific stage. It tells you what the stage is waiting on and what has already been decided.
-- **Plan doc** — read in full if it exists. Look on the mount first
+- **Spec or plan doc** — read in full if it exists. Look on the mount first
   (`/mnt/su-vista-uscentral1/chaudhari_lab/phil/planning/<repo>/<task>.md`), which holds every
   repo's plans in one place including ones that live only on a feature branch; fall back to
-  `docs/plans/<task>.md` in the repo. A plan copied to the mount carries a `Program:` line naming
-  its brief and stage.
+  `docs/plans/<task>.md` in the repo. A doc on the mount carries a `Program:` line naming its
+  brief and stage. Two formats are live; read each on its own terms and don't convert:
+  - **Spec** (from `/grill`): *Status*, *Goal*, *Done when*, *Decided*, *Out of scope*,
+    *Deliverables*, *Expensive steps*, *Landing*. What's left is the unticked *Deliverables*;
+    settled questions are in *Decided*.
+  - **Old long-format plan**: *Approach*, *Files to Modify*, *Open Questions*, *Verification*,
+    *Landing & cleanup*. What's left is the unbuilt *Files to Modify* rows and phases.
 - **Session doc** — read the task's `docs/session/` readback / state doc in full if one exists; it carries the substance and next steps the resume block pointed at.
 - **Memory entries** — grep `MEMORY.md` for the task name and read any matching `*.md` files in the memory directory.
 - **Journal / decision entries** — if the project has `docs/journal/`, `docs/decisions/`, or similar, check for recent entries naming the task.
 - **Code state** — for in-flight tasks, run the reads in the task's *own* checkout: `git -C <chosen-worktree> log --oneline <branch>` and `git -C <chosen-worktree> diff main...<branch>` for committed work, plus `git -C <chosen-worktree> diff` (and `--staged`) for any *uncommitted* work in that worktree — Phase 0 step 4 flagged it; this is where you actually read it. Use the invocation checkout's `HEAD` (`git diff main...HEAD`) only when the chosen task *is* the current checkout. Read the files most recently touched.
-- **Open questions / blockers** — anything the plan or memory flagged as unresolved.
+- **Open questions / blockers** — anything the spec, plan or memory flagged as unresolved.
 
 Run the reads in parallel where possible.
 
@@ -105,7 +110,12 @@ Then summarize for the user as bullets — not prose:
 
 - **Where things stand** (1-3 bullets)
 - **Open questions / decisions needed** (if any — skip the section if none)
-- **Recommended first concrete action** (one bullet, specific: "edit `path/to/file.py:42` to do X", not "start implementing")
+- **Recommended first concrete action** (one bullet, specific: "edit `path/to/file.py:42` to do X", not "start implementing"). Pick it by where the task stands:
+  - **No spec, and it's bigger work** (spans sessions, runs on a GPU or VM, writes to PHI data, or needs more than about three answers from Phil) → `/grill <one-line idea>`. Not "write a plan".
+  - **No spec, small work** → ask the one or two questions that matter, then do it.
+  - **`Draft` spec** → `/grill docs/plans/<task>.md` to finish the interview.
+  - **Approved spec or old plan with work left** → the next unbuilt deliverable, stopping before any *Expensive step* Phil didn't approve.
+  - **Everything built** → the finish steps in `claude_ops.md` → When the work is finished: *Done when* checks, the `evaluator` agent, the what-changed explainer, then `/land`.
 
 End with a hand-off line: "Ready to start with <action>, or want to dig into something else first?"
 

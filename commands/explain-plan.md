@@ -1,667 +1,199 @@
 ---
 name: explain-plan
-description: Convert a plan doc into a self-contained interactive HTML explanation (Mermaid diagrams, blast-radius map, step accordion, inline feedback widgets, clipboard-export button) and then run a drift-verification pass that reconciles the HTML against the source markdown. Use when a plan is too long or repo-wide for prose review to be productive, or when the user invokes `/explain-plan <path>`. Opens with a program panel built from the plan's `Program:` brief — why the program exists, which stage this plan is, what is done, what it waits on, and which decisions are already settled — because a plan read alone never answers "why are we doing this at all". NOT opt-in: every plan written or substantively edited is handed over with its explainer already generated, and an approved explainer that is in sync with the plan's content hash is the ONLY route to `Reviewed: Yes` (`/read-plan` no longer promotes anything, since opening markdown is not a review for a user who does not read markdown). SKIP only when there is no plan doc at all, or the plan is already Completed.
+description: Build the what-changed explainer at the end of a piece of work — a self-contained HTML page on the shared mount showing what was built, how it fits into the repo, a diagram, a before/after, the numbers that moved, and each spec deliverable ticked against the commit or file:line that delivers it — then check the page against the spec and the actual diff, and link it from the PR or commit. This is the hand-over step in claude_ops.md "When the work is finished", after the evaluator agent passes the work. Also renders an older long-format plan doc (Approach / Files to Modify / Open Questions) that is still under review, when Phil asks to see it visually. TRIGGER when work against a spec or plan is finished and about to land, or on `/explain-plan [path]`. SKIP for small work with no spec, and for a spec whose build hasn't started — Phil's confirming the /grill interview is the approval, so no explainer is owed before the build.
+argument-hint: "[path to spec or plan] [--plan for a pre-build view of an older long-format plan]"
 ---
 
 # explain-plan
 
-Convert a plan doc into an interactive HTML explanation. Plans for repo-wide changes encode dense graph-shaped information (knobs → files → outputs → consumers, sequencing constraints, blast radius) in linear prose. Humans absorb diagrams faster than prose; agents are good at the prose. This skill bridges that gap so the user can review *visually* and direct *editorially*.
-
-## When to use
-
-- User invokes `/explain-plan <path-to-plan>` or `/explain-plan` (auto-detect the most-recently-referenced plan in conversation).
-- Right after `/review-plan` finishes substantive edits — automatically, not as an alternative to anything. A revised plan is handed back with its explainer regenerated.
-- When the user says "I'm losing the thread" / "show me visually" / "let me see this as a diagram" about a plan doc.
-- **The user pastes back the clipboard export** — a blob starting `# Resume: apply explain-plan feedback` or `# Feedback on <plan>`. Route to *Feedback ingestion* below; resolve the plan from the resume header first (fresh session → read the plan doc + related context, `/next`-style; already in flight → apply against the plan you already hold).
-
-**This is no longer opt-in.** Every plan doc written or substantively edited is handed over *with*
-its explainer already generated — don't wait to be asked. The explainer is the artifact Phil
-actually reads, and an approved in-sync explainer is the **only** route to `Reviewed: Yes`, so a
-plan without one cannot be reviewed at all. The old trivial-plan exception takes care of itself:
-trivial changes don't get plan docs in the first place.
-
-## When NOT to use
-
-- **There is no plan doc.** A trivial change that went straight to main never became a document, so
-  there is nothing to explain. This is now essentially the only case.
-- Plan is already `Completed` — a planning aid for live work, not a historical artifact.
-- The user is mid-implementation and asked a narrow question. Answer the question; the explainer is
-  still owed at the next substantive plan edit, just not right now.
-- The plan is itself a *doc reorg* plan whose payload is mostly text restructuring (HTML adds no visual signal).
-
-## Writing voice — plain English, and questions about the design not the machinery
-
-**The voice is defined once, in `claude_ops.md` → How to write to me.** Read it and follow it;
-it is not repeated here. In this skill it governs *every* human-facing string: the questions it
-asks, the HTML prose (TL;DR, "what changed" notes, plain restatements of open questions, `.resp`
-callouts, drill answers), and any edit applied back into a plan doc. The reader is a busy person
-reviewing a plan on screen who is **not reading the code**.
-
-### Questions: ask about the design, not the machinery
-
-This is the part that goes wrong most often, and it is worth more than the rest of this section. **The user is reviewing direction and taste, not implementation.** They cannot see the code and should not have to.
-
-Run every candidate question through two filters before it reaches an `AskUserQuestion`:
-
-1. **Can I just decide this?** Implementation detail — naming, file layout, which helper to call, how to structure the JS, diagram granularity — is yours. Decide it, note it in one line if it's non-obvious, move on. Never spend a question on it.
-2. **Would answering it require having read the code?** If yes, the question is wrong-shaped. Either decide it yourself, or re-ask it as the *consequence* the user can actually judge. Not "should the loader fall back or raise here?" but "if one task's results are missing, should the comparison skip it and carry on, or stop so you can look?"
-
-What survives both filters is worth asking. Those questions are about:
-
-- **What we're really doing here** — is the plan pointed at the right target? Does this answer the question you actually care about?
-- **Direction and scope** — in or out, now or later, one phase or two, ship it or park it.
-- **Trade-offs the user can feel** — cost, time, risk, how much gets thrown away, what the reader loses.
-- **Judgement calls with no right answer** — which of two reasonable framings, how much rigor this deserves, where good-enough is good enough.
-
-**Shape of a good question:** one sentence of context naming the real trade-off → the question → options labeled as *outcomes*, not mechanisms. Put the cost in the option's description, in plain units. Ask at most one or two real forks per round; a stack of small questions is a sign filter #1 wasn't applied.
-
-**Translations — the left column is what to stop writing:**
-
-| Don't ask | Ask instead |
-| --- | --- |
-| "Enable node-level drill affordance with request-time relay round-trips?" | "Make the diagram boxes clickable for extra detail? Takes 1–3 min longer now, and asks Claude each time you click one." |
-| "Should the fair_group loader fall back or raise on a missing per-task parquet?" | "If one task's results are missing, should the comparison skip it and keep going, or stop so you can look? Skipping is smoother but can hide a broken run." |
-| "Apply the OQ3 resolution across the blast-radius edges and diff target tables?" | "You said drop the pathology tasks — take them out everywhere in the plan, or just the section you commented on?" |
-| "Include before/after diagrams for this refactor?" | "Want a side-by-side of how the data flows today vs after? Worth it if the shape really changes, noise if it's the same picture twice." |
-| "Should Phase 2 be gated on the Phase 1 verification artifact?" | "Phase 2 only makes sense if Phase 1's numbers hold up. Wait and see them first, or build both now and accept the rework risk?" |
-
-**Self-test before you send:** read the question out loud. If a sharp colleague who has never opened the repo would answer "…what?", rewrite it. If you catch yourself explaining the mechanism in order to justify the question, that is the tell that you're asking the wrong person — go back to filter #1.
-
-## What to generate
-
-A single self-contained HTML file. **Default output path: sibling to the plan** —
-`<plan-dir>/<plan-stem>.html`.
-
-For a plan on the shared mount (`/mnt/su-vista-uscentral1/chaudhari_lab/phil/planning/<repo>/`) —
-where plans are authored from 2026-09-15 on — that sibling path *is* the deliverable: the mount is
-readable from the Mac, so Phil opens it directly and nothing needs copying. For a plan still in a
-repo's `docs/plans`, write the HTML beside it as before (checked in for traceability, not
-gitignored) **and** copy it to the mount so he can open it without a checkout.
-
-Either way it must end up somewhere he can open. An explainer that exists only inside a VM checkout
-has not been delivered.
-
-**Above everything below — the program panel.** A plan doc explains one slice of a larger effort,
-and read alone it answers "what are we building" while leaving "why are we doing this at all"
-unanswered. So the first thing on screen, before the header card and before any diagram, is a panel
-built from the brief named in the plan's `Program:` header:
-
-- **Why this program exists** — the brief's `Why` paragraph, trimmed to 2–3 sentences. Plain
-  English, no file or function names.
-- **Where this plan sits** — `stage 5 of 9`, with that stage's own one-line description from the
-  brief's `Stages` table.
-- **What is already done, and what this waits on** — the landed stages as a compact done-strip; the
-  blocking ones named together with what blocks them. This is the part a plan doc can never tell
-  you about itself.
-- **Settled — don't re-open** — if the brief's `Decided already` ledger has entries touching this
-  stage, list them as dated one-liners. A reader about to give feedback needs to know which calls
-  are already made, and this is the cheapest place to stop a decision being re-argued.
-- A link to the brief itself.
-
-If the plan has no `Program:` header, or the brief it names does not exist, say so in the panel in
-one plain line. An unplaced plan is a real finding, not something to paper over with blank space.
-
-The HTML then embeds:
-
-1. **Header card** — title, status, owner, branch, source-doc link, source-doc SHA-256 (for drift detection), generated timestamp.
-2. **TL;DR** — 2–4 sentences on what this plan is for and why it's worth doing, distilled from the plan's "What you're building" / status preamble. Plain English (see *Writing voice* above) — no jargon, no preamble, no file or function names. Lead with the goal, not the mechanism: a reader who stops after the TL;DR should know what question this work answers.
-3. **Repo Map** (Mermaid `flowchart LR`) — the *zoomed-out* view: where this PR sits in the whole repo pipeline. Show upstream sources, config layer, query layer, task modules, output tables, downstream/sibling repos. Color-code by relationship to the PR: bright-yellow with thick border = THIS PR adds; solid amber/green = modified/affected; grey dashed = untouched (Phase-2 deferred, or unrelated task families) — *negative space matters here, it tells the reader what is and isn't in scope*. Place this BEFORE the detailed Blast Radius diagram. Skip the Repo Map if the plan's footprint is genuinely confined to a single layer (e.g., a CSS-only tweak with no module/output blast radius); otherwise include it.
-4. **Blast radius diagram** (Mermaid `flowchart LR`) — the *zoomed-in* detail: knobs → files touched → output tables → downstream consumers. Mark Out-of-Scope deferred work with a muted color and a "Phase 2" label.
-5. **Order-of-operations diagram** (Mermaid `flowchart TD`) — sequenced steps with status chips (SHIPPED ✅ / PENDING ⏳ / BLOCKED 🛑 / PARTIAL ⚠️). Show inter-step dependencies (e.g., "bundle Step 4 + Step 5 in one commit") as edge labels.
-6. **Knobs / contracts card** — for each knob: type, default, allowed values, where it's used. Code blocks for default predicates / signatures. Inline annotations on subtle behavioral defaults (fail-closed validators etc.).
-7. **Step accordion** — `<details>`/`<summary>` per step. Closed by default. Each step: description, files touched, verify-gate, and a `<textarea class="section-feedback">` for inline comments. For steps with substeps (like a "Materialize and diff" step with 6a–6f), include a sub-flowchart.
-8. **Gotchas accordion** — same shape as steps; closed by default to reduce visual load on first open.
-9. **Open Questions panel** — one card per OQ with a `<select>` (Pending / Resolved / Deferred), a `<textarea>` for notes, and the full question prose. **Lead each card with a one-line plain-English restatement of what is actually being decided** (bold, above the plan's original wording) — OQs as written in a plan doc are usually the most jargon-dense prose in it, and this panel is where the user is being asked to make real calls. Restate it as the choice and its consequence ("Do we include the report-less scans, knowing we lose the text signal for them?"), then keep the original text below for precision. If an OQ turns out to be an implementation detail the user shouldn't have to rule on, say so in the restatement and propose the default. These pre-populate the export with `OQ<N>: <status> — <notes>` lines.
-10. **Feedback sidebar / footer** — a global `<textarea>` plus a single button `Copy all feedback as Claude prompt`. JS gathers all per-section textareas, OQ statuses, and the global box; formats them as a markdown prompt — **prefixed with a resume header** so a *fresh* session that receives the paste can bootstrap itself (plan path + branch + `plan-sha`, plus a one-line read-the-plan instruction; exact format in *Feedback ingestion* below) — then copies to clipboard. **Persist all textarea values to `localStorage` keyed by plan-stem + section-id** — first user complaint after using the HTML is invariably "I refreshed and lost everything." Restore on page load; clear when the plan SHA changes (the HTML has been regenerated, old feedback is stale). Show a small pending-count badge on the button (e.g., "Copy feedback (3 pending)") so the user can see they have unsubmitted notes before navigating away.
-11. **Node drill-down panel (OPTIONAL — opt-in per generation; default OFF)** — Mermaid nodes that represent *changing* entities (kind `added` / `modified` / `deferred`) become drillable via double-click; `untouched` / `external` nodes are not drillable (the cursor stays default, so the pointer affordance itself encodes "this box is where the change lives"). Authors can opt in an unchanged-but-load-bearing node with `forceDrillable: true`. Dblclick opens a side panel with kind chip + plan-anchor jump chips (cheap, embedded) plus a **"Generate detail" button**. The button POSTs the drill prompt to a local relay (`research-skills/relay/explain-plan-relay.py`, default `http://127.0.0.1:7237`) that wraps `claude -p`; the markdown response is rendered inline in the panel and cached to `localStorage[\`drill::${planSha}::${nodeId}\`]`. **If the relay isn't running, the button falls back gracefully to clipboard** (copies the prompt, toast tells the reader how to start the relay). **Detail is generated on-the-fly per node the reader inspects — NOT precomputed at HTML-generation time.** See `## Node drill-down (double-click)` below for the contract, prompt template, and relay wiring. **Generation cost (why this is opt-in):** drill-down adds noticeable time and token spend at HTML-generation. Claude has to hand-author a `nodeManifest` entry (label + kind + plan-anchors) for every drillable diagram node — typically 20–40 entries cross-referenced against the plan's `data-section` IDs, plus three additional verification classes (ORPHAN_NODE, ORPHAN_MANIFEST, BROKEN_ANCHOR). Expect roughly an extra 1–3 minutes and a few hundred lines of generated JS. **When generating, ALWAYS surface this trade-off before turning drill-down on** — via `AskUserQuestion`, worded in plain English (see *Writing voice → Questions*). Say the cost in words the reader gets on first pass, e.g. "Make the diagram boxes clickable for more detail? Adds about 1–3 min now, and asks Claude each time you click a box." — not "Enable node-level drill affordance with request-time relay round-trips?". Default the recommendation to OFF unless the user explicitly requested drill-down (e.g., `/explain-plan <path> --drill`, "include drill-down", "make the nodes clickable"), or the plan is genuinely large (≥ 3 diagrams AND ≥ 25 distinct drillable nodes), in which case lean ON. When turning drill-down ON, **mention the relay in the hand-off message**: "Drill-down is wired to the relay at `RELAY_URL` — run `python research-skills/relay/explain-plan-relay.py` in a spare terminal before double-clicking nodes, or the panel will fall back to clipboard."
-
-12. **Change-since-last-review layer (default ON when a baseline exists)** — plans are reviewed *iteratively*, and on a re-generation most of the plan is unchanged; re-reading the whole HTML to find the handful of edits is the friction this removes. The layer calls out *what changed since the last review* inline — a summary card up top, `✦ new` / `● changed` chips on each touched section (auto-expanded, with a one-line "what changed" note at the top of the section body), **unchanged sections receded** (dimmed) so the eye tracks deltas while scrolling, and a sticky toolbar with change counts, a Show-changed-only toggle, and Next / Prev-change navigation. On a genuine first pass it degrades to a one-line "first review" banner. The full contract — baseline resolution, section-level attribution, the honesty rules, the `CHANGES` data model, and the verification classes — lives in `## Change-since-last-review layer` below.
-
-### Optional sections (case-by-case)
-
-- **Before/after diagrams** — include ONLY when the change reshapes data flow (e.g., a refactor that moves a query layer between repos, an API migration where the call graph changes, an architectural extraction). SKIP for mechanical token substitutions (e.g., "regex literal → Jinja variable in 3 templates") — two near-identical diagrams differing only in node labels have low signal density. The behavioral diff in those cases lives in the verification step's diff queries (Step 6 EXCEPT-DISTINCT, etc.), not in a static visual. When in doubt, ask the user via AskUserQuestion — phrased as what they get, e.g. "Want a side-by-side of how the data flows today vs after?", not "Include before/after blast-radius renderings?" (see *Writing voice → Questions*).
-- **Step-detail sub-flowcharts** — include when any single step has ≥4 sequenced substeps (like Step 6's 6a–6f); don't bother otherwise.
-- **Review history table** — include when the plan has been through one or more independent reviewer passes (detectable from a "Provenance" / "Review history" section in the markdown, or from `<plan-stem>-*.md` artifacts in the `reviews/` directory beside the plan (for a plan in a repo's `docs/plans`, that repo's mount tree), falling back to the repo's `docs/plans/reviews/` for reviews written before the move). Render a table near the top (right after TL;DR) with columns `Pass | Reviewer | Verdict | Key findings surfaced | Applied to plan`, one row per pass, linking each reviewer artifact. Surface user-driven architectural pivots (e.g., a decision that supersedes a prior RD) as their own row with a distinct "Pivot" verdict chip. This is the highest-signal section for a reader trying to understand *how the plan reached its current shape* — a plan revised across 3+ passes is otherwise opaque about which decisions are settled vs fresh. SKIP for plans with no reviewer history (a freshly-scoped plan has nothing to tabulate). Keep each cell terse; the reviewer artifacts hold the detail.
-
-### Ordering constraint — motivation before machinery
-
-The first screen answers **why**, not **how**. In order: program panel, header card, TL;DR, review
-history if any, then diagrams and machinery. Phil's standing criticism of these HTMLs was that they
-showed one plan in isolation with the motivation buried under mechanism — so if a reader has to
-scroll past a blast-radius diagram to learn what question the work answers, the generation is wrong
-however good the diagrams are.
-
-Cut machinery to make this true. A knobs card, a contracts table or a sub-flowchart that pushes the
-motivation below the fold gets moved down or dropped, not shrunk.
-
-### Visual design constraints
-
-- **Single file, no build step.** Inline CSS and JS. External loads are Mermaid + `svg-pan-zoom` (both via CDN — see the pan/zoom requirement below).
-- **Readable in dark and light.** Use `prefers-color-scheme` media query; provide both palettes.
-- **Mobile-friendly layout** is NOT required — these are reviewed on a laptop.
-- **No emojis in body prose.** Status chips (✅ ⏳ 🛑 ⚠️) and Mermaid node labels are the exception — they encode information visually.
-- **Diagrams must be pan/zoom-able.** Mermaid's default render is a static SVG that fills its container — fine for small diagrams, useless for the 12-node repo maps and phase flows this skill typically produces. Wrap each `<pre class="mermaid">` in a fixed-height container (e.g. `height: 520px; overflow: hidden`) and after Mermaid renders, attach `svg-pan-zoom` to the resulting `<svg>`. Provide per-diagram controls (Reset zoom/pan, Toggle fullscreen) and a small hint label ("scroll to zoom • drag to pan") so the affordance is discoverable. Reasonable bounds: `minZoom: 0.3, maxZoom: 8, fit: true, center: true`. ESC key exits fullscreen. **Implementation notes:** load `svg-pan-zoom@3.6.x` from `cdn.jsdelivr.net`; set `mermaid.initialize({ startOnLoad: false, flowchart: { useMaxWidth: false } })` and call `mermaid.run({ querySelector: 'pre.mermaid' })` explicitly after wrapping containers, then strip Mermaid's inline `style="max-width:..."` from each rendered `<svg>` (svg-pan-zoom needs to control sizing). Re-fit on window resize and on fullscreen toggle (call `inst.resize(); inst.fit(); inst.center()` with a small `setTimeout` after the class change so layout settles first).
-- **In-figure color legends.** When a diagram uses ≥3 distinct node styles to encode meaning, include a `subgraph legend["Color legend"]` inside the Mermaid source — disconnected sample nodes, one per style class, with concise labels. Avoid prose-only legends below the figure (small italicized lists) — those force the reader to look away from the diagram to decode color. Place the legend subgraph LAST in the diagram source so it floats to an edge without disrupting the main flow.
-- **Legend must enumerate every class actually used.** If the diagram applies an `ext` / `cfg` / `deferred` class to any node, that class needs a legend entry. Missing legend entries are the most common drift complaint after the first user review.
-- **Append the color name to each legend label.** "THIS PR adds — new config knobs (cyan)" beats "THIS PR adds (new config knobs)" — readers shouldn't have to match a swatch to text by saccade. The parenthetical color name is a redundant cue but a useful one when colors are subtly different.
-- **Pick hues that are visually distinct, not just programmatically distinct.** Yellow + amber are adjacent on the color wheel and read as "the same color, slightly different" to many readers. When a class needs to stand out as the *focus* of the diagram (the PR-add node), pick a hue that is NOT adjacent to any other class — cyan, magenta, or strong rose work well against the typical amber/green/blue/grey palette. Don't use yellow if amber is already in use.
-
-## Mermaid pitfalls
-
-Concrete syntax landmines that have broken diagrams in real plans. Avoid up-front; don't wait for the user to report "syntax error in text, mermaid version X.Y.Z."
-
-- **Never put `{` or `}` in node labels, subgraph titles, or edge labels** — not even single braces. Mermaid's parser treats `{` as a rhombus-node opener even inside quoted strings, and even inside subgraph quoted titles. This breaks placeholders like `{dataset}/{pair_key}` or `{model_a/b}_per_example.parquet` that look perfectly natural in a path-template label. Rewrite as `(dataset)/(pair_key)/` or `(model_a or b)_per_example.parquet` — parentheses inside `[...]` labels are literal text. Same hazard for Jinja `{{ INDEX_FOO }}` — drop braces.
-- **Never put `|` (pipe) in node labels** — `|` is the edge-label delimiter in `A -->|label| B`, and the parser gets confused when a pipe appears inside a node's `[...]` label. Replace with `/`, `,`, or the word `or`. E.g., `[results/{ct|ehr|path}/...]` is doubly broken — both `{` and `|` are hazards; rewrite as `[results/(ct, ehr, or path)/...]`.
-- **Never put double or triple dashes (`--`, `---`) inside node labels** — Mermaid uses `-->`, `---`, `===` as edge tokens, and a label containing `--verify-against-solo` or `---` (from a separator line) tokenizes ambiguously. Common failure mode: bullet replacement (`• --foo` → `- --foo`) silently creates `---foo` which the parser splits as edge-then-node. Strip leading `--` from labels (drop the CLI-flag dashes when used as a *label*; keep them in the surrounding prose), and avoid `---`/`━━━`/`═══` as visual separators inside labels.
-- **Avoid Unicode arrows (`→`, `←`, `↔`) in node labels** — 10.x parsers sometimes choke. Replace with `->`, `<-`, `to`, `vs`, or simply rephrase. (Status chips `✅ ⏳ 🛑 ⚠️` and `▸` *generally* work; arrows specifically don't.)
-- **Avoid box-drawing chars (`━`, `═`, `│`) in node labels** as visual separators — same fragility as `---`. Use `<br/><br/>` for visual whitespace or just `<br/>` alone.
-- **NEVER use a reserved keyword as a node ID** — this is the highest-frequency "Syntax error in text" that the grep suite below does NOT catch (it inspects label *contents*, not IDs). Banned IDs: `end`, `call`, `class`, `click`, `style`, `link`, `href`, `graph`, `subgraph`, `direction`, `flowchart`, `default`, `linkStyle`. The two that bite most: **`call`** (it's the click-interaction keyword `click X call fn()`) and **`end`** (subgraph terminator). Real incident (2026-06): a blast-radius node `call["convert_dicom_to_nifti..."]` failed to render across three fix attempts because the author kept inspecting label punctuation; the ID itself was the bug. Use a descriptive non-keyword instead (`cvt`, `convNode`, `warnLog`). When auto-deriving IDs from file/function names, prefix or suffix them (`n_call`, `call_`) so a name collision with a keyword is impossible.
-- **Never put a bare `<`, `>`, `<=`, or `>=` in a label** — Mermaid feeds labels through an HTML parser, so a bare `<` opens a phantom tag and the diagram dies. `"mismatch <= tol"` breaks; the only `<`/`>` it tolerates are the literal `<br/>` / `<b>` tags you intend. Rewrite comparisons in words (`"at or below tol"`, `"fewer than 2"`) or HTML entities (`&lt;`, `&le;`, `&gt;`). Note `-->` / `-.->` edge arrows are fine — the hazard is `<`/`>` *inside `[...]` labels*.
-- **Subgraph titles are parsed MORE strictly than node labels** — parentheses, slashes, and `+` that are perfectly safe inside a quoted *node* label (`x["a (b) / c"]` renders) will break a quoted *subgraph title* (`subgraph s["a (b) / c"]` fails) on 10.x. Keep subgraph titles to letters, digits, spaces, and commas: `subgraph s["Out of scope, Phase 2"]`, not `["Out of scope (Phase 2 / elsewhere)"]`. (This is *in addition* to the `{`-brace hazard, which breaks both.)
-- **Edge labels: use pipe syntax `A -->|label| B`**, not `A -- "label" --> B`. Pipe syntax is more permissive about special chars (parens, slashes, commas) and survives parser quirks across Mermaid versions.
-- **Dotted arrows with labels: `A -. label .-> B`** (spaces required around the label on both sides). NOT `A -.label.-> B` or `A -.label-->B` — both are malformed-token bugs that 10.x parsers reject silently. Same for thick: `A == label ==> B` (spaces required). Watch for this when you have many `-. <verb> .->` edges with short labels — easy to drop the spaces by reflex.
-- **Avoid `•` (bullet) in node labels** if you're seeing parser failures — switch to `,`, `;`, or just rely on `<br/>` for line breaks. `•` usually works but is a known sometimes-fail in older Mermaid versions. **Watch out for blind bullet-replacement**: if you do a bulk `• ` → `-` substitution to fix the bullet issue, you may create new `--` or `---` sequences when `• ` precedes another `-` token (e.g., `• --verify-against-solo` → `---verify-against-solo`).
-- **`<br/>` for line breaks in node labels works**; raw `\n` does not. Use HTML-style breaks.
-- **Subgraph labels with spaces or punctuation must be quoted**: `subgraph foo["My Label (v2)"]`, not `subgraph foo My Label`. Note: quoting does NOT save you from the `{` hazard inside the label.
-- **Wrap multi-line / punctuated node labels in double quotes**: `s1["<b>Slice 1</b><br/>line 2<br/>line 3"]`, not `s1[<b>Slice 1</b><br/>...]`. The quotes harden the label against ambiguity when it contains colons, commas, parentheses, or HTML tags.
-- **`class A,B,C classname` is fine**; many node IDs in one assignment is the idiomatic shape.
-- **Generation-time validation (run BEFORE opening the file)**: extract `<pre class="mermaid">...</pre>` blocks and grep for every known-bad pattern. Cheap, catches the common cases — but see the hard limit below:
-
-  ```bash
-  # Extract label/body content only (drop the <pre> wrapper lines) so the <pre tag isn't a false <-hit.
-  awk '/<pre class="mermaid"/{f=1;next} /<\/pre>/{f=0} f' <html> > /tmp/mm.txt
-  grep -nE '\{|\}'                              /tmp/mm.txt                 # curly braces (any)
-  grep -nE '\[[^]]*\|[^]]*\]'                   /tmp/mm.txt                 # pipe inside node labels
-  grep -nE '\[[^]]*\(\)[^]]*\]'                 /tmp/mm.txt                 # empty () inside labels (reads as round-node)
-  grep -nE '<[^b]'        /tmp/mm.txt | grep -v '<br'                       # bare < not part of <br/> (HTML-tag opener)
-  grep -nE '<=|>='                             /tmp/mm.txt                 # comparison ops in labels
-  grep -nE 'subgraph[^[]*\[[^]]*[()/+{}|][^]]*\]' /tmp/mm.txt              # parens/slash/+ in SUBGRAPH titles (stricter than nodes)
-  grep -niE '(^|[[:space:]])(end|call|click|class|graph|subgraph|style|link|href|default|direction|flowchart)[[:space:]]*\[' /tmp/mm.txt  # reserved-keyword node IDs
-  grep -nE '\-\.[A-Za-z][^.]*\.->'             /tmp/mm.txt                 # dotted arrow missing spaces
-  grep -nE '\[[^]]*---[^]]*\]'                 /tmp/mm.txt                 # triple-dash in node labels
-  grep -nE '→|←|↔'                             /tmp/mm.txt                 # unicode arrows
-  grep -nE '━|═|│'                             /tmp/mm.txt                 # box-drawing chars
-  # Balance check: subgraph count must equal end count.
-  echo "sg=$(grep -c subgraph /tmp/mm.txt) end=$(grep -cE '^[[:space:]]*end[[:space:]]*$' /tmp/mm.txt)"
-  ```
-
-  Every check must return zero hits (and sg==end) before opening.
-
-- **The grep suite is necessary but NOT sufficient — it cannot prove a diagram parses.** It catches *known* character/keyword landmines, not novel ones or structural errors. For ground truth, run the actual parser:
-  - **Interactive / one-off (zero setup, best ROI):** paste the failing diagram into the **Mermaid Live Editor — <https://mermaid.live>**. It renders against a pinned Mermaid version and prints the exact parse error with the offending token highlighted. When a user reports "Syntax error in text, mermaid version X.Y.Z" and the greps are clean, go here *first* instead of guessing — guessing burned three round-trips in the 2026-06 incident.
-  - **Automated, if a Node runtime exists:** `mermaid.parse(src)` validates WITHOUT rendering (no headless browser needed) and throws with the token; or `mmdc` (`@mermaid-js/mermaid-cli`). A CI lint can iterate every `<pre class="mermaid">` block through `mermaid.parse`. Node-free boxes can `pip install nodejs-bin` to get one, or use a Go validator (`tetrafolium/mermaid-check`). The npm `@a24z/mermaid-parser` lints `.mmd` / markdown blocks from the CLI.
-  - **Don't make the user be the parser.** If the greps pass but you can't run a real parser locally, say so and ask the user to paste into mermaid.live — that's faster and more honest than shipping a guess and waiting for "still broken."
-
-## Node drill-down (double-click)
-
-> **Opt-in feature.** Default is OFF — see section 11 in *What to generate* above for the cost rationale and the AskUserQuestion gate. The contract below applies only when drill-down has been turned on for this generation.
-
-A static diagram answers "what's in scope"; a drillable diagram answers "what *changes* in this box, and where do I look for it." Without drill-down the reader still has to scroll 400 lines of markdown to recover the connection between a node and the plan's prose.
-
-**Affordance**: double-click a *changing* node (kind `added` / `modified` / `deferred`) in the Repo Map, Blast Radius, or Order-of-operations diagrams. A side panel opens with the node's details. `untouched` / `external` nodes are not drillable by default — the `cursor: pointer` change is itself the signal that this box is part of the change. Single-click is reserved for pan/drag — don't bind it.
-
-**Why gate on kind**: it doesn't measurably reduce HTML-generation cost (manifest entries are one line each, 40 vs 15 is noise). The point is *signal* — the pointer cursor becomes a kind-encoded affordance, and the reader doesn't waste a Claude round-trip clicking an untouched node to learn it's unchanged.
-
-### Generate detail on-the-fly, not at HTML-generation time
-
-**Do not precompute per-node detail for every diagram node.** A typical plan HTML has 15–40 drillable nodes; a reader inspects 2–5. Precomputing all 40 burns generation tokens (and re-burns them on every plan revision) for content that will never be read. Worse, the detail goes stale the instant the plan is edited.
-
-Instead: drill-down is a **request-time round-trip back to Claude**, same pattern as the existing "Copy feedback as Claude prompt" button. Dblclick → panel opens → panel exports a structured prompt to the clipboard → user pastes into Claude → Claude reads the live plan + code and answers. The HTML stays a static artifact; the *current* state of the plan and the repo is what gets analyzed, not a snapshot frozen at HTML-generation time.
-
-### What to embed at generation time (minimal)
-
-A lightweight `nodeManifest` keyed by Mermaid node ID, with only the cheap fields the JS needs to build the drill prompt and the in-panel plan-jump chips:
-
-```js
-const nodeManifest = {
-  "orch": {
-    label: "cross_modality.py",
-    kind: "added",                    // "added" | "modified" | "untouched" | "deferred" | "external"
-    planAnchors: ["step-2", "knobs-card"]   // scroll targets in this HTML (data-section IDs)
-  },
-  "fit": { label: "_fit_and_eval", kind: "modified", planAnchors: ["step-2"] },
-  "out_pe": { label: "intersection_per_example.parquet", kind: "added", planAnchors: ["step-2"] },
-  "slice4": { label: "Slice 4: HTML / radar", kind: "deferred", planAnchors: ["slice-4"] },
-  "vct": {
-    label: "vista-ct cohort_all/ct/",
-    kind: "external",
-    planAnchors: ["gotcha-ct-master"],
-    forceDrillable: true              // opt-in: unchanged but load-bearing (gates slice 3)
-  },
-  // also include manifest entries for untouched/external nodes that are NOT drillable,
-  // so the verification pass can confirm they were intentionally non-drillable rather
-  // than oversights. Just omit forceDrillable.
-  "load": { label: "data_pipeline.load_eval_data", kind: "untouched", planAnchors: [] },
-};
-```
-
-This is small (one line per node), cheap to author, and stable across the lifetime of the HTML. Everything *substantive* (summary, changes, exploded sub-diagram) is generated by Claude on demand.
-
-**Drillability rule**: a node is drillable iff `manifest[key]` exists AND (`kind ∈ {added, modified, deferred}` OR `forceDrillable === true`). Everything else is rendered with the default cursor and ignores dblclick.
-
-Also embed at generation time:
-- `const planPath = "docs/plans/cross-modality-comparison.md";` — the source-of-truth path Claude should re-read on drill.
-- `const planSha = "5d12e0431273...";` — the SHA Claude was given. Lets Claude warn the user if the live plan has drifted from the HTML.
-
-### Wiring (JS sketch)
-
-```js
-// After mermaid.run(...) and after svg-pan-zoom is attached:
-const DRILLABLE_KINDS = new Set(['added', 'modified', 'deferred']);
-
-function isDrillable(entry) {
-  return entry && (DRILLABLE_KINDS.has(entry.kind) || entry.forceDrillable === true);
-}
-
-function attachDrillHandlers() {
-  document.querySelectorAll('pre.mermaid svg g.node').forEach(node => {
-    const m = node.id.match(/^flowchart-(.+?)-\d+$/);   // Mermaid 10 ID shape
-    const key = m ? m[1] : node.id;
-    const entry = nodeManifest[key];
-    if (!isDrillable(entry)) return;   // untouched/external nodes stay default-cursor, no dblclick
-    node.style.cursor = 'pointer';
-    node.classList.add('drillable');
-    node.addEventListener('dblclick', (e) => {
-      e.preventDefault(); e.stopPropagation();
-      openDrillPanel(key, entry);
-    });
-  });
-}
-
-function buildDrillPrompt(key, manifest) {
-  return `Drill into node "${key}" (${manifest.label}, kind=${manifest.kind}) from plan ${planPath} (HTML generated against SHA ${planSha.slice(0,12)}).
-
-Re-read the plan and any referenced source files. Produce a markdown-formatted answer with these sections:
-
-1. **Summary** — one paragraph, the node's role in this plan.
-2. **Concrete changes** — 3–7 bullets, one line each, named functions / branches / fields / config keys. What will a reader see different if they open the file(s)?
-3. **Files touched** — paths only.
-4. **Plan steps that reference it** — step numbers + one-line why.
-5. **Exploded sub-diagram** (only if the node has non-trivial internal structure) — a fenced \`\`\`mermaid block with a \`flowchart LR\` source. Follow the pitfall rules in the explain-plan skill (no { } | -- → in labels, quoted multi-line labels, etc).
-
-If the live plan SHA differs from ${planSha.slice(0,12)}, flag the drift in a leading paragraph before the sections above.
-
-Write in plain English — short concrete sentences, plain verbs, no inflated diction (skip "leverage / utilize / robust / seamless / comprehensive"), no filler affirmations. Explain it the way you'd tell a colleague at the whiteboard. **The reader has not read the code**: say what this box does and why it matters to the plan's goal, not how the code is organized. Identifiers (file, function, column names) go in parentheses after the plain description, never as the subject of a sentence.
-
-Return only the markdown answer in your final message — no preamble, no "I'll now..." narration. Do not edit any files; do not write to the HTML.`;
-}
-```
-
-### Relay integration (preferred path) + clipboard fallback
-
-The drill panel's "Generate detail" button has two modes, in priority order:
-
-1. **Relay (preferred).** A small localhost HTTP relay (`research-skills/relay/explain-plan-relay.py`) wraps `claude -p` and is reachable at `RELAY_URL` (default `http://127.0.0.1:7237`). The HTML POSTs the drill prompt to the relay, which shells out to `claude -p`, captures stdout, and returns it as JSON. The panel renders the markdown response inline via [marked](https://cdn.jsdelivr.net/npm/marked/marked.min.js) and caches the answer in `localStorage[\`drill::${planSha}::${nodeId}\`]`. Subsequent re-opens of the same node hit the cache — no relay round-trip, no token spend. Cache invalidates automatically when `planSha` changes (HTML regenerated from a new plan version).
-2. **Clipboard fallback.** If the relay is unreachable (timeout or connection refused), the button copies the prompt to the clipboard with a toast: *"Relay not running — prompt copied to clipboard. Paste into Claude to drill, or `python research-skills/relay/explain-plan-relay.py` to enable inline drill."*
-
-**Embed these constants at generation time** alongside the existing `planPath` / `planSha`:
-
-```js
-const RELAY_URL = "http://127.0.0.1:7237";              // localhost relay (see research-skills/relay/)
-const REPO_ROOT = "/Users/.../Stanford/VISTA/code/<repo>";   // absolute path; `claude -p` runs here
-```
-
-Compute `REPO_ROOT` from the plan's location via `git -C <plan-dir> rev-parse --show-toplevel` at generation time; embed the absolute path so the relay can `cwd` into the repo and `claude -p` sees the codebase.
-
-### Wiring (full flow)
-
-```js
-// Render markdown responses via marked (CDN). Add to <head>:
-//   <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
-
-async function probeRelay() {
-  try {
-    const r = await fetch(RELAY_URL, {method: 'GET', signal: AbortSignal.timeout(800)});
-    return r.ok;
-  } catch { return false; }
-}
-
-async function generateDetail(key, manifest, panel) {
-  const cacheKey = `drill::${planSha}::${key}`;
-
-  const cached = localStorage.getItem(cacheKey);
-  if (cached) {
-    renderMarkdownInto(panel, JSON.parse(cached).answer);
-    return;
-  }
-
-  const prompt = buildDrillPrompt(key, manifest);
-  showSpinner(panel, 'Asking Claude…');
-
-  try {
-    const r = await fetch(RELAY_URL, {
-      method: 'POST',
-      headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({prompt, cwd: REPO_ROOT, timeout: 300}),
-      signal: AbortSignal.timeout(330_000)   // slightly > relay timeout
-    });
-    if (!r.ok) throw new Error(`relay ${r.status}`);
-    const {answer, elapsed_s} = await r.json();
-    localStorage.setItem(cacheKey, JSON.stringify({answer, elapsed_s, ts: Date.now()}));
-    renderMarkdownInto(panel, answer);
-    appendFooter(panel, `via relay · ${elapsed_s}s`);
-  } catch (e) {
-    // Relay unreachable / errored — graceful fallback to clipboard
-    await navigator.clipboard.writeText(prompt);
-    renderFallbackInto(panel,
-      `**Relay not reachable** (${e.message}).\n\n` +
-      `Prompt copied to clipboard — paste into Claude to drill.\n\n` +
-      `To enable inline drill: \`python research-skills/relay/explain-plan-relay.py\``
-    );
-  }
-}
-
-function renderMarkdownInto(panel, md) {
-  panel.querySelector('.drill-body').innerHTML = marked.parse(md);
-  // Re-run Mermaid on any new ```mermaid``` blocks the answer contained.
-  panel.querySelectorAll('pre code.language-mermaid').forEach(b => {
-    const pre = document.createElement('pre');
-    pre.className = 'mermaid';
-    pre.textContent = b.textContent;
-    b.parentElement.replaceWith(pre);
-  });
-  mermaid.run({ querySelector: '.drill-body pre.mermaid' });
-}
-```
-
-`openDrillPanel(key, manifest)` populates a right-side `<aside id="drill-panel">` with:
-1. Header — node label + kind chip + a small "relay: ✓ / ✗" indicator (driven by `probeRelay()` at page load and on panel-open).
-2. **Plan-jump chips** — one per `manifest.planAnchors` entry, scrolls to and expands the matching `<details data-section="...">`. Cheap, instant, no Claude round-trip — these always work regardless of relay state.
-3. **"Generate detail" button** — calls `generateDetail(key, manifest, panel)`. Disabled while a request is in flight; shows spinner. Re-clicks while a cache hit exists re-render from cache. A "Re-ask (skip cache)" link sits below the button for the case where the plan moved and the user wants a fresh answer.
-4. Close button, ESC, backdrop click all dismiss. The diagram stays interactive behind the panel.
-
-### Affordance discovery
-
-- Each diagram's hint label gains `• double-click changing nodes for details` alongside `scroll to zoom • drag to pan` — the word *changing* is load-bearing, it tells the reader which nodes will respond.
-- Drillable nodes get `cursor: pointer` and a faint outline on hover.
-- Non-drillable nodes (`untouched` / `external` without `forceDrillable`) keep the default cursor — the cursor change is the affordance signal, and itself encodes "this box is part of the change."
-
-### Authoring discipline
-
-Build `nodeManifest` *alongside* the diagram, not after. Include an entry for **every** node in the diagram (including untouched/external ones) — the verification pass uses entry-presence to distinguish "intentionally non-drillable" from "author forgot to add it."
-
-When deciding `kind`: be honest. `modified` means this entity's behavior or signature actually changes in this PR. A file that's *touched but only by import-reordering or rename-tracking* is `untouched` from the reader's perspective — drilling into it would return "nothing interesting." Likewise, a sibling-repo node that *gates* this work (you depend on its output layout) is `external` + `forceDrillable: true` if there's a plan-anchor worth pointing at; plain `external` otherwise.
-
-The manifest is intentionally thin. Resist the temptation to inline `summary` / `changes` / `exploded` fields into it "just for the common case" — that re-introduces the staleness problem and conflates the static HTML with the live plan state.
-
-### Verification update
-
-Add to the verification pass:
-- **`ORPHAN_NODE`**: a Mermaid node in any diagram has no `nodeManifest` entry. List every instance. Either add the entry (with the appropriate `kind`) or drop the node — orphans leave the reader guessing about drillability.
-- **`ORPHAN_MANIFEST`**: a `nodeManifest` entry has no corresponding Mermaid node ID across any diagram. Stale — delete or add the diagram node.
-- **`BROKEN_ANCHOR`**: a `planAnchors` value doesn't match any `data-section` ID in the HTML. The chip would scroll to nothing.
-- **`MISLABELED_KIND`**: a node labeled `untouched` / `external` is reachable from a step the plan says is `SHIPPED` or `PENDING` and likely modifies it (and vice-versa: a node labeled `modified` that the plan never mentions in any change-bearing step). Catches "author forgot to update the kind after the plan changed scope." Borderline calls are fine — only flag clear mismatches.
-
-## Change-since-last-review layer
-
-Plans are reviewed **iteratively** — the reader has usually seen a prior version, and on a re-generation most of the plan is unchanged. Re-reading the whole HTML to re-find the handful of edits is exactly the friction this layer removes: it calls out *what changed since the last review* inline, so the reader scrolls to the deltas and skims past the settled parts. Default **ON** whenever a baseline is resolvable (below); on a genuine first pass it degrades to a one-line "first review" banner that says the layer activates next round.
-
-### Resolve the baseline (what "since last review" means)
-
-**"Since last time" means "since the version the reader last looked at" — the *previous generation*, not the last formal approval.** During a feedback loop (feedback → regenerate → feedback → regenerate…) the reader sees the HTML every round, so each regeneration is a "last time." The baseline must therefore advance on **every** regeneration, not only on approval — see *Baseline snapshot sidecar* below for the mechanism.
-
-> **The staleness trap this fixes.** Plans under iteration are *not committed each round* (`claude_ops.md` → Saving a plan: one PHI review per plan, not per revision), and approval anchors only advance on sign-off. So "diff against git HEAD" and "diff against the last-approved SHA" both freeze at the last approval — which can be 2–3 rounds back. Diffing against a frozen baseline makes "what changed since last time" *accumulate every round since approval* and re-show old deltas. Never use the approval anchor or git HEAD as the round-to-round baseline; that IS the bug. The approval SHA is a `--since` target for a returning reviewer ("what changed since I signed off"), nothing more.
-
-Pick the first that applies:
-
-1. **Explicit override** — `/explain-plan <path> --since <ref-or-sha>` names the baseline directly (e.g. the last-approved SHA, when a returning reviewer wants "since I signed off").
-2. **Per-generation baseline snapshot (default)** — the plan snapshot the *previous generation* wrote to the sidecar (see below). `diff(current plan, snapshot)` is exactly *this* round's edits — the correct "since you last looked." This advances every regeneration, so it never accumulates across rounds.
-3. **Prior generated HTML / git HEAD** — fallback only when no sidecar exists yet (first run after this mechanism was added, or the sidecar was cleaned). Diff the current plan against `git show HEAD:<path>` when the plan is committed. Use once, then the sidecar takes over next round.
-4. **Review-reconstructed** — no diffable prior version exists (e.g. the reviewed plan landed in a single commit), but the plan just went through review passes. Reconstruct the delta from the review artifacts (`<stem>-*.md` in the `reviews/` directory beside the plan (for a plan in a repo's `docs/plans`, that repo's mount tree), falling back to the repo's `docs/plans/reviews/` for reviews written before the move, + the review-history table), attributing each change to its pass. Label the baseline honestly as *reconstructed from the review passes*, not a git diff.
-5. **First pass** — none of the above resolves (no sidecar, no diffable prior). Render the "first review" banner; the layer lights up on the next iteration once the sidecar is seeded (below).
-
-### Baseline snapshot sidecar
-
-The change layer's baseline lives in a **gitignored sidecar** that captures the plan text as-of each generation, so the next generation can diff against *exactly what the reader last saw* — independent of git commits and approvals.
-
-- **Location**: `<plan-dir>/.explain-plan/<plan-stem>.baseline.md`. Create the `.explain-plan/` dir if absent and ensure it's gitignored (add `.explain-plan/` to the repo's `.gitignore` if not already covered — it's a review-scratch dir, never committed, and being git-ignored also shields it from a parallel session's `git reset --hard`).
-- **On every generation, in order:**
-  1. **Read** the sidecar if it exists → that's the baseline (resolution step 2). If absent, fall through to steps 3–5 above for *this* run only.
-  2. **Diff** the current plan against the baseline and author `CHANGES` **fresh** from that diff (see below). Never carry `CHANGES` notes forward from a prior generation — recompute every time against the resolved baseline.
-  3. **Advance** the sidecar: if the current plan text differs from the snapshot, overwrite the sidecar with the current plan content. **If the plan text is unchanged (annotation-only regen — e.g. a mermaid-syntax fix or `.resp` callout with no `.md` edit), leave the sidecar untouched** so the round's delta doesn't reset to empty. Comparing plan-text-to-snapshot (not SHA-to-SHA) is what makes annotation-only re-runs safe.
-- **Why not the SHA the HTML embeds?** The HTML stores only the plan *SHA*, not the text, so you can't reconstruct the prior plan to diff against. The sidecar holds the actual content — that's the whole point.
-- **On approval** the sidecar already holds the approved version (the last generation wrote it), so a fresh feedback round after approval diffs against the approved plan automatically — no special-casing needed. The approval SHA is recorded separately for the README row and as a `--since` target (see *Completion*).
-
-### Compute the delta at section granularity
-
-Parse both versions into sections (H2/H3, each step, each gotcha, each OQ, each Files-to-Modify row) and classify each `new` / `changed` / `unchanged` / `removed` by comparing normalized text. For every `new`/`changed` node, **author a one-line "what changed" note** — the plain-English *why it matters* ("now recomputes from scratch instead of reusing the old run", "you decided to keep the report-less scans in", "added a checkpoint so we stop if the numbers look off"). Write it in the plain voice (see *Writing voice*): the note is the high-signal element, so make it read like a person's margin note, not a changelog stub. A raw word-diff is noisy and usually not worth rendering. If a section genuinely needs the exact text delta, embed old/new and render it behind a per-section toggle — case-by-case, not the default.
-
-**Honesty rules — the highest-priority correctness bar for this layer** (a padded or wrong change list is worse than none, because the reader *trusts it to decide what to skip*):
-
-- Mark a section `unchanged` only when the baseline actually confirms it. On the review-reconstructed path, flag only the sections the review artifacts demonstrably touched and leave the rest **neutral**, rather than asserting an "unchanged" you can't prove.
-- Attribute each delta to its source (which review pass, which decision doc) when known — it tells the reader *why* it moved.
-- Author a delta only where the baseline diff or the review artifacts support it. Never invent one to make the layer look busy.
-
-### `CHANGES` data model (embed at generation time)
-
-A small JS object the render logic consumes — the only per-plan authored artifact. Keys match the `data-section` ids on the `<details>` and the OQ `#oq-N` ids:
-
-```js
-const CHANGES = {
-  round: "diff",                 // "diff" | "review-reconstructed" | "first"
-  baseline: "…one line naming the baseline the reader is being diffed against…",
-  sections: {                    // one entry per touched section, keyed by data-section id
-    "track-c": { s: "new",     note: "…one line, attributed…" },
-    "b4":      { s: "changed", note: "…" }
-  },
-  oqs: { 7: { s: "resolved", note: "…" }, 12: { s: "new", note: "…" } }
-};
-// round:"first" needs only { round, firstPassNote }.
-```
-
-Keep it thin — status + one-line note per touched node, nothing more. Sections absent from the object are treated as not-flagged (neutral, receded), never asserted unchanged. The render logic: stamp chips + inline notes, auto-open changed `<details>`, add `.recede` to the rest, build the summary card from the object, and wire the toolbar (counts, `body.changes-only` toggle that hides `details:not([data-changed])`, and Next/Prev over `[data-changed]` in document order).
-
-### Verification additions
-
-Fold these into the verification pass:
-
-- **UNVERIFIED_UNCHANGED** — a section is counted/styled `unchanged` on a path where the baseline can't confirm it. Downgrade to neutral.
-- **ORPHAN_CHANGE** — a `CHANGES.sections` / `CHANGES.oqs` key has no matching `data-section` / `#oq-N` in the HTML. Fix the key or drop the entry.
-- **UNSOURCED_DELTA** — a `new`/`changed` note asserts a change with no support in the baseline diff or the review artifacts. Re-check or remove it.
-- **STALE_BASELINE** — `CHANGES` spans more than one feedback round's worth of edits (the accumulation bug): the delta describes changes the reader already saw acknowledged in a prior round. Confirm the baseline resolved to the per-generation **sidecar** (`.explain-plan/<stem>.baseline.md`), not the last-approval SHA or `git HEAD`. If the sidecar wasn't advanced on the prior run — or the baseline fell back to an approval/HEAD anchor — the diff spans multiple rounds; re-resolve against the sidecar and rebuild `CHANGES`.
-
-### SHA / drift discipline
-
-The change layer is **annotation, not plan content** — like the `.resp` response callouts, adding or refreshing it does **not** bump `plan-sha256` when the source `.md` is unchanged. That keeps the HTML in-sync for the *Completion* gate and preserves the reader's localStorage feedback (which wipes on a SHA change). Only a genuine plan edit re-bumps the SHA — at which point the layer's baseline advances too.
+Phil doesn't read markdown or diffs. When work is done, this skill turns the spec plus what
+actually landed into one HTML page Phil can read in a few minutes: what was built, where it sits,
+what changed, and proof that each deliverable exists. It is the review surface for finished work
+and the context a later session or reviewer reads first, the way a good PR carries a diagram or a
+demo.
+
+Two modes:
+
+- **What changed (default).** After the build, after the `evaluator` agent passes it. This is
+  the normal case.
+- **Plan view (`--plan`).** An older long-format plan still being reviewed before its build.
+  Same page shape, describing what *will* change. Kept because 2,000+ of those docs exist; new
+  specs never need it.
+
+## Voice
+
+Follow `claude_ops.md` → How to write to me, for every word on the page and every question you
+ask. The reader knows the research cold and has not opened the code. Lead with what the work
+does and why; put identifiers in parentheses after the plain description. If you need to ask
+Phil something, ask about outcomes Phil can judge, through `AskUserQuestion`, never about how the
+page is built.
 
 ## Inputs
 
-- **Required**: path to plan doc (markdown). Resolve from the skill argument or, if absent, from the most-recently-referenced plan in conversation; fail with a clear message if neither is available.
-- **Optional**: output path override. Default is sibling `<stem>.html`.
+- The spec or plan path: the argument, or the one most recently named in the conversation. Specs
+  live in the repo's `docs/plans/` (often an ignored symlink to the mount — open it by name).
+- The diff: merge-base with `main` to the branch tip, or, for work that went straight on `main`,
+  the commits since the spec was approved (a mount-only spec never enters git; use its *Approved*
+  date). `git log --oneline` over that range gives the
+  commit list for the deliverables table.
+- The evaluator's verdict, the *Done when* output, and any results the work produced (reports,
+  parquet summaries, logs on the mount).
+- The `Program:` brief, if the spec names one.
 
-## Generation flow
+Both spec formats must work. Read *Deliverables* or, in an older plan, *Files to Modify* plus
+every numbered phase and sub-phase; *Done when* or *Verification*; *Decided* or *Open
+Questions*.
 
-1. **Read the plan in full.** Plans are typically 200–500 lines; read directly with `Read`. If the plan exceeds the Read token cap, read in chunks.
-2. **Compute the source SHA-256** via `shasum -a 256 <plan-path>` (mac) or `sha256sum` (linux). Embed the full hash in the HTML's `<meta name="plan-sha256">` and the human-visible header (first 12 chars).
-3. **Parse the plan structure** — `H2` sections, `H3` subsections, fenced code blocks, links, and tables. Identify:
-   - **What you're building** / **Status** / **Owner** / **Branch** (preamble)
-   - **Knobs** / **Files you'll touch** (contracts)
-   - **Implementation steps** (sequenced)
-   - **Gotchas** / **Out of scope** / **Resolved decisions** / **Open questions** (cross-cutting)
-   - **Pointers** (links)
-4. **Build the diagrams**:
-   - Blast radius: entity-level. Nodes are concrete things — file paths, table names, knob identifiers. Edges are "flows into" / "renders" / "consumes." Use `subgraph` groupings.
-   - Flow: step-level with status chips.
-   - Inset diagrams for complex multi-substep nodes (only if the plan has them).
-   - **Group nodes by their call-graph role, not by their filesystem location.** A new orchestrator that *wraps* an existing primitive (e.g., calls `_fit_and_eval` directly while bypassing the outer `run_*` wrapper) is a *meta-orchestrator*, not a peer of the per-modality orchestrators it lives alongside in `eval/`. Putting it in the same subgraph as `run_linear_probe` / `run_knn` / `run_survival` makes the reader assume it's "another per-modality runner" — leading to questions like "shouldn't this feed *into* run_linear_probe?". Instead: put the wrapper in its own subgraph (e.g., `Meta-orchestrator (this plan)`) sibling to but distinct from the per-modality `Orchestrators` subgraph, and label the edge from the wrapped primitive with `calls directly (bypasses run_linear_probe)` or similar to make the call-graph relationship explicit. The diagram is for a fresh reader who has never seen the code — file-system adjacency is irrelevant; what they need is "who calls what."
-5. **Write the HTML** to the resolved output path. Use the template structure described above. Inline all CSS and JS; load Mermaid from `cdn.jsdelivr.net/npm/mermaid@10`.
-6. **Verification pass** — see next section. Run this BEFORE opening so any drift fixes land before the user sees the file.
-7. **Deliver the file for review** — REQUIRED, not optional. Two cases:
-   - **Local-display machine (Mac / any box with a browser):** open it — `open <output-path>` on macOS, `xdg-open <output-path>` on Linux, `start <output-path>` on Windows. Detect platform via `uname -s` if uncertain. The user invoked the skill to *review* the HTML; failing to open it forces an extra manual step.
-   - **Headless VM (no display — e.g. `phil-sllm-01`):** `open`/`xdg-open` has nothing to render to, so delivery instead means **copying the HTML to the shared bucket mount** where Phil can open it from his Mac. See *VM runs — deliver to the shared mount* below; the shared bucket mount is inside the secure perimeter, so this copy does **not** need a `/phi-vet` gate.
-   - The only exception (either case): if the user explicitly said "just generate, don't open/copy" in the invocation, skip delivery. Mention the path (local or mount) in the hand-off message regardless, so the user can re-open it manually.
+## What goes on the page
 
-## Verification pass (mandatory in v1)
+In this order. The first screen answers "why" and "did it work", not "how".
 
-After writing the HTML, run a drift-reconciliation step. The user explicitly asked for this; do not skip.
+1. **Header** — title, repo, branch or merge commit, spec path, date, and the spec's SHA-256
+   (first 12 characters visible, full value in `<meta name="spec-sha256">`).
+2. **Program strip** — one line from the brief: why the program exists, which stage this was,
+   and what this stage unblocks. If the spec has no `Program:` line or the brief is missing, say
+   so in one plain line. Don't fake it.
+3. **TL;DR** — two to four sentences: what was built, what question it answers, whether the
+   *Done when* checks passed.
+4. **Numbers that moved** — every number the work changed or produced, as before → after with
+   units (rows, AUROC, minutes, dollars, files). Link the report or file each came from. If
+   nothing measurable moved (a refactor, a doc change), say so rather than leave the section
+   empty.
+5. **Where it sits** — a Mermaid `flowchart LR` of the repo pipeline around the change: upstream
+   sources, the parts that changed, outputs, downstream consumers and sibling repos. Color by
+   relation: added, changed, untouched (grey dashed). The untouched parts matter; they show what
+   was left alone.
+6. **Before / after** — side-by-side diagrams when the shape of the data flow or call graph
+   changed. When it didn't, a short table of behaviour before and after is better than two
+   near-identical pictures.
+7. **Deliverables** — a table with one row per deliverable (and per sub-phase in an older plan):
+   the item, the commit SHA or `file:line` that delivers it, and a ✅ or ❌. A ❌ row means the
+   spec stays open; say that plainly at the top of the table. Don't roll sub-parts up into one
+   row; that is how an approved sub-phase once went unbuilt for weeks.
+8. **Checks** — each *Done when* check, the command that ran, what it printed (trimmed), and
+   the evaluator's PASS line for it. Anything the evaluator flagged and you chose not to fix gets
+   a row with the reason.
+9. **Decided along the way** — any *Decided* entries added during the build, and anything that
+   departed from the spec, with the reason.
+10. **Not done / follow-ups** — the spec's *Out of scope* items that came up, and anything left
+    for later.
 
-1. Re-read both the source `.md` and the generated `.html`.
-2. For each major section of the HTML, locate the corresponding plan section. Check:
-   - **Coverage**: every plan H2 section is represented OR has a justified omission (e.g., `Implementation history` typically excluded from HTML).
-   - **Fidelity**: claims made in the HTML are sourced in the plan, not invented. Paraphrasing is OK; contradiction or fabrication is not.
-   - **Status accuracy**: SHIPPED/PENDING markers on steps match the plan's per-step status markers.
-   - **Knob/file enumeration**: every knob and every file in the plan's tables appears in the HTML's blast-radius diagram or knobs card.
-   - **OQ count**: number of OQs in HTML equals number in plan.
-3. Produce a short drift report inline in the chat — bullet points, one per finding. Classes:
-   - `MATCH` — section reconciled, no issues (don't list individually; summarize as "Sections N reconciled cleanly").
-   - `DRIFT` — HTML and plan disagree. List specifically: "HTML says X, plan says Y at line Z."
-   - `MISSING` — plan content not represented in HTML. List with plan line range.
-   - `INVENTED` — HTML content not in plan. Highest-priority class — list every instance.
-4. If `INVENTED` or `DRIFT` findings exist, offer to fix them in the HTML before handing off to the user.
+Group diagram nodes by who calls what, not by which folder a file sits in. A new wrapper around
+an existing function belongs in its own box beside the things it wraps, not inside them.
 
-## VM runs — deliver to the shared mount
+**Plan view** swaps sections 4, 7 and 8 for: the steps in order with their status (✅ shipped,
+⏳ pending, 🛑 blocked), the files each step touches, and each Open Question restated as one
+plain line naming the choice and its consequence, with the original text below it. Nothing on
+the page collects feedback; Phil answers in chat.
 
-On the headless VM (`phil-sllm-01`) there is no display, so step 7's `open`/`xdg-open` can't render the HTML — and the VM's local disk (repo checkout, git worktree) is invisible to Phil's Mac. The **only** surface both machines share is the `/mnt/su-vista-uscentral1` gcsfuse bucket. So on the VM, *delivery* means copying the explainer there for Phil to open on the Mac.
+### Page rules
 
-**First: is the plan already on the mount?** If the plan lives under
-`/mnt/su-vista-uscentral1/chaudhari_lab/phil/planning/<repo>/` — every plan authored from
-2026-09-15 on — then the explainer was written beside it and **delivery is already done.** Report
-the path and stop. Do not copy it anywhere, and do not offer to commit it: a mount-authored plan
-and its explainer never enter git, which is the point.
+- One HTML file, CSS and JS inline. External loads only from `cdn.jsdelivr.net`: Mermaid
+  `@10` and `svg-pan-zoom@3.6.x`.
+- Light and dark palettes via `prefers-color-scheme`. Laptop layout is enough.
+- No emojis in prose. Status marks (✅ ⏳ 🛑 ⚠️ ❌) are fine; they carry meaning.
+- Diagrams pan and zoom. Wrap each `<pre class="mermaid">` in a fixed-height box (about 520px,
+  `overflow: hidden`); call `mermaid.initialize({ startOnLoad: false, flowchart: { useMaxWidth:
+  false } })`, then `mermaid.run(...)`, strip the inline `max-width` from each rendered `<svg>`,
+  and attach `svg-pan-zoom` (`minZoom: 0.3, maxZoom: 8, fit: true, center: true`). Give each
+  diagram Reset and Fullscreen buttons and a "scroll to zoom, drag to pan" hint.
+- When a diagram uses three or more node styles, put a `subgraph legend["Color legend"]` last in
+  the source with one sample node per class actually used, color name in the label ("added
+  (cyan)"). Missing legend entries were the most common complaint about these pages.
+- Pick the "added" color so it can't be mistaken for any other: cyan, magenta or rose. Never
+  yellow next to amber.
 
-**Otherwise** — the plan is a frozen in-git plan under a repo's `docs/plans` — the copy branch below
-applies. Both must hold: (a) you're on the VM — `hostname` is `phil-sllm-01` (or an unfamiliar host
-where local open fails); and (b) the mount destination exists —
-`/mnt/su-vista-uscentral1/chaudhari_lab/phil/plan-explainers/` is present. If either is false, fall
-back to the normal local `open` (or, if there's genuinely no way to surface it, just report the
-local path).
+## Mermaid pitfalls
 
-**The bundle — copy all three so the page's in-links resolve** (mirrors the repo layout: source + feedback sit beside the HTML):
-- `<stem>.html` → `plan-explainers/<stem>.html`
-- `<stem>.md` (the source plan) → `plan-explainers/<stem>.md`
-- the feedback file, if one exists — `<plan-dir>/reviews/<stem>-*feedback*.md` → `plan-explainers/reviews/` (mkdir the `reviews/` subdir first).
+Each of these has broken a real diagram.
 
-**No `/phi-vet` gate — the shared bucket mount is inside the secure perimeter.** The `su-vista-uscentral1` bucket is mounted only on the secured Mac and the secured VMs — all within the same IRB-covered environment — so copying onto it is intra-perimeter shared storage, not content *leaving* to an uncontrolled system. Writing the bundle there therefore does **not** trigger a human PHI vet (this is Phil's ruling, 2026-08-27; see claude_ops.md → What gets committed, *egress rule*). The standing authorship discipline still holds unchanged: never write raw PHI (patient identifiers, sample rows, report text) into the plan / HTML / feedback in the first place. The flow is:
-1. Generate + verify the HTML on VM-local disk first (keep iterating locally as much as needed).
-2. When ready to deliver, `cp` the bundle to the mount directly.
-3. Report the mount path and tell Phil to open it from the Mac (via that same bucket's mount point there). Mention the VM-local path too, so a later commit to the git home can find it.
+- No `{` or `}` anywhere in a label or subgraph title, even quoted. Write `(dataset)/(split)`.
+- No `|` inside a node label; it is the edge-label delimiter. Use `/` or "or".
+- No `--` or `---` inside labels (drop CLI-flag dashes in labels). Watch bulk bullet
+  replacement, which creates them.
+- No `→ ← ↔` or box-drawing characters (`━ ═ │`) in labels.
+- No bare `<`, `>`, `<=`, `>=` in labels; the only tags allowed are `<br/>` and `<b>`. Write
+  "at or below" or use `&lt;`.
+- **Never use a reserved word as a node ID**: `end`, `call`, `class`, `click`, `style`, `link`,
+  `href`, `graph`, `subgraph`, `direction`, `flowchart`, `default`, `linkStyle`. In 2026-06 a node
+  with the ID `call` failed through three fix attempts because everyone checked the label, not the
+  ID. Prefix derived IDs (`n_call`).
+- Subgraph titles are stricter than node labels: letters, digits, spaces and commas only.
+- Quote multi-line or punctuated labels: `s1["<b>Step 1</b><br/>line two"]`. Line breaks are
+  `<br/>`, never `\n`.
+- Edge labels use `A -->|label| B`. Dotted with a label needs spaces: `A -. label .-> B`.
 
-**Where the canonical copy lives depends on where the plan lives.** For a plan authored on the mount (everything from 2026-09-15 on), the mount copy *is* canonical — it never enters git, which is the point. For a plan still in a repo's `docs/plans`, the explainer's git home is `docs/plans/<stem>.html` beside it, committed at `/explain-plan` approval (see *Completion* below), and the mount copy is the review surface. Re-delivering after edits re-copies the bundle (re-vet only if the content changed since the last vetted copy).
+Run these before opening the page. Every one must print nothing, and `sg` must equal `end`:
 
-## Feedback ingestion (when the user pastes back from the clipboard button)
-
-If the user pastes back the clipboard-exported markdown, the format will be:
-
+```bash
+awk '/<pre class="mermaid"/{f=1;next} /<\/pre>/{f=0} f' <html> > /tmp/mm.txt
+grep -nE '\{|\}' /tmp/mm.txt
+grep -nE '\[[^]]*\|[^]]*\]' /tmp/mm.txt
+grep -nE '\[[^]]*\(\)[^]]*\]' /tmp/mm.txt
+grep -nE '<[^b]' /tmp/mm.txt | grep -v '<br'
+grep -nE '<=|>=' /tmp/mm.txt
+grep -nE 'subgraph[^[]*\[[^]]*[()/+{}|][^]]*\]' /tmp/mm.txt
+grep -niE '(^|[[:space:]])(end|call|click|class|graph|subgraph|style|link|href|default|direction|flowchart)[[:space:]]*\[' /tmp/mm.txt
+grep -nE '\-\.[A-Za-z][^.]*\.->' /tmp/mm.txt
+grep -nE '\[[^]]*---[^]]*\]' /tmp/mm.txt
+grep -nE '→|←|↔|━|═|│' /tmp/mm.txt
+echo "sg=$(grep -c subgraph /tmp/mm.txt) end=$(grep -cE '^[[:space:]]*end[[:space:]]*$' /tmp/mm.txt)"
 ```
-# Resume: apply explain-plan feedback
-Plan: <repo-relative path> · branch: <branch> · plan-sha: <first-12>
-→ If you're picking this up in a fresh session, read the plan doc above (plus any related docs / memory it points to) first. Then apply the feedback below.
 
-# Feedback on <plan-name>
+Clean greps don't prove a diagram parses. If Node is available, run each block through
+`mermaid.parse`; if not, and Phil reports "Syntax error in text", paste the block into
+<https://mermaid.live> first instead of guessing.
 
-## blast-radius
-<user text>
+## Check the page against the work
 
-## step-6
-<user text>
+Before handing it over, re-read the spec, the diff and the page side by side, and report one
+line per problem in chat:
 
-## OQ1
-Status: Resolved
-<user text>
+- **INVENTED** — the page claims something the diff, the results or the spec don't support.
+  Highest priority; list every one.
+- **DRIFT** — the page and the source disagree (a number, a status, a file).
+- **MISSING** — a deliverable, a changed file that matters, or a moved number isn't on the page.
+- **UNTICKED** — a deliverable marked ✅ whose commit or `file:line` doesn't contain it. Open
+  the commit and look; the ✅ is only as good as that check.
 
-## Overall
-<user text>
-```
+Fix what you find, then summarize the rest as "N sections reconciled". In plan view, check
+against the plan doc only (every step, file and Open Question present; nothing invented).
 
-**Fresh session vs in-flight — resolve the plan cheaply.** The resume header at the top of the paste names the plan path, branch, and `plan-sha`. If you are **already in flight on this plan this session** — you generated the HTML or read the plan earlier and the header's `plan-sha` matches what you hold — apply the feedback against the plan already in your context; you needn't re-open it. If you are a **fresh session**, follow the header: read the plan doc at that path first, plus any related docs or memory it points to, then ingest. If the live plan's SHA has drifted from the header's, flag it — the HTML feedback was written against an older version of the plan.
+## Where it goes
 
-To ingest:
-1. Parse the H2 sections.
-2. For each section, find the corresponding part of the plan markdown.
-3. Classify each comment:
-   - **Bug report on the HTML itself** (e.g., "syntax error in mermaid", "this color is wrong", "section is missing") — fix the HTML directly; do NOT touch the plan.
-   - **Clarification request** (e.g., "what is X?") — answer the user. For a one-off question a chat reply is fine; for a **non-trivial round** (several questions at once, a term-glossary ask, or an OQ-by-OQ pass), prefer writing the answers **inline into the HTML** as response callouts (see *Responding inline in the HTML* below) so each lives next to the section it explains. Do NOT silently edit the plan unless the answer reveals the plan is genuinely unclear.
-   - **Trivial fix** (typo, broken link) — apply to plan directly.
-   - **Substantive scope/content change** (e.g., "drop this task family from scope", "rename X to Y") — surface via `AskUserQuestion` before applying, since these often have cross-section ripple effects (status text, blast-radius edges, diff target tables, file enumerations). Ask about the *reach* of the change in their terms — "take the pathology tasks out everywhere, or just here?" — not by listing the sections you'd touch (see *Writing voice → Questions*). DO NOT chain-apply across the plan without the user confirming.
-4. Regenerate the HTML (the SHA will change; embed the new one).
-5. Re-run verification.
+Write the what-changed page to
+`/mnt/su-vista-uscentral1/chaudhari_lab/phil/plan-explainers/<repo>/<spec-stem>.html`. Plan view
+writes beside the plan (`planning/<repo>/<stem>.html`), where its existing explainer already lives.
+Never commit the HTML.
 
-**Partial feedback is normal.** Users typically review and submit feedback in chunks (e.g., "I've reviewed sections 1–2, here's feedback, haven't gotten to the rest"). Treat each paste as additive. Don't pressure the user to finish before applying — they can continue reviewing while you apply the chunk. The localStorage persistence in the HTML widget means their unsubmitted feedback on later sections is safe across reloads.
+- **On the Mac**, the mount can accept a write, read it back with a matching checksum, and never
+  send it to the bucket (270 files lost this way in 2026-09). Write locally first, then
+  `gcloud storage cp <local> gs://su-vista-uscentral1/chaudhari_lab/phil/plan-explainers/<repo>/`,
+  and confirm with `gcloud storage ls` on that path. Never verify by re-reading the mount.
+- **On a VM**, `cp` to `/mnt/...` works; there's no display, so the mount copy is the delivery.
+- The mount is inside the secure environment, so copying there needs no PHI review (Phil's
+  ruling, 2026-08-27). The page itself must still never contain a patient identifier, a sample
+  row or report text. Aggregate numbers only.
 
-The skill does NOT auto-apply substantive feedback — it requires user confirmation for non-trivial edits per `feedback_*` memories. For trivial fixes (typo corrections, link patches), apply directly.
+Then:
 
-### Responding inline in the HTML (non-trivial iterations)
+1. Open it where there's a display (`open <local path>` on the Mac).
+2. Link it: put the mount path in the PR description, or for work that went straight on `main`,
+   in the spec's close-out block next to the ticked deliverables, so the next session finds it.
+3. Hand over one line: the path and what a reader should look at first (usually the numbers or
+   the ❌ rows).
 
-When a feedback round is **non-trivial** — the user asks several questions at once, requests a term glossary, or gives an OQ-by-OQ pass — default to writing your responses **inline into the HTML companion** as visually distinct callouts placed next to the section each answers, rather than only in chat. The HTML is where the user is already reading; co-locating the answer with its section beats a wall of chat prose they have to cross-reference back to the plan.
+Re-running on the same work regenerates the page in place. If the spec's SHA-256 no longer
+matches the one in the page header, the spec changed after the page was built; regenerate before
+anyone relies on it.
 
-**Ask preference when it's ambiguous.** The first such round in a session, or for a mixed batch, offer the choice via `AskUserQuestion` — "answer next to each section in the HTML" vs "answer here in chat" (vs both). Once the user has expressed a preference, honor it for the rest of the session without re-asking. A direct instruction ("write it into the HTML") overrides the default and skips the ask.
+## Plan view and the Reviewed column
 
-Write every response in the plain voice (see *Writing voice*): answer the question directly, in the words you'd use out loud, no jargon and no preamble.
+The old `Reviewed` column in plan indexes is frozen. Phil's approval of an older plan is recorded
+in chat and the close-out block, not by changing that column.
 
-**The `.resp` callout pattern:**
-- Add a `.resp` CSS class **distinct from the user's feedback widgets** — e.g. a left-accent border + subtle tint + a small uppercase label (`Claude`, or `Re: "<their question>"`). Keep it visually separate from the `textarea.section-feedback` widgets so the user's own input fields stay clean.
-- **Place each response next to what it answers:** inside the relevant step/gotcha `<details>` block; for the JS-rendered OQ panel, add a parallel `OQRESP` map keyed by OQ number (template-literal HTML values) and render it after each OQ's prose, e.g. `(OQRESP[n] ? '<div class="resp">…' + OQRESP[n] + '</div>' : '')`. For cross-cutting term questions, a single *"Answers to your review questions"* card placed right after the Knobs/contracts section reads better than scattering definitions.
-- **Never prefill the user's feedback textareas.** Those are localStorage-bound input fields; responses go in separate `.resp` callouts.
+## Improving this skill
 
-**SHA / drift discipline:**
-- If you only added response callouts and the **source `.md` is unchanged**, do **NOT** bump `plan-sha256` — the responses are annotation, not plan content. Leaving the SHA untouched avoids a false drift flag *and* preserves the user's existing localStorage feedback (the widget wipes saved input when `__sha` changes).
-- If the round also produces genuine plan edits, follow the normal regenerate path (new SHA, re-run verification) — and re-author the response callouts into the regenerated HTML.
-
-**Then re-open** the HTML (`open <path>`) so the user sees the annotations in place, per the open-is-required rule above.
-
-## Completion — recording review approval (the only path to `Reviewed: Yes`)
-
-**This is the sole promotion path.** `/read-plan` no longer records a review: Phil does not read
-markdown, so opening the markdown never showed him the plan in a form he reads. An approved,
-in-sync explainer is what makes a plan `Reviewed: Yes`, and nothing else does. When the user signals the visual review is **done / approved** — an explicit "done", "approved", "reviewed", "looks good, ship it", or unambiguous synonym, **not** a mid-loop "ok" / "looks good" acknowledgment — record the approval, gated on the HTML being SHA-in-sync with the plan:
-
-1. **Confirm SHA-sync — this is the gate.** Recompute the plan's current hash (`shasum -a 256 <plan-path>`, or `sha256sum` on linux) and compare it to the HTML's embedded `<meta name="plan-sha256">`. They **must** match. A freshly generated or regenerated HTML qualifies (this skill embeds the current SHA on every write); a *stale* HTML — one the user reviewed before a later plan edit — must **not** flip the row, since that would record approval of a version the user never saw. If they differ, the HTML is stale: regenerate it (per *Idempotency and re-runs*), have the user re-confirm against the fresh HTML, then re-check.
-   - Response-callout-only annotations deliberately leave the SHA untouched (see *SHA / drift discipline*), so an HTML carrying only `.resp` callouts is still in-sync and may promote.
-2. **Confirm the plan is settled** — no unaddressed feedback, no open questions left dangling. If something is open, surface it once before closing out: "Before I mark this Reviewed — OQ2 is still Pending. Resolve or defer?"
-3. **Mark the plan as Reviewed.** If the project has a plan-tracking index (`docs/plans/README.md` or equivalent with a `Reviewed` column), update this plan's row to `Reviewed: Yes` — this skill is the only thing that may do so. Confirm inline: "Marked `<plan>` as Reviewed: Yes in `docs/plans/README.md` (HTML in-sync at `<sha-first-12>`)." If no such index exists, skip silently (don't bootstrap one mid-review — that's `/wrapup`'s job).
-4. **Record the approved SHA (for a returning reviewer, not the round-to-round baseline).** The change layer's baseline already advances every generation via the sidecar (see *Baseline snapshot sidecar*), so the next feedback round diffs against the approved plan automatically — you do **not** need to stamp an anchor to make "since last time" work. Do record the just-approved version so a reviewer returning *after* sign-off can see what changed
-   since. Record **two** things, because one is not enough: the plan's **content hash**, and a
-   **retrievable snapshot** of the approved text at
-   `<plan-dir>/<plan-stem>/history/<plan-stem>-<YYYY-MM-DD>-approved.md`. A content hash alone
-   cannot serve `--since`: it is a SHA-256 digest, not a git object, so there is no text behind it
-   to diff against — and for a mount-authored plan there is no commit either. With the snapshot in
-   place, a returning reviewer runs `/explain-plan <path> --since <that-snapshot-path>`. Record the
-   hash in the brief's stage row (it is already the stage record). Skip only if there is nowhere to
-   write the snapshot — nothing round-to-round depends on it.
-5. Then offer the natural next steps in one line, **branching on where the plan lives**. Mount-authored
-   plan: run `/review-plan`, or start implementation — there is nothing to commit. Frozen in-git plan:
-   commit the plan + HTML via `/commit-review`, run `/review-plan`, or start implementation.
-
-This is gated on an **explicit** approval signal — never infer it from a mid-loop "ok" or the user
-moving on, and never promote on a drifted HTML. Since this is the only promotion path, a mistake
-here cannot be caught by another route: a row marked `Yes` off a stale explainer records approval of
-a version he never saw.
-
-## Dated snapshots — this skill owns them
-
-Plans on the mount have no git history, so the version record has to be made deliberately. Because
-this skill now runs on **every** substantive plan edit, it is the thing that owns the snapshot:
-
-**On every generation where the plan's content hash differs from the last snapshot**, write a dated
-copy of the plan beside it at `<plan-dir>/<plan-stem>/history/<plan-stem>-<YYYY-MM-DD>.md` before
-generating the HTML. If a snapshot for today already exists and the content has changed again, suffix
-it (`-2`, `-3`) rather than overwriting — losing an intermediate version is the failure this prevents.
-
-Two notes. This is **not** the change-layer baseline sidecar, which is a separate mechanism for the
-"what changed since last review" diff and lives in `.explain-plan/`; the history directory is the
-durable record a human or a later session reads. And the first handed-over version gets a snapshot
-too — not just revisions — so a plan's history is never missing its own starting point.
-
-## Idempotency and re-runs
-
-- Re-running on the same plan: regenerate HTML in place. Diff the old vs new HTML; if structure changed substantively, surface that as a "structure delta" note before handing off.
-- If the source plan's SHA-256 differs from the HTML's embedded SHA, the HTML is stale. Warn the user before they review it.
-- Regenerate on every substantive plan edit. For a frozen in-git plan the HTML is committed alongside the plan revision; for a mount-authored plan nothing is committed — the mount copy is canonical.
-- **A re-run is the moment the change-since-last-review layer earns its keep** — resolve the baseline, author the `CHANGES` object **fresh**, and advance the baseline sidecar on every regeneration, not just the first (see `## Change-since-last-review layer` → *Baseline snapshot sidecar*). The baseline is the *previous generation's* plan snapshot, so each round's delta is that round's edits alone — it never accumulates across rounds. Recompute `CHANGES` from the diff every time; never carry prior-round notes forward. The "structure delta" note above is the coarse version; the change layer is the section-level, reader-facing form of the same idea.
-
-## Iteration mode
-
-This skill is itself iterative — v1 will not be perfect. Patterns to watch for in feedback rounds:
-- Diagram nodes too coarse or too fine — adjust granularity.
-- **A question the user answers with "what does that mean?" or "I can't follow this"** — that's a voice failure, not a comprehension failure. Re-read *Writing voice → Questions*, and fix the question class (not just the one instance) in this file.
-- Questions the user waves through with "your call" — they were implementation detail and shouldn't have been asked.
-- Specific sections users keep asking about — promote to top-level cards.
-- Specific sections users skip — demote to collapsible or remove.
-- Feedback-export format too verbose / too terse — tune the JS.
-
-When the user gives feedback on the *skill itself* (not the generated HTML), edit this SKILL.md.
-
-## Pointers
-
-- `~/.claude/skills/review-plan/` and `~/.claude/skills/read-plan/` — sibling plan skills. Naming and invocation convention follows the verb-plan family.
-- Mermaid syntax: <https://mermaid.js.org/intro/> — flowchart, sequence, classDiagram are the useful subset here.
+When Phil answers a question with "what does that mean?", that's a writing failure; fix the
+kind of question here, not just the one instance. When a section of the page keeps getting
+skipped, cut it; when one keeps getting asked about, move it up.

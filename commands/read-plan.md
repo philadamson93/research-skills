@@ -1,129 +1,68 @@
 ---
 name: read-plan
-description: Use when the user signals they're ready to read/review a plan doc themselves — phrases like "I'll review", "ready to read it", "let me look", "open it for me", "I'll take a look", or affirmative agreement ("yes", "ok") right after Claude has offered/named a plan doc for review. Also invoked explicitly via `/read-plan [path]`. Runs `open <path>` so the plan launches in the user's default `.md` app (Marked, Typora, Obsidian, VS Code, etc.). Identifies the path from recent conversation context (most-recently-referenced plan doc) or asks via AskUserQuestion if ambiguous. This skill opens a file and nothing more — it does NOT record a review; only an approved, in-sync `/explain-plan` HTML can do that. SKIP when the user is asking Claude to read, summarize, or audit the plan — this skill is for handing the plan over to the user to read themselves, not for Claude-side analysis. SKIP if no plan doc has been referenced recently and the user hasn't supplied a path.
+description: Use when the user signals they're ready to read a spec or plan doc themselves — phrases like "I'll review", "ready to read it", "let me look", "open it for me", "I'll take a look", or a bare "yes"/"ok" right after Claude has named one spec or plan doc. Also invoked explicitly via `/read-plan [path]`. Runs `open <path>` so the doc launches in the user's default `.md` app, then waits for their comments and works through them. Identifies the path from recent conversation (the most recently named spec or plan) or asks via AskUserQuestion if ambiguous. Opening a doc records nothing; it is a reading aid, not an approval step. SKIP when the user asks Claude to read, summarize or audit the doc — this skill hands the doc to the user. SKIP if no spec or plan has been named recently and no path was given.
 ---
 
 # read-plan
 
-Hand off plan docs to the user's app for human review. macOS `open <path>` routes `.md` to whatever default app the user has configured.
+Open a spec or plan doc in the user's own app so they can read it, then get out of the way.
+macOS `open <path>` routes `.md` to whatever default app is set. Claude having read the doc is
+not the same as the user reading it.
 
-The skill exists because Claude reading the plan ≠ the user reading the plan. When the user wants to review themselves, the right action is to get out of the way.
+## 1. Find the path
 
-## Phase 0 — Codex review prerequisite (typically already happened)
+**Open without asking only when the target is obvious:**
 
-For critical plans the typical flow is `/review-plan` → `/explain-plan`; this skill just opens a file along the way and records nothing. By the time `/read-plan` fires, a Codex critique at `<plan-stem>-feedback.md` — look in the `reviews/` directory beside the plan (for a plan in a repo's `docs/plans`, that repo's mount tree), falling back to the repo's `docs/plans/reviews/` for reviews written before the move — may already have been processed (findings adjudicated, plan revised). If the user invokes `/read-plan` on a plan that has unprocessed feedback (a feedback file exists but Phase 4–6 of `/review-plan` was never run), surface that once before opening: *"Heads up — there's an unprocessed Codex critique at `<path>`. Process it first via `/review-plan`, or open the plan as-is?"*. Don't block; let the user choose.
+- the user ran `/read-plan <path>`; use it as given, or
+- Claude named exactly one spec or plan in the immediately preceding turn and the user replied
+  with a plain yes ("yes", "ok", "open it", "let me read").
 
-For non-critical plans where Codex review was deliberately skipped, this phase is a no-op.
+**Otherwise ask** through `AskUserQuestion` (up to four options), most recently mentioned first,
+each with a one-line reason it's a candidate ("named in your last message", "spec for the current
+branch"). Use `multiSelect: true` when two docs were discussed together. With no candidates, ask
+free-form for a path.
 
-## Phase 1 — Identify the path
+Where to look:
 
-**Default is to prompt.** Open without asking only when the target is *obvious*. When in doubt, ask.
+- The mount first: `/mnt/su-vista-uscentral1/chaudhari_lab/phil/planning/<repo>/`. A repo's
+  `docs/plans` is often an ignored symlink to it, so searching the checkout misses plans.
+- Then `docs/plans/`, `plans/`, `design/`, `rfcs/` in the repo, and any file Claude recently
+  called a spec or plan.
 
-### Obvious — open without prompting
+Check the path exists before opening; a silent typo wastes the user's attention.
 
-Both conditions must hold:
-
-- **Explicit arg** — the user invoked `/read-plan <path>` with a path. Use it verbatim.
-- **OR direct response to a single named plan** — Claude named exactly one plan doc in the *immediately preceding* turn AND the user's current message is a direct affirmative ("yes", "ok", "open it", "let me read", "I'll review") with no other plan named or implied. The pairing has to be unambiguous — if Claude offered a choice between plans, or named multiple, this is no longer obvious.
-
-In all other cases, prompt.
-
-### Not obvious — prompt via AskUserQuestion
-
-Scan recent turns (and `git log -10 --name-only -- '*plans/*'` if needed) for plan-doc candidates:
-
-- **The mount first** — `/mnt/su-vista-uscentral1/chaudhari_lab/phil/planning/<repo>/`. Live plans
-  are authored there and it holds every repo's plans in one place, including ones that exist only on
-  a feature branch. Scanning only the repo is how an unqualified invocation misses the current plan.
-- Then anything under `docs/plans/`, `plans/`, `design/`, `rfcs/`, `proposals/` in the repo — frozen
-  history for plans that predate the move
-- Files named `PLAN.md`, `DESIGN.md`, `RFC.md`, `IMPLEMENTATION.md`, `PROPOSAL.md` at any depth
-- Markdown files Claude has explicitly framed as a plan/spec/RFC in recent turns
-
-Then raise an `AskUserQuestion` (max 4 options + auto "Other"):
-
-- Lead with the most recently mentioned candidate.
-- Annotate each with a one-line *why it's a candidate* hint (e.g., "in-flight on current branch", "last touched 2 commits ago", "named in your last message").
-- Use `multiSelect: true` if 2+ plans were paired in the discussion (e.g., a refactor + its downstream feature plan) — opening both at once is common in that case.
-- If zero candidates surface, drop the multi-choice and ask free-form for a path.
-
-Verify the chosen path exists (quick `ls` or `Read` check) before opening. Silently failing on a typo wastes the user's attention.
-
-## Phase 2 — Open
+## 2. Open and hand off
 
 ```bash
-open <path>
+open <path>            # several: open path1 path2
 ```
 
-For multiple paths, open in one call: `open path1 path2 ...`.
+Then one line and stop:
 
-## Phase 3 — Hand off
+> Opened `<path>` — leave comments in it, save, and tell me when you're done.
 
-One line, then stop:
+Don't summarize it, list things to watch for, suggest next skills, or carry on with other work.
+The user asked to take the wheel.
 
-> Opened `<path>` — leave inline comments, save, and ping me when you're done.
+## 3. Work through their comments
 
-That's it. Do **not**:
+When they say they're done reading:
 
-- Summarize the plan.
-- Pre-list "things to watch for" or "open questions."
-- Volunteer to run `/review-plan` or other next-step skills.
-- Continue working on adjacent tasks.
+- Re-read the whole doc. Use `git diff <path>` if it's tracked; otherwise look for new
+  `<!-- -->` comments, `Q:` / `TODO:` / `FIXME:` markers, new blockquotes and inserted prose.
+- Answer each comment in order, quoting it briefly: propose the edit, push back with the
+  reason, or ask.
+- Show a proposed edit and get a yes before writing it. A direct edit the user made is
+  authoritative; keep it and fix whatever else it makes inconsistent.
 
-The user explicitly asked to take the wheel. Wait for them.
+Repeat until they're satisfied. Treat the doc as settled only on an explicit "done" (or "all
+done", "final", "ship it"), not on "ok" or "looks good" mid-loop. If a comment is still open
+when they say done, name it once before closing.
 
-## Phase 4 — Pick up inline comments and iterate
-
-The user's review loop is:
-
-1. They edit the plan doc directly in their app, leaving inline comments — typically HTML comments `<!-- ... -->`, blockquotes, `TODO:` / `Q:` / `FIXME:` markers, or fresh prose edits inserted into sections.
-2. They save and ping you ("done", "comments in", "ready", "take a look", "ok back to you", etc.).
-3. You re-read the plan doc to surface what changed.
-4. You address each comment — incorporate the change, push back with rationale, or ask a clarifying question.
-5. The user iterates again, or moves on.
-
-**When the user pings:**
-
-- Re-read the full plan doc with `Read`. Don't rely on memory of the previous version — diff what's there now against what was there before.
-- If the repo has the plan committed, `git diff <path>` is the cleanest way to surface changes; otherwise visually scan for new comment markers (`<!--`, `Q:`, `TODO:`, `FIXME:`, blockquotes that weren't there) and inserted prose.
-- For each comment/change, respond in order. Quote the comment briefly so the user can track which one you're addressing, then give your response (proposed edit, pushback, or clarifying question).
-- If a comment requests an edit you agree with, propose the concrete diff and ask for confirmation before writing — don't auto-edit the plan during the review loop.
-- If the user has already directly edited the plan (not just commented), treat the edit as authoritative; don't undo it. Acknowledge and adjust downstream sections that need to stay consistent.
-
-Iteration continues until the user is satisfied. There is no fixed number of rounds.
-
-## Phase 5 — Completion: only on "done"
-
-The plan is marked complete **only when the user explicitly says "done"** (or an unambiguous synonym: "all done", "we're done", "plan is final", "ship it"). Do not infer completion from:
-
-- "ok" / "looks good" / "fine" / "sounds right" — these are mid-loop acknowledgments, not completion signals.
-- The user moving on to a different topic.
-- A long silence.
-
-When the user does say "done":
-
-- Confirm the plan is in its final state (no unaddressed comments, no open questions left dangling).
-- If anything is still unresolved, surface it once before treating the plan as complete: "Before I close this out — comment in section X about Y is still open. Resolve or defer?"
-- **Do not mark the plan as Reviewed.** This skill no longer promotes anything. Phil does not read
-  markdown, so opening the markdown is not the review — the only route to `Reviewed: Yes` is an
-  approved explainer that is in sync with the plan's content. If he says "done" here and wants the
-  review recorded, say so in one line and offer `/explain-plan`: "Opening the markdown doesn't
-  record a review — want the explainer generated so it can be approved?"
-
-  This retires the second promotion path on purpose. Two routes to `Yes` meant the artifact he
-  actually reads was the optional one, and a row could be promoted by a path that never showed him
-  the plan in a form he reads.
-- Then offer the natural next steps in one line: generate the explainer via `/explain-plan` (the
-  only thing that can record the review), run `/review-plan` (it checks whether a fresh session
-  could build the plan without asking questions), or start implementation.
+Nothing is recorded either way. A `/grill` spec is approved by the interview itself, and the old
+`Reviewed` column in plan indexes is frozen: don't change it.
 
 ## Permission prompts
 
-If `Bash(open:*)` isn't allowlisted, every invocation will prompt. After the first time, mention once that they can allowlist it via `/update-config` to make this skill silent. Don't re-mention on subsequent runs.
-
-## What NOT to do
-
-- **Don't auto-fire on a bare "yes"/"ok"/"sure"** unless Claude *just* named a plan doc in the immediately-preceding turn — otherwise the trigger is too broad.
-- **Don't fire when the user asks Claude to review the plan** ("can you check this plan?", "audit it", "any gaps?"). That's `/review-plan` territory.
-- **Don't open non-plan files.** For arbitrary `open` calls, the user can invoke Bash directly.
-- **Don't summarize, even briefly.** The whole point is the user reading the source, not Claude's gloss of it.
+If `Bash(open:*)` isn't allowlisted, each run prompts. Mention once that `/update-config` can
+allow it; don't repeat it.

@@ -5,22 +5,25 @@ Personal Claude Code skills, shared in case they're useful. These are slash comm
 ## Contents
 
 - `commands/` — slash commands loaded by Claude Code from `~/.claude/commands/`
-  - [`explain-plan.md`](commands/explain-plan.md) — visual companion to `read-plan`: generates a self-contained interactive HTML (Mermaid diagrams with pan/zoom, blast-radius map, step accordion, inline feedback widgets) for plans too dense to review in prose
-  - [`review-plan.md`](commands/review-plan.md) — independent design audit of a plan doc by Codex CLI or a fresh Claude Code subagent, then *applies* agreed feedback; always checks **whether a fresh session could build it** (does the plan POINT AT / STATE DIRECTLY everything a fresh implementing agent needs), folded in from the retired `plan-handoff-readiness`
+  - [`grill.md`](commands/grill.md) — interviews you about a piece of work at the level that matters (what, why, how we'll know, where it sits, what it costs) and writes a one-page spec; replaces plan mode. Adapted from mattpocock/skills (MIT)
+  - [`explain-plan.md`](commands/explain-plan.md) — after the build, a self-contained HTML of what changed (numbers that moved, where it sits, before/after, deliverables checked against commits, the evaluator's verdict), written to the mount and linked from the PR; `--plan` mode for older long-format plans
+  - [`review-plan.md`](commands/review-plan.md) — second-opinion design audit, only for older long-format plans or when you ask about a spec: can each check fail, are the deliverables complete, could a fresh session build it
   - [`wrapup.md`](commands/wrapup.md) — end-of-session cleanup
   - [`next.md`](commands/next.md) — "where did we leave off?" session-opener
   - [`commit-review.md`](commands/commit-review.md) — commit workflow with an appropriateness review (catches accidentally-leaked private content) before commit + push
   - [`phi-vet.md`](commands/phi-vet.md) — hard pre-commit gate for medical-data repos that scans files for PHI leakage (patient/encounter/study identifiers, sample row data, free-text excerpts, image files); `commit-review` escalates to this when working in an OMOP/NeuralFrame/EHR/DICOM context. Adapts to the machine (fail-closed): inert on machines in the PHI-FREE allowlist (`hooks/lib/is-phi-free-machine.sh`), active everywhere else
-  - [`review-implementation.md`](commands/review-implementation.md) — independent implementation audit of uncommitted code against a plan doc
-  - [`review-tests.md`](commands/review-tests.md) — independent test-coverage audit of uncommitted code against a plan doc
-  - [`read-plan.md`](commands/read-plan.md) — opens a plan doc in the user's default `.md` app
+  - [`review-implementation.md`](commands/review-implementation.md) — runs the `evaluator` agent over the work against its spec (or an older plan), then applies the findings it agrees with
+  - [`review-tests.md`](commands/review-tests.md) — test-coverage audit of uncommitted code against its spec or plan, by a fresh Claude subagent
+  - [`read-plan.md`](commands/read-plan.md) — opens a spec or plan doc in your default `.md` app
   - [`open.md`](commands/open.md) — opens *any* file in the user's default app via `open <path>`; resolves the target by obviousness (just-touched file / explicit path → open directly; a description → search then open; ambiguous → confirm). General-purpose sibling of `read-plan`
   - [`debate.md`](commands/debate.md) — structured adversarial debate for major design decisions where reasonable people disagree (cross-repo architecture, build system choices, data contract design); two parallel advocates, codebase-grounded arguments, main-agent moderation, synthesized decision doc
+- `agents/` — subagent definitions loaded by Claude Code from `~/.claude/agents/`
+  - [`evaluator.md`](agents/evaluator.md) — fresh-context reviewer with no edit rights: checks the work against the spec's checks and deliverables and returns PASS or NEEDS_WORK. Adapted from anthropics/cwc-long-running-agents (Apache-2.0)
 - `hooks/` — Claude Code lifecycle hooks (separate from skills: hooks are shell scripts the harness fires automatically at events like `PreToolUse` / `SessionStart`, not invoked-by-intent skills)
   - [`phi-vet-gate.sh`](hooks/phi-vet-gate.sh) — `PreToolUse` hook that hard-gates `git commit` in medical-data repos until [`phi-vet`](commands/phi-vet.md) has signed off on the current staged tree (forces both PHI scan and explicit per-doc read-acknowledgement). Self-gates by machine (inert on PHI-free machines, so it's safe to install everywhere). See [`hooks/README.md`](hooks/README.md) for install.
   - [`lib/is-phi-free-machine.sh`](hooks/lib/is-phi-free-machine.sh) — shared fail-closed machine check (PHI-FREE allowlist) consulted by *both* the hook above and the [`phi-vet`](commands/phi-vet.md) skill, so they never disagree about where PHI tooling is active.
 - [`CLAUDE.md`](CLAUDE.md) — global Claude Code instructions (interaction style, environment notes)
-- [`claude_ops.md`](claude_ops.md) — operating standards shared across research repos: how to write to the user (plain English, no coined shorthand), planning workflow, code quality, git practices, pre-commit review pointers, skill composition discipline. Designed to be **symlinked into each repo as `docs/claude_ops.md`** so all repos reference the same source-of-truth (see [Setup → Once per repo](#once-per-repo) below).
+- [`claude_ops.md`](claude_ops.md) — operating standards shared across research repos: how to write to the user (plain English, no coined shorthand), the interview → spec → build → review → explainer workflow, code quality, git practices, pre-commit review pointers, skill composition discipline. Designed to be **symlinked into each repo as `docs/claude_ops.md`** so all repos reference the same source-of-truth (see [Setup → Once per repo](#once-per-repo) below).
 
 ## Setup
 
@@ -35,6 +38,7 @@ Make the slash commands available globally:
 ```bash
 git clone git@github.com:philadamson93/research-skills.git ~/code/research-skills
 ln -s /path/to/research-skills/commands ~/.claude/commands
+ln -s /path/to/research-skills/agents ~/.claude/agents
 ```
 
 Updating is just `git -C ~/code/research-skills pull` — symlinks survive Claude Code restarts, no rebuild. Hooks are **not** installed by these symlinks; they need a `~/.claude/settings.json` entry per [hook](hooks/README.md).
@@ -72,9 +76,20 @@ git add docs/claude_ops.md CLAUDE.md && git commit -m "docs: wire in claude_ops.
 
 - **Shortcut if you launch Claude from a parent folder.** If you run Claude from a workspace folder that sits *above* several repos, one `@research-skills/claude_ops.md` import in *that folder's* `CLAUDE.md` is inherited by every repo beneath it (CLAUDE.md loads the entire tree from cwd to root), so no per-repo wiring is needed. Convenient at scale, but it assumes the parent-folder launch pattern — the per-repo steps above are the portable default for working inside a single repo.
 
-- **Session-start sync:** `git -C ~/code/research-skills pull --ff-only` at the start of a session picks up cross-machine updates. `claude_ops.md` documents this as a Session Start step (it suggests a pull when the local clone is 3+ commits behind `origin/main`).
+- **Session-start sync:** `git -C ~/code/research-skills pull --ff-only` at the start of a session picks up cross-machine updates. `claude_ops.md` documents this as a Session Start step (it asks before pulling when the local clone is even one commit behind `origin/main`).
+
+## Adopted from elsewhere
+
+Prefer an existing public skill over writing our own. Copy it in, pinned, with its source, commit and license in a header comment, then adapt it here. Updates come in only when we choose to pull them.
+
+| File | Source | Commit | License |
+|---|---|---|---|
+| `commands/grill.md` | [mattpocock/skills](https://github.com/mattpocock/skills) `skills/productivity/grilling` | `49dd158` | MIT, (c) 2026 Matt Pocock — [`LICENSES/MIT-mattpocock-skills.txt`](LICENSES/MIT-mattpocock-skills.txt) |
+| `agents/evaluator.md` | [anthropics/cwc-long-running-agents](https://github.com/anthropics/cwc-long-running-agents) `claude-code-config/.claude/agents/evaluator.md` | `ad107a9` | Apache-2.0, (c) 2026 Anthropic PBC — [`LICENSES/Apache-2.0.txt`](LICENSES/Apache-2.0.txt) |
 
 ## Notes
+
+- `relay/` (the drill-down relay for the old interactive plan explainer) is retired: the explainer no longer has drill-down or feedback widgets. Kept only until it is deleted.
 
 - [`review-plan.md`](commands/review-plan.md) looks for a repo-local checklist at `.claude/references/plan-review-checklist.md` — if present, it's loaded into the reviewer prompt to ground the audit in repo-specific contracts. Each project should author its own.
 - Skills evolve; feedback / PRs welcome.

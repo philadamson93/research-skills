@@ -5,9 +5,8 @@ Bootstrapped 2026-08-24 (`/wrapup`); before this, plan status lived only in each
 `Status:` header (still the source of truth for implementation status — this table adds the
 cross-doc `Reviewed` column that header convention didn't carry).
 
-**Reviewed** column values: `Yes` (user reviewed the current content, via `/read-plan` or an
-approved SHA-in-sync `/explain-plan` HTML), `No` (never reviewed), `Stale` (was `Yes`, plan
-substantively edited since).
+**Reviewed** column: frozen as of 2026-10-14. New work uses `/grill` specs, which are approved in
+the interview, so the column is no longer updated; existing values are left as they were.
 
 | Plan | Status | Reviewed | Description |
 |---|---|---|---|

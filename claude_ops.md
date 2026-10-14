@@ -61,7 +61,9 @@ desk to someone who knows the research cold and has never opened the repo.
 **When you ask me something**
 
 - Describe what each choice leads to, not how it works inside. I usually can't see the code.
-  Options describe outcomes, never mechanisms.
+  Options describe outcomes, never mechanisms. Code-layout questions are the exception: show the
+  proposed files and modules, what each does in plain English, and which existing tooling each
+  one reuses.
 - Every question must name what changes in the outcome depending on the answer, *and* the default
   you'll take if I shrug. If you can't name the consequence, it isn't a question — decide it and
   record it. (The tiers for what's worth asking are under *Standing rules*.)
@@ -135,9 +137,9 @@ unless I ask for it.
 - **Small work** (a fix, a doc change, anything reversible in under an hour): no spec. Ask the
   one or two questions that matter, then do it.
 - **Bigger work** (spans sessions, runs on a GPU or VM, writes to PHI data, or needs more than
-  about three answers from me): run `/grill`. It interviews me at the level I care about (what,
-  why, how we'll know, where it sits, what it costs), then writes a one-page spec to
-  `docs/plans/`. The template is in the command.
+  about three answers from me): run `/grill`. It interviews me until every decision is settled,
+  code layout included, then writes a one-page spec to `docs/plans/`. The template is in the
+  command.
 - My confirming the interview is the approval. No explainer or plan review before the build.
   Approval covers building, not the spec's *Expensive steps*: stop before each GPU run, VM
   hand-off or first PHI write unless I approved that exact run in the interview.
@@ -168,7 +170,9 @@ Older plan docs in the long format stay as they are. Finish them on their own te
 
 ## Writing code
 
-- Extend an existing utility rather than building a second version alongside it.
+- Follow the existing code and the repo's standards unless there's a good reason not to, and say
+  the reason. We have a lot built: search this repo and the sibling repos before writing anything
+  new, and extend an existing utility rather than building a second version alongside it.
 - Write the simplest thing that works. No abstraction or feature nobody asked for yet.
 - Put new files in a named directory decided in the spec's *Deliverables*, not the repo root.
 
@@ -388,7 +392,10 @@ the machines that have GPUs.
 
 - Sort every decision by what the answer changes, and act on the tier:
   - Changes the results, the cost, or what we can conclude → ask me.
-  - Changes only the shape of the code → decide it, say why in the commit message, don't ask.
+  - Code layout (which modules, where they live, the interfaces between them) → ask me, in
+    `/grill` for bigger work.
+  - Line-level details (names, the code inside a function, small refactors) → decide it, say why
+    in the commit message, don't ask.
   - Reversible in under an hour → just do it.
 - Whether a failure should fall back or raise is always mine: a silent fallback can hide a real
   error upstream.

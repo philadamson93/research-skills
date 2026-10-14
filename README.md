@@ -5,7 +5,7 @@ Personal Claude Code skills, shared in case they're useful. These are slash comm
 ## Contents
 
 - `commands/` — slash commands loaded by Claude Code from `~/.claude/commands/`
-  - [`grill.md`](commands/grill.md) — interviews you about a piece of work at the level that matters (what, why, how we'll know, where it sits, what it costs) and writes a one-page spec; replaces plan mode. Adapted from mattpocock/skills (MIT)
+  - [`grill.md`](commands/grill.md) — Matt Pocock's grilling interview, unmodified (MIT), plus a closing step that writes a one-page spec with code layout and reuse; replaces plan mode
   - [`explain-plan.md`](commands/explain-plan.md) — after the build, a self-contained HTML of what changed (numbers that moved, where it sits, before/after, deliverables checked against commits, the evaluator's verdict), written to the mount and linked from the PR; `--plan` mode for older long-format plans
   - [`review-plan.md`](commands/review-plan.md) — second-opinion design audit, only for older long-format plans or when you ask about a spec: can each check fail, are the deliverables complete, could a fresh session build it
   - [`wrapup.md`](commands/wrapup.md) — end-of-session cleanup

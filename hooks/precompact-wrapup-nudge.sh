@@ -32,7 +32,7 @@ reason="$(printf '%s' "$payload" | jq -r '.trigger // .trigger_reason // .reason
 # user action.
 [ "$reason" = "auto" ] || exit 0
 
-msg="Auto-compact imminent: context is nearly full. Avoid STARTING new work now — consider running /wrapup to checkpoint cleanly. After the compact, re-confirm the task and plan before continuing (claude_ops: plan-before-code, ask-before-destructive)."
+msg="Auto-compact imminent: context is nearly full. Avoid STARTING new work now — consider running /wrapup to checkpoint cleanly. After the compact, re-confirm the task and spec before continuing (claude_ops: spec-before-code, ask-before-destructive)."
 
 printf '%s\n' "$msg" >&2
 jq -nc --arg m "$msg" '{systemMessage:$m}'

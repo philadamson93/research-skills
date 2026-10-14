@@ -1,13 +1,32 @@
 # How Claude Code works on VISTA repos
 
-The standard for every VISTA repo. Read it at the start of each session. Plan docs open with
+The standard for every VISTA repo. Read it at the start of each session. Specs and plan docs open with
 the line `Reference: docs/claude_ops.md`.
+
+## The workflow, start to finish
+
+1. **Open the session.** `/next` if no task is named. Check the start-of-session items below.
+2. **Size it.** Small work (reversible in under an hour): ask one or two questions, do it, skip
+   to step 6. Bigger work: go on.
+3. **Interview.** `/grill` asks me what changes the outcome and writes a one-page spec to
+   `docs/plans/`. My confirming it is the approval.
+4. **Build.** In auto mode, in this session or a fresh one handed `build docs/plans/<name>.md`.
+   Stop before each *Expensive step* I didn't approve in the interview, and hand me its one-line
+   command.
+5. **Check.** Run the *Done when* checks, then `/review-implementation <spec>` (it runs the
+   `evaluator` agent and saves the verdict). Tick the deliverables. Make the what-changed
+   explainer with `/explain-plan <spec>`.
+6. **Commit and land.** `/commit-review` (which runs `/phi-vet` where it applies), then `/land`
+   for branch work.
+7. **Close out.** Print the close-out block after each chunk; `/wrapup` at session end.
+
+Details for each step are in the sections below.
 
 ---
 
 ## How to write to me
 
-Plain English, always — in chat, in questions, in plan docs, in commit messages. I read this in a
+Plain English, always — in chat, in questions, in specs, in commit messages. I read this in a
 terminal and usually don't have the code in front of me. Write the way you'd explain it across a
 desk to someone who knows the research cold and has never opened the repo.
 
@@ -107,136 +126,62 @@ writing failure, not a misunderstanding.
 
 ---
 
-## Planning
+## Specs
 
-- Plan before writing code. Iterate until the plan is solid, then build.
-- Read the existing docs and code first. Find what already exists before proposing something new.
-- Say what you're building and why.
-- Ask me "is anything here ambiguous?" It catches requirements I left out.
-- A wrong fast answer costs more than a right slow one. Think it through.
-- Go back to planning when the direction changes: the approach won't work, a new constraint turns
-  up, the job is bigger than it looked, the design has a problem, or you're simply unsure.
-- Keep a plan short enough to check off. Past about 500 lines, split it at a phase boundary into
-  separate plans, each with its own *Files to Modify* and its own finish. Long plans are where
-  approved items get buried: a sub-phase that lives only in paragraph 40 of a 2,800-line doc is
-  one nobody will check off.
+Write down what we're building and how we'll know it's done, not how to build it. The model plans
+its own implementation; what I read is the decisions. Plan mode is not part of the workflow
+unless I ask for it.
 
-### Saving a plan
+- **Small work** (a fix, a doc change, anything reversible in under an hour): no spec. Ask the
+  one or two questions that matter, then do it.
+- **Bigger work** (spans sessions, runs on a GPU or VM, writes to PHI data, or needs more than
+  about three answers from me): run `/grill`. It interviews me at the level I care about (what,
+  why, how we'll know, where it sits, what it costs), then writes a one-page spec to
+  `docs/plans/`. The template is in the command.
+- My confirming the interview is the approval. No explainer or plan review before the build.
+  Approval covers building, not the spec's *Expensive steps*: stop before each GPU run, VM
+  hand-off or first PHI write unless I approved that exact run in the interview.
+- When a result contradicts the spec: if it changes the results, the cost or what we can conclude,
+  stop and ask. Otherwise rethink, keep going, and record what changed. Either way, add it to the
+  spec's *Decided* list with the date.
+- Where `docs/plans` is in git, commit the spec with the first code that builds it, not before.
+  Where `docs/plans` is the ignored symlink to the mount, the spec never enters git; name its mount
+  path in that first commit message.
 
-Plan mode can only write to its own scratch file, never to `docs/plans/`. So:
+### When the work is finished
 
-1. Exit plan mode. That approves the plan's content, not the implementation.
-2. Save it to `docs/plans/` with a name that says what it is, not `plan_01.md`.
-3. Stop and ask me before building. No task lists, no code, no edits.
-4. Don't commit a plan while it's still changing. Commit once I've signed off, so it costs one
-   PHI review instead of one per draft.
+- Run every *Done when* check yourself and show what it printed.
+- Run `/review-implementation <spec>`: the `evaluator` agent checks the work against the spec from a
+  fresh context and the verdict is saved beside the spec's reviews. The builder doesn't grade its
+  own work. Fix what it finds, or tell me why not.
+- **Tick the deliverables one by one**, each next to the commit or `file:line` that delivers it.
+  Anything with no match keeps the spec open, and the brief's stage stays open with it.
+- **Hand over a what-changed explainer** with `/explain-plan <spec>`. I don't read markdown. It makes
+  a self-contained HTML page on the mount showing what was built (a diagram, a before/after, the
+  numbers that moved) and carries the Mac mount write rule. Link it from the PR or close-out block.
+- Fix the docs the change made stale. Land branch work with `/land`. Mark the spec
+  `Status: Completed (date)` and update `docs/plans/README.md`.
 
-### What a plan contains
-
-```markdown
-Reference: docs/claude_ops.md
-Program: <brief path> — stage N of M
-
-# [What this is]
-
-## Goal
-What we're building, and why.
-
-## Approach
-How.
-
-## Files to Modify
-Each path and what changes there. For a new file, name the directory it goes in, and flag
-any directory that doesn't exist yet. This list is what the plan gets checked off against when
-it's finished, so every deliverable belongs here, including the ones buried in sub-phases.
-
-## Open Questions
-What's still ambiguous. "None — the defaults below are mine to make" is a valid and often correct
-body: don't invent a question to fill the section. Keep the header (three skills parse it and it's
-in 2,000+ plan docs), but a body with no real questions is fine.
-
-## Verification
-How we'll know it worked:
-- What runs, in order, and where. Name a specific machine only when the step needs a GPU or
-  heavy parallel compute.
-- Per step, what a good result looks like: exit code, a file that must exist and be non-empty,
-  a number inside a stated range.
-- Per step, what should make you stop and come back to me.
-- Any fork you can see coming — a number near a threshold, an optional path — decided in
-  advance ("above 0.8 do A, otherwise B") so it resolves while you work instead of costing a
-  pause. A finding that contradicts the plan is not a handoff: rethink it, write down what
-  changed, keep going.
-- If a step needs hardware with no Claude Code on it, name its script under *Files to Modify*,
-  give that script its own success criteria here, and write out the one-line command I paste to
-  run it (see *Which machine to run on*).
-
-## Landing & cleanup
-- The branch this lands on, or "straight on main" for docs and small fixes.
-- What must be true before it merges: reviewed, any GPU step actually run and checked,
-  PHI-reviewed. Name any other branch that has to land first.
-- Merge order when several branches are involved: small and foundational first, big renames
-  last unless something depends on them.
-- What gets retired afterward: the branch, its worktree, the plan's status line, the tracker
-  entry, and anything extra like scratch directories or temporary tables.
-```
-
-The `Program:` line names the brief this plan serves and its stage. Omit it only when no brief
-exists yet — a live plan should resolve to one.
-
-### When a plan is finished
-
-- Land branch work with `/land`, following the plan's landing section. Don't merge or delete
-  branches by hand. For work that went straight on `main`, do the three steps below yourself.
-- **Check it off item by item before calling it done.** List every deliverable the plan names —
-  each *Files to Modify* row, each numbered phase *and sub-phase* (1a, 1b, …), each gate it
-  promised — and next to each, the commit or `file:line` that delivers it. Anything with no match
-  keeps the plan open, and the brief's stage stays open with it. Don't roll sub-parts up into
-  "Phase 1 done": that is how an approved sub-phase went unbuilt for weeks while the brief, the
-  board and memory all said "nothing left to build". Put the checked list in the close-out block.
-- Fix the documentation the change invalidated: stale paths, command examples, imports, links.
-- Mark the plan `**Status: Completed** (date)`.
-- Update the table in `docs/plans/README.md`.
-
-### Hand a plan over with its explainer
-
-I don't read markdown, so a plan isn't handed over until its explainer exists:
-
-- Any plan you write or substantively edit is handed to me *with* its rendered explainer already
-  generated (`/explain-plan`) — on this VM, already copied to the mount where I can open it. Don't
-  wait for me to ask.
-- The explainer HTML is the review surface: an approved, in-sync explainer is what promotes a plan
-  to `Reviewed: Yes`, not the markdown. Trivial changes don't get plan docs at all, so this never
-  fires on them.
+Older plan docs in the long format stay as they are. Finish them on their own terms.
 
 ---
 
 ## Writing code
 
-- Look for an existing utility before writing a new one. Extend what's there rather than building
-  a second version alongside it.
-- Write the simplest thing that works. No abstraction you don't need yet, no feature I didn't ask
-  for, nothing built for a future that may not arrive.
-- Decide where a file lives while planning, and put that in *Files to Modify*. Don't default to
-  the repo root. When a second or third file appears around one concern, give it a directory and
-  say why in one line.
-- Re-use and "don't build it until you need it" pull against each other. Judge the clear cases
-  yourself: a one-off script stays inline, the third caller in one module earns an extracted
-  function. When it's a genuine coin flip, ask me with `AskUserQuestion` — before drafting if the
-  plan's shape depends on it, otherwise in the plan's *Open Questions*. Don't paper it over with
-  "I'll extract it later if needed."
+- Extend an existing utility rather than building a second version alongside it.
+- Write the simplest thing that works. No abstraction or feature nobody asked for yet.
+- Put new files in a named directory decided in the spec's *Deliverables*, not the repo root.
 
 ---
 
 ## Checking your work
 
-Give yourself something that tells you pass from fail. This matters more than anything else here.
+This matters more than anything else here.
 
-- Every plan states how we'll know it worked in its *Verification* section, so I review those criteria alongside it.
-- Show evidence, not assurances: the command you ran and what it printed, the test output, the
-  file that appeared.
+- Show evidence, not assurances: the command you ran and what it printed.
 - A check that cannot fail proves nothing. Work out the expected answer independently of the thing
   you're testing.
-- Run the checks yourself and bring me the results. Don't leave assertions for me to run.
+- Run the checks yourself. Don't leave assertions for me to run.
 
 ---
 
@@ -272,7 +217,7 @@ write is what stops the decision ledger from freezing on the day it was hand-typ
 ## Which machine to run on
 
 Every machine running Claude Code does the whole job: plan, build, check, commit. There is no
-machine that only plans and another that only executes. A session that finds its plan was wrong
+machine that only plans and another that only executes. A session that finds its spec was wrong
 revises it where it stands.
 
 The one real difference between machines is hardware. GPU training, embedding generation, and
@@ -365,7 +310,7 @@ If it won't fit on one line, that is the signal it should have been a committed 
 
 ### When to commit
 
-- Commit when the work reaches a state worth sharing: an approved plan, a finished and verified
+- Commit when the work reaches a state worth sharing: an approved spec with its first code, a finished and verified
   change, results ready to use. Or when I ask.
 - Running low on context is not a reason to commit. `/wrapup` preserves the session without one.
 - Every commit in a medical-data repo goes through the PHI review, including my own read of each
@@ -378,12 +323,12 @@ If it won't fit on one line, that is the signal it should have been a committed 
 Everything committed passes the PHI review, and I personally read every committed markdown file.
 Keep that surface small.
 
-- **Commit**: code, approved plans, README and `docs/` updates, write-ups of aggregate numbers.
+- **Commit**: code, approved specs, README and `docs/` updates, write-ups of aggregate numbers.
 - **Don't commit**: session notes, verification write-ups, scratch analyses. These live in
   `docs/session/`, which is git-ignored — add it to the repo's `.gitignore` if it isn't already.
   Being ignored also protects them from another session's `reset --hard`.
-- **Don't commit yet**: a plan still being revised. Save it to `docs/plans/` immediately, commit
-  it after sign-off.
+- **Don't commit yet**: a spec still being revised. Save it to `docs/plans/` immediately, commit
+  it with its first code (only where `docs/plans` is in git; see *Specs*).
 - **Never commit**: results data — parquet files, HTML reports, metrics tables. Those live on the
   mount. What reaches git is the summary that points at them.
 
@@ -405,9 +350,11 @@ Keep that surface small.
 Use these skills instead of writing review prompts inline. Each one describes itself when you
 invoke it, so the short version:
 
-- `/review-plan <plan>` — design review of a plan, before building.
-- `/review-implementation <plan>` — uncommitted code against the plan, before `/commit-review`.
-- `/review-tests <plan>` — test coverage of uncommitted code, when the change adds new behavior
+- `/grill` — interview me and write the spec, before building.
+- `/review-implementation <spec>` — runs the `evaluator` agent (a fresh-context reviewer) against
+  the spec, saves its verdict, and applies the fixes it agrees with, before `/commit-review`.
+- `/explain-plan <spec>` — the what-changed explainer, after the build.
+- `/review-tests <spec>` — test coverage of uncommitted code, when the change adds new behavior
   worth protecting against regressions.
 - `/commit-review` — the commit path. Use this instead of running `git commit` yourself.
 - `/phi-vet` — the PHI review. `/commit-review` calls it automatically in repos touching BigQuery,
@@ -427,8 +374,6 @@ the machines that have GPUs.
   context — are never started off a keyword alone. Describe the choice in one sentence and offer
   it through `AskUserQuestion` next to the cheaper options. Spending that budget is my call. Cheap
   skills like `/read-plan` and `/next` run on a direct request.
-- Skills can point at each other. Where two overlap, reference the canonical one instead of
-  copying its text, so they don't drift apart.
 - Handing work to a subagent: don't pour this session's context into the prompt. Point it at the
   skill or doc it needs and give it just enough to know what to read.
 - Building a multi-step workflow: write the skill in markdown first, then the code it calls. The
@@ -443,19 +388,13 @@ the machines that have GPUs.
 
 - Sort every decision by what the answer changes, and act on the tier:
   - Changes the results, the cost, or what we can conclude → ask me.
-  - Changes only the shape of the code → decide it, record it in the plan, don't ask.
+  - Changes only the shape of the code → decide it, say why in the commit message, don't ask.
   - Reversible in under an hour → just do it.
-- Ask me about: what to build and how it should behave, anything ambiguous, decisions that shape
-  the architecture, anything where a wrong assumption wastes work, whether a failure should fall
-  back or raise (don't assume a fallback — it can hide a real error upstream), and what's worth
-  testing before you write tests.
-- Decide yourself: variable names, code patterns, internal structure, ordinary refactoring,
-  obvious bug fixes.
+- Whether a failure should fall back or raise is always mine: a silent fallback can hide a real
+  error upstream.
+- Prefer an existing public skill or agent over writing our own. Copy it into research-skills
+  with its source, commit and license noted, and adapt it there.
 - When you get something wrong, add the lesson to the repo's `CLAUDE.md` so the next session
   doesn't repeat it.
-- When a pattern recurs, write it into the right `docs/` file.
 - Record a non-obvious decision where someone will find it: a short code comment, the commit
-  message, or the plan.
-- Start a fresh session for unrelated work.
-- Match the rigor to the stakes. A prototype can be loose; production changes get the full
-  treatment.
+  message, or the spec.

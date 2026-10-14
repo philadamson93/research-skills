@@ -33,13 +33,14 @@ cat <<'EOF'
 [post-compact re-anchor — injected by post-compact-reinject.sh]
 
 You may be resuming after an AUTO-COMPACT. Earlier context — including
-claude_ops.md and any approved plan — may have been dropped. Before taking ANY
+claude_ops.md and any approved spec or plan — may have been dropped. Before taking ANY
 action, re-anchor on these NON-NEGOTIABLES, and re-read
 ~/code/research-skills/claude_ops.md if you are at all unsure:
 
-  1. PLAN BEFORE CODE. Enter plan mode and get EXPLICIT user approval before
-     implementing. Do NOT resume or start implementation off a compacted context
-     without re-confirming the plan with the user first.
+  1. SPEC BEFORE CODE. Re-read the spec (or plan doc) in docs/plans/ and tell
+     the user which deliverable you were on before touching anything. Do NOT
+     resume a build off a compacted context without that check. Bigger work
+     with no spec goes through /grill first.
   2. ASK BEFORE DESTRUCTIVE / EXPENSIVE ACTIONS. Deleting /mnt data, and
      provisioning cloud infra (VM create/start, disk create/resize, terraform),
      require the user's go-ahead. (Hooks enforce the worst cases, but treat this
@@ -47,9 +48,9 @@ action, re-anchor on these NON-NEGOTIABLES, and re-read
   3. PHI DISCIPLINE. Never echo PHI into chat/docs/commits; commits in
      medical-data repos are gated by /phi-vet.
   4. EXECUTOR LANE. Make minor iterative corrections, but do NOT broad-plan or
-     major-rewrite without user confirmation. If scope changed, document the
-     finding and defer to a new plan.
+     major-rewrite without user confirmation. If scope changed, stop and ask;
+     add the answer to the spec's Decided list.
 
 If you were mid-task, briefly restate to the user what you believe the task and
-its approved plan were, and confirm before continuing.
+its approved spec were, and confirm before continuing.
 EOF

@@ -73,10 +73,16 @@ next: <one line> → <path to the spec or plan, or "no spec">
   `⚠` ran but the result cannot be trusted yet.
 - **Hard cap: one screen, under 100 lines.** If it does not fit, something on it is finished or was
   never really active.
-- **Also update the brief** when the stage moved: set the stage row's status, and if the user made
-  a real decision this session, append one dated line to the brief's `Decided already` ledger. That
-  ledger is what stops the same decision being re-argued next month, and this step is its only
-  writer.
+- **Also update every brief** when the stage moved: each one named on the spec's `Program:` line,
+  not only the first (a spec can serve two programs at once). Set each stage row's status, and if
+  the user made a real decision this session, append one dated line to each brief's `Decided
+  already` ledger. That ledger is what stops the same decision being re-argued next month, and this
+  step is its only writer.
+- **Update the umbrella entries too.** A board entry that names this item as one of its streams
+  (e.g. a release tracker listing streams S1–S6) still says "open" after the item's own block is
+  updated or removed. `grep` the board for the item's name and refresh every line that mentions it.
+  (2026-10-15: a landed stream was removed from the board, but the v1.7 umbrella entry and the second
+  brief still showed it open until Phil asked.)
 - **Don't grow the in-repo `docs/next.md`.** It is legacy: a committed file edited inside many
   checkouts, which is why vista-eval's existed in 8 different versions across 9 checkouts. If it
   still holds real content, move that content to the board rather than updating both.

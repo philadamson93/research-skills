@@ -105,11 +105,14 @@ Only after a merge actually landed (skip entirely for **Hold** / PR-not-yet-merg
 - **Mark the spec or plan done**, only if Phase 1's deliverable list came back fully matched or every gap was explicitly dropped; otherwise mark it `Partially landed` and name what's still owed. For a spec, tick each *Deliverables* box with its commit or `file:line` and set `Status: Completed (<date>)`; for an old plan, `**Status: Completed** (<date>)` at the top. Flip its `docs/plans/README.md` row to Completed.
 - **Update the brief, then prune the board.** Both live on the mount, so neither costs a review and
   both work from either machine.
-  - **Brief** (`…/planning/programs/<name>.md`): set this stage's row to landed in the `Stages`
+  - **Briefs** (`…/planning/programs/<name>.md`): **every** brief on the spec's `Program:` line, not
+    only the first. In each one, set this stage's row to landed in the `Stages`
     table. If the landing settled something the user decided, append one dated line to the
     `Decided already` ledger. If the stage's row was the last one open, say so — the program may be
     finished, which is worth telling Phil rather than leaving the brief looking live.
-  - **Board** (`…/planning/boards/<repo>.md`): **remove** the item's block. Finished work does not
+  - **Board** (`…/planning/boards/<repo>.md`): **remove** the item's block, then `grep` the board for
+    the item's name and refresh any umbrella entry that still lists it as open (a release tracker
+    naming its streams). Finished work does not
     belong on a board; its status now lives in the brief's stage table. If follow-ups survive the
     landing, they become their own block with their own `next:` line rather than a note attached to
     the dead one.

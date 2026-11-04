@@ -4,7 +4,7 @@
 # (project som-nero-plevriti-deidbdf, global region) with the PHI commit gate and the other hooks.
 #
 # Usage, on the VM, as the user who will run the Claude session (on the GPU boxes that is the
-# gcsfuse mount owner, e.g. pmayankees, so the session can see that user's screen sessions):
+# user who owns the bucket mount on that box, so the session can see that user's screen sessions):
 #   git clone git@github.com:philadamson93/research-skills.git ~/code/research-skills ; bash ~/code/research-skills/scripts/setup_claude_vm.sh
 # (Re-running is safe: every step skips itself when already done.)
 #

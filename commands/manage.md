@@ -125,7 +125,14 @@ are backed up is one line, not an investigation.
 
 ## Phase 1 — Build the map
 
-Join three sources; none involves a session.
+**Start from the work dashboard's data**, which already joins most of this every 5 minutes:
+`planning/dashboard/hosts/*.json` (sessions and what each machine is running), `items/*.json` (questions
+and features, their runs and open decisions), `phil-actions.json` (what Phil marked done, snoozed,
+triaged or commented) and `problems-auto.json` / `problems-proposed.json`. Don't re-derive what those
+files hold; spend the loop on what they can't show (a session that drifted from the rules, a stage-order
+mistake, a finished step nobody advanced). Never add to `problems.json` what Phil already dismissed.
+
+Where the dashboard's files are missing or stale, fall back to joining three sources; none involves a session.
 
 **Running sessions** — `~/.claude/projects/<cwd-slug>/<session-id>.jsonl`. Take `cwd` and
 `gitBranch` from the **newest** line carrying them, not the first, or a session that switched

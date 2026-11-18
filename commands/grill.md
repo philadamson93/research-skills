@@ -43,6 +43,12 @@ Given a path to a `Draft` spec (an interview stopped by `/wrapup`), start from i
 When the user confirms, save a one-page spec to `docs/plans/<what-it-is>.md`. About 80 lines is
 the ceiling; past that it's two pieces of work. No implementation steps.
 
+Also write (or update) the work dashboard item for it: `/mnt/su-vista-uscentral1/chaudhari_lab/phil/planning/dashboard/items/<id>.json`,
+format in `research-skills/scripts/dashboard/README.md`. A question if it tests something, a feature if it
+builds something. Before saving, propose the plain-English title, why it matters and (for a question) the
+result layout, and ask the user "is this right?"; their yes is the approval, so set `approved`. Put the
+spec's open decisions under `decisions` and its Expensive steps under `runs` once they are started.
+
 ```markdown
 Reference: docs/claude_ops.md
 Program: <brief path> — stage N of M

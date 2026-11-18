@@ -6,6 +6,10 @@ the line `Reference: docs/claude_ops.md`.
 ## The workflow, start to finish
 
 1. **Open the session.** `/next` if no task is named. Check the start-of-session items below.
+   Coming back after time away, across all sessions: `/dashboard` (who is working, what's waiting
+   on me, what finished and where its results are, which programs need a direction). In your first
+   reply, name the question or feature this work belongs to (`planning/dashboard/items/<id>.json`);
+   if none fits, propose one as a draft. Quick one-off lookups may stay unattached.
 2. **Size it.** Small work (reversible in under an hour): ask one or two questions, do it, skip
    to step 6. Bigger work: go on.
 3. **Interview.** `/grill` asks me what changes the outcome and writes a one-page spec to
@@ -195,7 +199,7 @@ When you finish a block — an implementation, a verification run, a review — 
 the same five labels every time, nothing decorative around it:
 
 ```
-Program  <name> — stage N of M
+Program  <name> (<brief-slug>) — stage N of M
 Done     <what concretely finished>
 Verified <the command you ran and what it printed>
 Next     <the one next action>
@@ -252,6 +256,22 @@ either, like an interactive `gcloud auth login`.
   Nobody is watching it, so it judges itself — exit codes, files that must exist and be non-empty,
   numbers in range. Tell me in one line what a pass looks like.
 - **Say where to run it.** Hostname first, then the line, then the pass condition.
+- **Name what it is for, so its result comes back to one place.** A hand-off file opens with these
+  lines, which the work dashboard reads:
+
+  ```
+  Item:      <question or feature id in planning/dashboard/items/>   Cell: <row · column, if a grid>
+  Machine:   <hostname>
+  Job:       <text that appears in the run's process command, e.g. the script name>
+  Quiet for: <hours the run may write nothing while its job is alive>
+  Readback:  <the readback's path on the mount, under planning/<repo>/session/>
+  ```
+
+  Add the run to that item file's `runs` in the same step. A run that never names its item is invisible
+  on the dashboard.
+- **Every readback starts with one status line**, rewritten every time the readback changes:
+  `Status: running | waiting on Phil | done | failed — <one plain sentence>`. The dashboard trusts this
+  line and nothing else; without it the run shows "status unknown".
 - It writes results to the shared bucket mount (`su-vista-uscentral1`, mounted on the Mac and on
   the Claude-capable VMs), not into a document. Whichever session needs the numbers reads them
   off the mount.

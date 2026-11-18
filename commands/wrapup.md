@@ -160,6 +160,9 @@ The resume loop's **write side**. Because commit is opt-in and most sessions clo
 
 For each in-flight task advanced this session, write (or update) a state doc at `docs/session/<task-slug>-readback.md` — `mkdir -p docs/session` first if the dir is absent. Match `<task-slug>` to the resume block's DOC / OPEN lines so the pointer resolves. Capture the substance a fresh session needs to resume without re-deriving it from git:
 
+- **Status line first** — the readback's first line (after any `Reference:`/`Program:` lines) is
+  `Status: running | waiting on Phil | done | failed — <one plain sentence>`, rewritten on every update.
+  The work dashboard reads only this line to judge the run.
 - **Where things stand** — what was done this session and the current state of the work.
 - **What's next** — the recommended first concrete action, plus the remaining steps.
 - **Open questions / blockers** — anything unresolved or waiting on the user.
@@ -170,6 +173,16 @@ For each in-flight task advanced this session, write (or update) a state doc at 
 **Mechanics**: `docs/session/` is git-ignored — edit it in place; never stage or commit it. In a guarded background session where direct edits to a sibling checkout are blocked, write to scratch and `cp` it in (Bash isn't guarded).
 
 **Skip** only for sessions that advanced no resumable work (pure doc-tweak, vista-pm-only) — the same sessions that skip the resume block.
+
+### Update the work dashboard item
+
+If the work belongs to a question or feature (`/mnt/su-vista-uscentral1/chaudhari_lab/phil/planning/dashboard/items/<id>.json`),
+update the parts sessions own, following the format in `research-skills/scripts/dashboard/README.md`:
+fill the result cells, findings or checklist steps you produced (with session name and commit), rewrite
+`status` in one plain line, add or close `decisions`, and list any run you started under `runs` (its readback must be on the mount, under `planning/<repo>/session/`, not a repo's `docs/session/`, which other machines can't read). Never edit
+`title`, `why` or `answer` directly: put proposed wording under `draft` (with `by` and `at`), and when you
+filled a cell, draft the updated answer there. If no item fits, write a new one with no `approved` field
+(a draft for Phil). Plain English only: no run labels or code names as the subject of a sentence.
 
 ## Step 9 — Summary + commit gate (opt-in)
 
@@ -208,7 +221,8 @@ After the commit gate resolves (whether or not you committed), the **final outpu
 **Uncommitted close (the common case):**
 ```
 Resume ▸ per-CT landmark tasks · stage 5 of 9
-  PROGRAM per-CT landmark tasks — stage 5 of 9
+  PROGRAM per-CT landmark tasks (per-ct-landmark-tasks) — stage 5 of 9
+  ITEM    <mount>/planning/dashboard/items/<id>.json (question or feature on the work dashboard)
   BRIEF   <mount>/planning/programs/per-ct-landmark-tasks.md
   REPO    research-skills
   BRANCH  feat/foo   [WORKTREE .claude/worktrees/foo]
@@ -220,7 +234,8 @@ Resume ▸ per-CT landmark tasks · stage 5 of 9
 **Committed-and-pushed close (milestone):**
 ```
 Resume ▸ per-CT landmark tasks · stage 5 of 9
-  PROGRAM per-CT landmark tasks — stage 5 of 9
+  PROGRAM per-CT landmark tasks (per-ct-landmark-tasks) — stage 5 of 9
+  ITEM    <mount>/planning/dashboard/items/<id>.json (question or feature on the work dashboard)
   BRIEF   <mount>/planning/programs/per-ct-landmark-tasks.md
   REPO    research-skills
   BRANCH  feat/foo   [WORKTREE .claude/worktrees/foo]
@@ -228,6 +243,9 @@ Resume ▸ per-CT landmark tasks · stage 5 of 9
   SHA     <pushed short sha>
   SYNC    git fetch origin && git checkout feat/foo && git pull --ff-only   # run FIRST; verify: git rev-parse --short HEAD → <sha>
 ```
+
+Put the brief's file name (`per-ct-landmark-tasks`) in parentheses after the program name: the work
+dashboard (`/dashboard`) files the session under that program only when the file name matches.
 
 If the work maps to no program, write `PROGRAM (none — not on any board)` rather than dropping the
 line. A blank is indistinguishable from forgetting; an explicit "none" is a finding the next session

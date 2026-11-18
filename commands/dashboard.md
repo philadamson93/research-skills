@@ -8,7 +8,7 @@ description: Refresh and read the work dashboard — the status view built aroun
 Phil runs many sessions across several machines. The dashboard answers "where are we" without touching any
 session: it reads files that already exist and writes pages.
 
-- Served: front door `/dashboard/` (a site on the review server on vista-cohort; Phil's clicks save there).
+- Served: front door `/phil-dashboard/` (a site on the review server on vista-cohort; Phil's clicks save there).
 - Files: `/mnt/su-vista-uscentral1/chaudhari_lab/phil/planning/dashboard/`
 - Code and file formats: `~/code/research-skills/scripts/dashboard/README.md`. Spec: `docs/plans/work-dashboard.md`.
 
@@ -22,7 +22,7 @@ session: it reads files that already exist and writes pages.
    - **What finished** since Phil last looked: by question, one line each with the number.
    - **Running where**: runs by machine and state; any "possibly died"; machines not reporting.
    - **Problems** not yet triaged.
-3. End with the link (`/dashboard/` on the front door) and the one session or decision to look at first.
+3. End with the link (`/phil-dashboard/` on the front door) and the one session or decision to look at first.
 
 Quote numbers and questions as the item files and readbacks state them; don't re-judge them.
 

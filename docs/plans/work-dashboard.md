@@ -29,7 +29,7 @@ Stop and come back if: after the week Phil still opens agent view or sessions to
 - Every readback starts with one status line: running / waiting on Phil / done / failed, plus a one-line plain result. The page trusts that line; readbacks without one show "status unknown", never guessed (2026-11-18)
 - A run counts as possibly died only when its status says running, nothing new is written for its quiet period, and its machine shows no matching job. Hand-offs name the job and quiet period. A non-reporting machine shows "can't check the job" (2026-11-18)
 - Problems: free rule checks on every 5-minute build, plus a once-a-day Sonnet review of all question pages for duplicates and missing links, capped at $5 a day; it only proposes problems for triage (2026-11-18)
-- Served as one more site on the existing review server on vista-cohort, behind the front door at /dashboard/; Phil's clicks, triage and comments save to the mount there and the builder reads them back. Local file copies still open, read-only for clicks (2026-11-18)
+- Served as one more site on the existing review server on vista-cohort, behind the front door at /phil-dashboard/; Phil's clicks, triage and comments save to the mount there and the builder reads them back. Local file copies still open, read-only for clicks (2026-11-18)
 - No access check: anyone on the front door can already read the mount (2026-11-18)
 - Drafts of all four areas at once (paper, agents vs embeddings, longitudinal, MerlinOnc); each page shows "draft wording" until Phil approves it on the page; Needs you shows one summary line for them (2026-11-18)
 - Skill changes land together: hand-off template and /wrapup (readback status line; name question, cell, machine, job, quiet period; fill the cell and draft the answer), /grill (writes the item file), close-out Program line names the brief file, /dashboard, and /manage reads dashboard data instead of its own sweep (2026-11-18)
@@ -57,12 +57,12 @@ Stop and come back if: after the week Phil still opens agent view or sessions to
 - [x] Rule checks + daily review writing proposed problems — `build_dashboard.py:490`; `daily_review.py:45` (live run 11-18: 8 problems, $0.08); test `DailyCap`
 - [x] Draft item files for all four areas (~35), plus at least one each from agentic labelers, the Cohort Explorer and RadLex — 29 files in `planning/dashboard/items/` (24 in the four areas; progression-labeler, explorer-variable-builder, radlex-silver-regex, radgraph-labeler-radlex)
 - [x] Skill and template wording changes, as one set — `claude_ops.md:259`, `:272`; `commands/wrapup.md:177`; `commands/grill.md:46`; `commands/manage.md:128`; `commands/dashboard.md`
-- [ ] /dashboard/ site on vista-cohort and front-door entry — half: entry at `vista-deploy/front-door/apps.json:39` (uncommitted, tests pass); site waits on `planning/dashboard/VISTA-COHORT-site-handoff.md`, deploy is Phil's
+- [ ] /phil-dashboard/ site on vista-cohort and front-door entry — half: entry at `vista-deploy/front-door/apps.json:39` (uncommitted, tests pass); site waits on `planning/dashboard/VISTA-COHORT-site-handoff.md`, deploy is Phil's
 
 ## Expensive steps
 - phil-sllm-01: daily review cron, Sonnet, $5/day cap → one problems file per day — approved 2026-11-18
-- vista-cohort: `add_site.sh dashboard <mount path>` → page loads at /dashboard/ — approved 2026-11-18 (reuse)
-- Phil, from a vista-deploy checkout: `git pull --ff-only && bash front-door/deploy.sh` → /dashboard/ loads after sign-in — Phil runs it
+- vista-cohort: `add_site.sh phil-dashboard <mount path>` → page loads at /phil-dashboard/ — approved 2026-11-18 (reuse)
+- Phil, from a vista-deploy checkout: `git pull --ff-only && bash front-door/deploy.sh` → /phil-dashboard/ loads after sign-in — Phil runs it
 - Each other machine: snapshot cron from `planning/dashboard/HOST-SETUP-handoff.md` → host file under 10 min old — Phil starts those sessions
 
 ## Landing
@@ -71,4 +71,4 @@ Branch `feat/work-dashboard` in research-skills (large change, skills included).
 At /land, before removing the worktree: repoint phil-sllm-01's cron line from
 `~/code/research-skills-work-dashboard/scripts/dashboard/refresh.sh` to `~/code/research-skills/scripts/dashboard/refresh.sh`,
 delete the untracked prototype copy in the main checkout's `scripts/dashboard/` and `commands/dashboard.md` so the
-merge can write them, and push the vista-deploy `/dashboard/` entry (Phil deploys).
+merge can write them, and push the vista-deploy `/phil-dashboard/` entry (Phil deploys).

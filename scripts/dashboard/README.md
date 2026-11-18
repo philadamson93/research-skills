@@ -4,7 +4,7 @@ One status view, built around **questions** (test something) and **features** (b
 answers after hours away: what finished, what needs Phil, what is running where, and what is next.
 Spec: `docs/plans/work-dashboard.md`.
 
-- Served: front door `/dashboard/` (a site on the review server on vista-cohort; clicks save there).
+- Served: front door `/phil-dashboard/` (a site on the review server on vista-cohort; clicks save there).
 - Files: `/mnt/su-vista-uscentral1/chaudhari_lab/phil/planning/dashboard/` (also opens as local files, read-only for clicks).
 
 ## How it works

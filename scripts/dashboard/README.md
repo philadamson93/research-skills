@@ -90,8 +90,8 @@ report, the page says "quiet, can't check the job".
 
 ## Phil's clicks
 
-On the served page, Done / Snooze / triage / comments / Approve are kept in browser storage under `wd:` keys,
+On the served page, Done / Snooze / Park / triage / comments / Approve are kept in browser storage under `wd:` keys,
 which the review server saves to `planning/review_answers/<email>.json`. The builder merges them into
-`phil-actions.json` (with timestamps) so any session can read what Phil decided, dismissed or wrote, and
+`phil-actions.json` (with timestamps) so any session can read what Phil decided, dismissed, parked or wrote, and
 applies an Approve click by setting `approved` in the item file. `/dashboard` turns a closed decision with a
 comment into a dated line in the program brief's decision ledger.

@@ -32,7 +32,8 @@ Quote numbers and questions as the item files and readbacks state them; don't re
 `item` and `decision` id and the text he acted on; Done on a decision row is how he closes it. For each
 decision he marked Done, add one dated line to the program brief's **Decided already** ledger (newest last, "Phil's
 call"), then set `closed` on that decision in the item file. Ask him if the comment doesn't make the
-decision clear. Never close a decision he didn't mark.
+decision clear. Never close a decision he didn't mark. `parked` lists questions he set aside (Park): nothing in them is decided;
+leave them out of the summary unless a session has worked on one since.
 
 ## Daily review on demand
 

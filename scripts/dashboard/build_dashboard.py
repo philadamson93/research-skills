@@ -305,7 +305,7 @@ def attach(s: dict, items: list, ids: set, plan: Path) -> str | None:
 
 def load_phil_actions(plan: Path) -> dict:
     """Phil's clicks and comments, as saved by the review server (planning/review_answers/<email>.json)."""
-    merged = {"approve": {}, "accept_draft": {}, "comments": {}, "needs": {}, "problems": {}, "saved_at": None}
+    merged = {"approve": {}, "accept_draft": {}, "comments": {}, "needs": {}, "problems": {}, "parked": {}, "saved_at": None}
     for f in sorted((plan / "review_answers").glob("*.json")):
         try:
             doc = json.loads(f.read_text())
@@ -327,6 +327,8 @@ def load_phil_actions(plan: Path) -> dict:
                 merged["needs"].update(val)
             elif k == "wd:probs":
                 merged["problems"].update(val)
+            elif k == "wd:park":
+                merged["parked"].update(val)
             elif k.startswith("wd:c:"):
                 merged["comments"].setdefault(k[5:], {}).update(val)
     return merged

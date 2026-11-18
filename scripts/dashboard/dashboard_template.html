@@ -69,7 +69,7 @@ table.qt{border-collapse:collapse;width:100%;background:var(--panel);border:1px 
 table.qt th{font-size:11px;text-transform:uppercase;color:var(--muted);text-align:left;padding:6px 8px;border-bottom:1px solid var(--line)}
 table.qt td{padding:6px 8px;border-bottom:1px solid var(--line);vertical-align:top}table.qt tr:last-child td{border-bottom:0}
 table.qt td.st{max-width:460px}.wrap{overflow-x:auto}
-.need button,.prob button{font-size:11px;padding:1px 7px;margin-left:4px}.need .age{font-size:12px;color:var(--muted);white-space:nowrap}
+.need select,.prob select{font-size:11px;padding:1px 4px;margin-left:4px}.need button,.prob button{font-size:11px;padding:1px 7px;margin-left:4px}.need .age{font-size:12px;color:var(--muted);white-space:nowrap}
 .banner{background:var(--fail-bg);color:var(--fail);border:1px solid var(--fail);border-radius:8px;padding:6px 10px;margin:6px 0;font-weight:600}
 .card.quiet{opacity:.55}.tri{font-size:11px;font-weight:700;color:var(--done)}
 .need{background:var(--panel);border:1px solid var(--line);border-left:4px solid var(--wait);border-radius:8px;padding:6px 10px;margin:5px 0;display:flex;gap:10px;align-items:baseline;flex-wrap:wrap}
@@ -98,9 +98,10 @@ table.qt td.st{max-width:460px}.wrap{overflow-x:auto}
 <main id="statusmain">
   <div id="banner"></div>
   <div id="machines" class="small" style="margin:6px 0"></div>
-  <section><h2>Needs you <span class="hint">longest waiting first · Done hides it · Snooze brings it back in 24 h or on new activity · to answer a stopped session, use <code>claude agents</code> on its machine</span></h2><div id="needs"></div>
+  <section><h2>Needs you <span class="hint">longest waiting first · Done = handled (a decision counts as closed) · Snooze = hide for 1 day, 1 week or 1 month (back early on new activity) · Park = set the whole question aside, nothing decided · to answer a stopped session, use <code>claude agents</code> on its machine</span></h2><div id="needs"></div>
     <details style="margin-top:4px"><summary id="hidden-sum">Done and snoozed</summary><div id="needs-hidden"></div></details></section>
-  <section><h2>Questions and features <span class="hint">click a title for its page</span></h2><div class="wrap"><table class="qt" id="qtable"></table></div></section>
+  <section><h2>Questions and features <span class="hint">click a title for its page</span></h2><div class="wrap"><table class="qt" id="qtable"></table></div>
+    <details style="margin-top:6px"><summary id="parked-sum">Parked</summary><div class="wrap" id="parked"></div></details></section>
   <section><h2>What changed <span class="hint" id="awayhint"></span> <button onclick="markSeen()">mark all seen</button></h2><div class="feed" id="feed"></div></section>
   <section><h2>Problems spotted <span class="hint">for discussion · your triage saves to the mount on the served page (this browser only when opened as a file)</span></h2><div id="problems"></div>
     <details style="margin-top:4px"><summary id="ptri-sum">Triaged</summary><div id="problems-done"></div></details></section>
@@ -230,10 +231,15 @@ function lsGet(k,d){try{return JSON.parse(localStorage.getItem(k)||"null")??d}ca
 function lsSet(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}}
 function hkey(s){let x=0;for(const c of s)x=(x*31+c.charCodeAt(0))|0;return "k"+(x>>>0).toString(36)}
 const NEEDMETA={};   // key -> {item, decision, text}: stored with each click so sessions can read what Phil closed
-function needAct(k,act){const st=lsGet("wd:needs",{});st[k]={act,at:Date.now(),...(NEEDMETA[k]||{})};lsSet("wd:needs",st);render()}
+const DAY=24*3600e3;
+function needAct(k,act,days){const st=lsGet("wd:needs",{});const at=Date.now();st[k]={act,at,...(days?{until:at+days*DAY}:{}),...(NEEDMETA[k]||{})};lsSet("wd:needs",st);render()}
+function snoozeMenu(fn,k){return `<select title="Snooze: hide until then; comes back early on new activity" onchange="if(this.value){${fn}('${k}','snooze',+this.value)}"><option value="">Snooze…</option><option value="1">1 day</option><option value="7">1 week</option><option value="30">1 month</option></select>`}
+const until = s0 => s0.until || (s0.at + DAY);   // older snoozes had no length: 1 day
 function needUndo(k){const st=lsGet("wd:needs",{});delete st[k];lsSet("wd:needs",st);render()}
+function parkAct(id,title){const st=lsGet("wd:park",{});st[id]={at:Date.now(),title};lsSet("wd:park",st);render()}
+function unpark(id){const st=lsGet("wd:park",{});delete st[id];lsSet("wd:park",st);render()}
 const PROBTEXT={};
-function probAct(k,act){const st=lsGet("wd:probs",{});st[k]={act,at:Date.now(),text:PROBTEXT[k]||""};lsSet("wd:probs",st);render()}
+function probAct(k,act,days){const st=lsGet("wd:probs",{});const at=Date.now();st[k]={act,at,...(days?{until:at+days*DAY}:{}),text:PROBTEXT[k]||""};lsSet("wd:probs",st);render()}
 function probUndo(k){const st=lsGet("wd:probs",{});delete st[k];lsSet("wd:probs",st);render()}
 const RUNICON={"waiting on Phil":"🟠 waiting on you","done":"✓ done","running":"▶ running","running, job alive":"▶ running (quiet, job alive)","quiet, can't check the job":"⏸ quiet, can't check the job","possibly died":"⚠ possibly died","failed":"✗ failed","status unknown":"? status unknown","no readback yet":"○ no readback yet","readback not on the mount":"? readback not on the mount"};
 function runsHtml(it){ const R=it.runs_status||[]; if(!R.length) return "";
@@ -255,16 +261,22 @@ function renderItems(since){
   if(now-T(D.generated_at) > 15*60000) bad.push(`this page was built ${ago(T(D.generated_at))}: the refresh may have stopped`);
   if(!D.hosts.length) bad.push("no machine is reporting sessions");
   $("banner").innerHTML = bad.map(x=>`<div class="banner">⚠ ${esc(x)}</div>`).join("");
+  // Parked questions: set aside by Phil until he unparks them or a session works on them again.
+  const PK = lsGet("wd:park",{});
+  const isParked = it => !!PK[it.id] && !(lastChange(it) > PK[it.id].at);
+  const backFromPark = it => !!PK[it.id] && lastChange(it) > PK[it.id].at;
   // Needs you
   const st = lsGet("wd:needs",{}); const shown=[], hidden=[];
   const add = (key, kind, title, page, what, sinceT, extra, itemId, decId) => {
     NEEDMETA[key] = {item:itemId||null, decision:decId||null, kind, text:what};
-    const s0 = st[key]; const it = I.find(i=>i.id===itemId);
+    const it = I.find(i=>i.id===itemId);
+    if (it && isParked(it)) return;
+    const s0 = st[key];
     const activity = it ? lastChange(it) : 0;
     let hide = false, why = "";
     if (s0 && s0.act==="done") { hide=true; why="done"; }
-    if (s0 && s0.act==="snooze" && Date.now()-s0.at < 24*3600e3 && !(activity > s0.at)) { hide=true; why="snoozed"; }
-    const row = `<div class="need"><span class="kind">${esc(kind)}</span><span class="what">${page!==null?`<a ${href(page)}><b>${esc(title)}</b></a>`:`<b>${esc(title)}</b>`}<br>${esc(what)}</span>${extra||""}<span class="age">${sinceT?(kind.startsWith("session")||kind.startsWith("run")||kind==="decision"||kind==="read"?"waiting "+ago(sinceT).replace(" ago",""):"listed "+ago(sinceT)):""}</span>${hide?`<button onclick="needUndo('${key}')">bring back</button> <span class="small muted">${why}</span>`:`<button onclick="needAct('${key}','done')">Done</button><button onclick="needAct('${key}','snooze')">Snooze</button>`}</div>`;
+    if (s0 && s0.act==="snooze" && Date.now() < until(s0) && !(activity > s0.at)) { hide=true; why="snoozed until "+new Date(until(s0)).toLocaleDateString(); }
+    const row = `<div class="need"><span class="kind">${esc(kind)}</span><span class="what">${page!==null?`<a ${href(page)}><b>${esc(title)}</b></a>`:`<b>${esc(title)}</b>`}<br>${esc(what)}</span>${extra||""}<span class="age">${sinceT?(kind.startsWith("session")||kind.startsWith("run")||kind==="decision"||kind==="read"?"waiting "+ago(sinceT).replace(" ago",""):"listed "+ago(sinceT)):""}</span>${hide?`<button onclick="needUndo('${key}')">bring back</button> <span class="small muted">${why}</span>`:`<button onclick="needAct('${key}','done')">Done</button>${snoozeMenu("needAct",key)}${it?`<button title="Set this whole question aside; nothing is marked decided" onclick="parkAct('${it.id}','${esc(it.title).replace(/'/g,"&#39;")}')">Park</button>`:""}`}</div>`;
     (hide?hidden:shown).push({t:sinceT||now,row});
   };
   I.forEach(it => {
@@ -283,7 +295,7 @@ function renderItems(since){
   $("needs-hidden").innerHTML = hidden.map(x=>x.row).join("") || '<div class="empty small">none</div>';
   $("hidden-sum").textContent = `Done and snoozed (${hidden.length})`;
   // compact table, most recently changed first
-  const rows = I.slice().sort((a,b)=>lastChange(b)-lastChange(a)).map(it => {
+  const rowOf = it => {
     const ss = it.sessions.map(id=>sById[id]).filter(s=>s && s.bucket!=="parked");
     const lc = lastChange(it); const isNew = lc > since; const stale = now-lc > 7*86400e3;
     const c = it.cells; const tot = c ? c.done+c.running+c.not_run : 0;
@@ -293,14 +305,19 @@ function renderItems(since){
     return `<tr data-q="${esc((it.title+' '+it.program).toLowerCase())}"><td>${isNew?'<span class="new">NEW</span> ':''}<span class="chip">${esc(it.kind)}</span><br><a ${href(it.page)}><b>${esc(it.title)}</b></a><div class="small muted">${esc(it.program)}</div></td>
       <td class="st">${esc(it.status)}${runsHtml(it)}${it.owed?`<div class="small muted">owed: ${esc(it.owed)}</div>`:''}</td><td>${bar}</td>
       <td>${nn?`<b style="color:var(--wait)">${nn}</b>`:'<span class="muted">0</span>'}</td><td title="${esc(ss.map(s=>s.name+' ('+s.bucket+')').join('\n'))}">${icons||'<span class="small muted">none</span>'}</td>
-      <td class="small ${stale?'stale':''}">${ago(lc)}${stale?'<br>nothing moved in a week':''}</td></tr>`; }).join("");
-  $("qtable").innerHTML = `<tr><th>question or feature</th><th>where it stands</th><th>results</th><th>needs you</th><th>sessions</th><th>last change</th></tr>`+rows;
+      <td class="small ${stale&&!isParked(it)?'stale':''}">${ago(lc)}${stale&&!isParked(it)?'<br>nothing moved in a week':''}${backFromPark(it)?'<br><b>back from parked: new activity</b>':''}<br>${isParked(it)?`<button onclick="unpark('${it.id}')">Unpark</button>`:`<button title="Set this whole question aside; nothing is marked decided" onclick="parkAct('${it.id}','${esc(it.title).replace(/'/g,"&#39;")}')">Park</button>`}</td></tr>`; };
+  const sorted = I.slice().sort((a,b)=>lastChange(b)-lastChange(a));
+  const head = `<tr><th>question or feature</th><th>where it stands</th><th>results</th><th>needs you</th><th>sessions</th><th>last change</th></tr>`;
+  const active = sorted.filter(it=>!isParked(it)), parked = sorted.filter(isParked);
+  $("qtable").innerHTML = head + active.map(rowOf).join("");
+  $("parked").innerHTML = parked.length ? `<table class="qt">${head}${parked.map(rowOf).join("")}</table>` : '<div class="empty small">none</div>';
+  $("parked-sum").textContent = `Parked (${parked.length}): set aside, not decided; they come back if a session works on them`;
   // problems with triage
   const ps = lsGet("wd:probs",{}); const open=[], done=[];
   (D.problems||[]).forEach(p=>{ const k=hkey(p.replace(/^\[daily review [0-9-]+\]\s*/,"")); PROBTEXT[k]=p; const s0=ps[k];
-    const snoozed = s0 && s0.act==="snooze" && Date.now()-s0.at<24*3600e3;
+    const snoozed = s0 && s0.act==="snooze" && Date.now() < until(s0);
     if (s0 && (s0.act!=="snooze"||snoozed)) done.push(`<div class="prob"><span class="tri">${esc(s0.act==="accept"?"accepted":s0.act==="dismiss"?"dismissed":s0.act==="dup"?"duplicate":"snoozed")}</span> ${esc(p)} <button onclick="probUndo('${k}')">undo</button></div>`);
-    else open.push(`<div class="prob">${esc(p)}<div><button onclick="probAct('${k}','accept')">accept: worth fixing</button><button onclick="probAct('${k}','dismiss')">dismiss</button><button onclick="probAct('${k}','dup')">duplicate</button><button onclick="probAct('${k}','snooze')">snooze</button></div></div>`); });
+    else open.push(`<div class="prob">${esc(p)}<div><button onclick="probAct('${k}','accept')">accept: worth fixing</button><button onclick="probAct('${k}','dismiss')">dismiss</button><button onclick="probAct('${k}','dup')">duplicate</button>${snoozeMenu("probAct",k)}</div></div>`); });
   $("problems").innerHTML = open.join("") || '<div class="empty">none open</div>';
   $("problems-done").innerHTML = done.join("") || '<div class="empty small">none</div>';
   $("ptri-sum").textContent = `Triaged (${done.length})`;

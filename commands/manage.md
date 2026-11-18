@@ -130,7 +130,7 @@ are backed up is one line, not an investigation.
 and features, their runs and open decisions), `phil-actions.json` (what Phil marked done, snoozed,
 triaged or commented) and `problems-auto.json` / `problems-proposed.json`. Don't re-derive what those
 files hold; spend the loop on what they can't show (a session that drifted from the rules, a stage-order
-mistake, a finished step nobody advanced). Never add to `problems.json` what Phil already dismissed.
+mistake, a finished step nobody advanced). Never add to `problems.json` what Phil already dismissed, and don't advance a question he parked.
 
 Where the dashboard's files are missing or stale, fall back to joining three sources; none involves a session.
 

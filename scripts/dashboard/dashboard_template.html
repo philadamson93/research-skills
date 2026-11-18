@@ -1,0 +1,337 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Work Dashboard</title>
+<style>
+:root{
+  --bg:#f6f7f9;--panel:#fff;--ink:#1c2230;--muted:#5d6676;--line:#e2e5ea;--chip:#eef1f5;
+  --wait:#b4540a;--wait-bg:#fff4e8;--work:#1a6fd1;--work-bg:#eaf3ff;--done:#1f8a4c;--done-bg:#e9f7ef;
+  --fail:#c0322b;--fail-bg:#fdecec;--park:#7a8291;--new:#7b3fe4;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#12151b;--panel:#1b2029;--ink:#e6e9ef;--muted:#9aa3b2;--line:#2b313c;--chip:#262c37;
+  --wait:#f3a35b;--wait-bg:#33261a;--work:#6aa8ff;--work-bg:#182638;--done:#5fd08f;--done-bg:#16291f;
+  --fail:#ff7b73;--fail-bg:#351c1c;--park:#8b93a1;--new:#b48cff;}}
+:root[data-theme="dark"]{
+  --bg:#12151b;--panel:#1b2029;--ink:#e6e9ef;--muted:#9aa3b2;--line:#2b313c;--chip:#262c37;
+  --wait:#f3a35b;--wait-bg:#33261a;--work:#6aa8ff;--work-bg:#182638;--done:#5fd08f;--done-bg:#16291f;
+  --fail:#ff7b73;--fail-bg:#351c1c;--park:#8b93a1;--new:#b48cff;}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif}
+header{position:sticky;top:0;z-index:5;background:var(--panel);border-bottom:1px solid var(--line);padding:10px 16px;display:flex;flex-wrap:wrap;gap:10px;align-items:center}
+header h1{font-size:16px;margin:0 8px 0 0}
+.muted{color:var(--muted)} .small{font-size:12px}
+.chip{display:inline-block;background:var(--chip);border-radius:10px;padding:1px 8px;font-size:12px;margin:1px 3px 1px 0;white-space:nowrap}
+.chip.bad{background:var(--fail-bg);color:var(--fail)}
+.count{font-weight:600}
+select,input{background:var(--panel);color:var(--ink);border:1px solid var(--line);border-radius:6px;padding:4px 6px;font:inherit}
+main{max-width:1400px;margin:0 auto;padding:12px 16px 60px}
+section{margin:18px 0}
+section>h2{font-size:14px;text-transform:uppercase;letter-spacing:.04em;margin:0 0 8px;display:flex;gap:8px;align-items:baseline}
+section>h2 .hint{text-transform:none;letter-spacing:0;font-weight:400;color:var(--muted);font-size:12px}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(380px,1fr));gap:10px}
+@media (max-width:600px){.grid{grid-template-columns:1fr}}
+.card{background:var(--panel);border:1px solid var(--line);border-left:4px solid var(--park);border-radius:8px;padding:10px 12px;min-width:0}
+.card.waiting,.card.asked{border-left-color:var(--wait)} .card.working{border-left-color:var(--work)}
+.card.finished{border-left-color:var(--done)} .card.failed{border-left-color:var(--fail)}
+.card h3{font-size:14px;margin:0;display:flex;gap:6px;align-items:baseline;flex-wrap:wrap}
+.card .meta{font-size:12px;color:var(--muted);margin:2px 0 6px}
+.q{background:var(--wait-bg);border-radius:6px;padding:6px 8px;margin:6px 0}
+.res{background:var(--done-bg);border-radius:6px;padding:6px 8px;margin:6px 0}
+.doing{background:var(--work-bg);border-radius:6px;padding:6px 8px;margin:6px 0}
+.lbl{font-size:11px;font-weight:600;text-transform:uppercase;color:var(--muted);margin-top:6px}
+ul{margin:2px 0 0 18px;padding:0}
+code,.path{font:12px ui-monospace,SFMono-Regular,Menlo,monospace;word-break:break-all}
+.cmd{display:flex;gap:6px;align-items:center;margin-top:8px}
+.cmd code{background:var(--chip);padding:2px 6px;border-radius:4px;flex:1}
+button{background:var(--chip);color:var(--ink);border:1px solid var(--line);border-radius:5px;font-size:12px;padding:2px 8px;cursor:pointer}
+.new{color:var(--new);font-weight:700;font-size:11px}
+details>summary{cursor:pointer;color:var(--muted);font-size:12px}
+pre.tail{white-space:pre-wrap;font:12px ui-monospace,Menlo,monospace;background:var(--chip);padding:6px;border-radius:6px;max-height:260px;overflow:auto}
+.feed{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:6px 12px}
+.feed div{padding:4px 0;border-bottom:1px solid var(--line);display:flex;gap:10px}
+.feed div:last-child{border:0}
+.feed .t{color:var(--muted);font-size:12px;min-width:92px}
+.st-done{color:var(--done)} .st-blocked{color:var(--wait)} .st-failed{color:var(--fail)}
+.prog{border-left-color:var(--work)}
+.road{font-size:11px;font-weight:600;border-radius:10px;padding:1px 8px}
+.road.left{background:var(--work-bg);color:var(--work)} .road.end{background:var(--wait-bg);color:var(--wait)}
+.road.wait{background:var(--chip);color:var(--muted)}
+.strip{display:flex;gap:3px;flex-wrap:wrap;margin:6px 0}
+.strip span{min-width:30px;text-align:center;border-radius:4px;padding:1px 4px;font-size:12px;background:var(--chip);cursor:default}
+.strip .g-ok{background:var(--done-bg);color:var(--done)} .strip .g-run{background:var(--work-bg);color:var(--work)}
+.strip .g-block{background:var(--fail-bg);color:var(--fail)} .strip .g-wait{background:var(--wait-bg);color:var(--wait)}
+.stale{color:var(--fail);font-size:11px}
+.empty{color:var(--muted);font-style:italic}
+table.qt{border-collapse:collapse;width:100%;background:var(--panel);border:1px solid var(--line);border-radius:8px;font-size:13px}
+table.qt th{font-size:11px;text-transform:uppercase;color:var(--muted);text-align:left;padding:6px 8px;border-bottom:1px solid var(--line)}
+table.qt td{padding:6px 8px;border-bottom:1px solid var(--line);vertical-align:top}table.qt tr:last-child td{border-bottom:0}
+table.qt td.st{max-width:460px}.wrap{overflow-x:auto}
+.need button,.prob button{font-size:11px;padding:1px 7px;margin-left:4px}.need .age{font-size:12px;color:var(--muted);white-space:nowrap}
+.banner{background:var(--fail-bg);color:var(--fail);border:1px solid var(--fail);border-radius:8px;padding:6px 10px;margin:6px 0;font-weight:600}
+.card.quiet{opacity:.55}.tri{font-size:11px;font-weight:700;color:var(--done)}
+.need{background:var(--panel);border:1px solid var(--line);border-left:4px solid var(--wait);border-radius:8px;padding:6px 10px;margin:5px 0;display:flex;gap:10px;align-items:baseline;flex-wrap:wrap}
+.need .what{flex:1;min-width:260px}.need .kind{font-size:11px;font-weight:700;text-transform:uppercase;color:var(--wait)}
+.item{border-left-color:var(--work)}.item.feature{border-left-color:var(--new)}
+.bar3{display:flex;height:8px;border-radius:4px;overflow:hidden;margin:6px 0 2px;background:var(--chip)}
+.bar3 span{display:block}.prob{background:var(--panel);border:1px solid var(--line);border-left:4px solid var(--fail);border-radius:8px;padding:6px 10px;margin:5px 0}
+.grp{font-weight:700;margin-top:4px}.feed .grp{display:block;padding-top:6px;border:0}
+</style>
+<script>/*__MOUNT_LINKS__*/</script>
+</head>
+<body>
+<header>
+  <h1>Work dashboard</h1>
+  <span class="muted small">built __GENERATED__ · <span id="ago"></span></span>
+  <span id="hosts"></span>
+  <span id="counts"></span>
+  <label class="small">changes since
+    <select id="since">
+      <option value="visit">my last visit</option><option value="2">2 h</option>
+      <option value="8">8 h</option><option value="24">24 h</option><option value="72">3 days</option><option value="at">since a time today…</option>
+    </select><input type="time" id="sinceAt" style="display:none"></label>
+  <input id="q" placeholder="filter (name, program, repo)" size="24">
+</header>
+<div id="itemview" style="display:none"></div>
+<main id="statusmain">
+  <div id="banner"></div>
+  <div id="machines" class="small" style="margin:6px 0"></div>
+  <section><h2>Needs you <span class="hint">longest waiting first · Done hides it · Snooze brings it back in 24 h or on new activity · to answer a stopped session, use <code>claude agents</code> on its machine</span></h2><div id="needs"></div>
+    <details style="margin-top:4px"><summary id="hidden-sum">Done and snoozed</summary><div id="needs-hidden"></div></details></section>
+  <section><h2>Questions and features <span class="hint">click a title for its page</span></h2><div class="wrap"><table class="qt" id="qtable"></table></div></section>
+  <section><h2>What changed <span class="hint" id="awayhint"></span> <button onclick="markSeen()">mark all seen</button></h2><div class="feed" id="feed"></div></section>
+  <section><h2>Problems spotted <span class="hint">for discussion · your triage saves to the mount on the served page (this browser only when opened as a file)</span></h2><div id="problems"></div>
+    <details style="margin-top:4px"><summary id="ptri-sum">Triaged</summary><div id="problems-done"></div></details></section>
+  <section><details><summary id="sess-sum">Sessions</summary>
+    <div id="unattached" style="margin-top:8px"></div>
+    <h3 class="small">Waiting on you</h3><div class="grid" id="b-waiting"></div>
+    <details style="margin-top:8px"><summary id="orphan-sum">Questions left by sessions that have since exited</summary><div class="grid" id="b-orphan" style="margin-top:8px"></div></details>
+    <h3 class="small">Working now</h3><div class="grid" id="b-working"></div>
+    <h3 class="small">Finished in the last 3 days</h3><div class="grid" id="b-finished"></div>
+    <details style="margin-top:8px"><summary>Parked (idle over 3 days, or exited)</summary><div class="grid" id="b-parked" style="margin-top:8px"></div></details>
+  </details></section>
+  <section><details><summary>Programs (stage strips from each brief)</summary><div class="grid" id="programs" style="margin-top:8px"></div></details></section>
+  <section><details><summary>Board items not tied to any brief</summary><div class="grid" id="unowned" style="margin-top:8px"></div></details></section>
+</main>
+<script>
+const D = __DATA__;
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const T = s => s ? Date.parse(s) : 0;
+const now = Date.now();
+function ago(ms){ if(!ms) return "?"; const m=Math.round((now-ms)/60000); if(m<60) return m+" min ago"; const h=Math.round(m/60); if(h<48) return h+" h ago"; return Math.round(h/24)+" d ago"; }
+
+// "Last visit" = the last heartbeat before a gap of 10+ minutes, so auto-refresh doesn't reset it.
+let prevVisit = 0;
+try {
+  const hb = +localStorage.getItem("wd:hb") || 0;
+  prevVisit = +localStorage.getItem("wd:prev") || 0;
+  if (hb && now - hb > 10*60000) { prevVisit = hb; localStorage.setItem("wd:prev", hb); }
+  const beat = () => localStorage.setItem("wd:hb", Date.now());
+  beat(); document.addEventListener("visibilitychange", () => { if (document.visibilityState === "hidden") beat(); });
+  addEventListener("pagehide", beat);
+} catch(e) {}
+function sinceMs(){ const v=$("since").value; if(v==="visit") return prevVisit || now-8*3600e3;
+  if(v==="at"){ const t=$("sinceAt").value; if(!t) return now-8*3600e3; const d=new Date(); const [hh,mm]=t.split(":"); d.setHours(+hh,+mm,0,0); return d.getTime(); }
+  return now - (+v)*3600e3; }
+function markSeen(){ prevVisit=Date.now(); try{localStorage.setItem("wd:prev",prevVisit)}catch(e){} $("since").value="visit"; render(); }
+
+$("ago").textContent = ago(T(D.generated_at));
+$("hosts").innerHTML = D.hosts.map(h => `<span class="chip ${h.stale||!h.liveness_ok?'bad':''}" title="snapshot ${esc(h.written_at)}">${esc(h.host)} · ${h.n} · ${h.age_min} min${h.liveness_ok?'':' · no live list'}</span>`).join("") || '<span class="chip bad">no host snapshots</span>';
+const S = D.sessions;
+const progTitle = Object.fromEntries(D.briefs.map(b => [b.slug, b.title]));
+
+function card(s){
+  const p = s.parsed || {}; const upd = T(s.updated_at || s.last_text_at);
+  const isNew = upd > sinceMs();
+  const head = `<h3>${isNew?'<span class="new">NEW</span>':''}${esc(s.name)}</h3>
+    <div class="meta">${esc(s.host)} · ${esc(s.id)} · ${esc(s.live)} · ${ago(upd)}${s.branch&&s.branch!=="HEAD"?` · ${esc(s.branch)}`:''}
+    ${s.program?` · <span class="chip">${esc(s.program)}</span>`:''}</div>`;
+  let body = "";
+  if (s.needs) body += `<div class="q"><b>Asking:</b> ${esc(s.needs)}</div>`;
+  else if (p.needs_input) body += `<div class="q"><b>Needs:</b> ${esc(p.needs_input)}</div>`;
+  else if (s.bucket==="asked" && p.close_yours) body += `<div class="q"><b>Yours:</b> ${esc(p.close_yours)}</div>`;
+  if (p.blocked_on_user?.length && s.bucket!=="working") body += `<div class="lbl">Blocked on you</div><ul>${p.blocked_on_user.map(x=>`<li>${esc(x)}</li>`).join("")}</ul>`;
+  if (s.bucket==="working") body += `<div class="doing">${esc(s.detail || "working")}</div>`;
+  const res = s.result || p.result || p.failed;
+  if (res && s.bucket!=="working") body += `<div class="res">${esc(res)}</div>`;
+  else if (!res && s.bucket!=="working" && s.detail) body += `<div class="muted small">${esc(s.detail)}</div>`;
+  const next = p.next?.length ? p.next : (p.close_next ? [p.close_next] : []);
+  if (next.length) body += `<div class="lbl">Next</div><ul>${next.map(x=>`<li>${esc(x)}</li>`).join("")}</ul>`;
+  if (p.mount_paths?.length) body += `<div class="lbl">Where things are</div>${p.mount_paths.slice(0,4).map(x=>`<div class="path">${esc(x)}</div>`).join("")}`;
+  if (s.artifacts?.length) body += `<div class="lbl">Pages</div>${s.artifacts.map(x=>`<div><a href="${esc(x)}">${esc(x)}</a></div>`).join("")}`;
+  if (s.intent) body += `<details><summary>original ask</summary><div class="small">${esc(s.intent)}</div></details>`;
+  if (s.last_text_tail) body += `<details><summary>end of last message</summary><pre class="tail">${esc(s.last_text_tail)}</pre></details>`;
+  const cmd = (s.kind==="background" && s.live!=="gone") ? `claude attach ${s.id}` : `cd ${s.cwd||"~/code"} && claude --resume ${s.session_id}`;
+  body += `<div class="cmd"><code>${esc(cmd)}</code><button onclick="cp(this)">copy</button><span class="small muted">on ${esc(s.host)}</span></div>`;
+  const quiet = s.bucket==="working" && now-upd > 3600e3;
+  return `<div class="card ${s.bucket} ${quiet?'quiet':''}" title="${quiet?'no output for '+ago(upd).replace(' ago',''):''}" data-q="${esc((s.name+' '+(s.program||'')+' '+(s.cwd||'')+' '+(s.branch||'')).toLowerCase())}">${head}${body}</div>`;
+}
+function cp(btn){ const t=btn.previousElementSibling.textContent;
+  (navigator.clipboard?navigator.clipboard.writeText(t):Promise.reject()).then(()=>btn.textContent="copied",()=>{const r=document.createRange();r.selectNode(btn.previousElementSibling);getSelection().removeAllRanges();getSelection().addRange(r);btn.textContent="selected";}); }
+
+const glyphClass = g => ({"✎":"g-wait","✅":"g-ok","●":"g-ok","▶":"g-run","◐":"g-run","⛔":"g-block","⏸":"g-wait","⚠":"g-wait"}[g]||"");
+function progCard(b){
+  const live = S.filter(s => b.sessions.includes(s.id));
+  const roadCls = b.road==="decided work left"?"left":(b.road==="end of decided work"||b.road==="stalled")?"end":"wait";
+  const strip = b.stages.map(st=>`<span class="${glyphClass(st.glyph)}" title="${esc(st.n+'. '+st.name+' — '+st.status)}">${esc(st.n)} ${esc(st.glyph)}</span>`).join("");
+  const nowStage = b.stages.filter(st=>"▶◐⚠".includes(st.glyph)).map(st=>`<li>${esc(st.n)}. ${esc(st.name)} <span class="muted small">— ${esc(st.status.slice(0,90))}</span></li>`).join("");
+  const board = b.board.map(i=>`<li>${esc(i.glyph)} ${esc(i.name)} <span class="muted small">(${esc(i.repo)}, ${esc(i.date||'?')})</span>${i.stale?` <span class="stale">stale ${i.age} d</span>`:''}${i.next?`<div class="small muted">${esc(i.next.slice(0,220))}</div>`:''}</li>`).join("");
+  return `<div class="card prog" data-q="${esc((b.slug+' '+b.title).toLowerCase())}">
+    <h3>${esc(b.title)}</h3>
+    <div class="meta">${esc(b.slug)} · brief updated ${esc(b.updated||'?')} · last decision ${esc(b.last_decision||'?')} · <span class="road ${roadCls}">${esc(b.road)}</span></div>
+    <div class="strip">${strip}</div>
+    ${nowStage?`<div class="lbl">In flight</div><ul>${nowStage}</ul>`:''}
+    ${live.length?`<div class="lbl">Sessions on it</div><ul>${live.map(s=>`<li>${esc(s.name)} <span class="muted small">${esc(s.bucket)} · ${esc(s.host)}</span></li>`).join("")}</ul>`:'<div class="lbl">Sessions on it</div><div class="empty small">none recent</div>'}
+    ${b.drafts.length?`<div class="lbl">Draft specs waiting on your read</div><ul>${b.drafts.map(x=>`<li>${esc(x)}</li>`).join("")}</ul>`:''}
+    ${b.unplanned.length?`<div class="lbl">Future work, no plan yet</div><ul>${b.unplanned.map(x=>`<li>${esc(x)}</li>`).join("")}</ul>`:''}
+    ${board?`<details><summary>${b.board.length} board item(s)${b.board.some(i=>i.stale)?' · some stale':''}</summary><ul>${board}</ul></details>`:''}
+    ${b.done_when.length?`<details><summary>done when</summary><ul>${b.done_when.map(x=>`<li>${esc(x)}</li>`).join("")}</ul></details>`:''}
+  </div>`;
+}
+
+function render(){
+  const since = sinceMs();
+  $("awayhint").textContent = $("since").value==="visit" ? (prevVisit?`since ${new Date(prevVisit).toLocaleString()}`:"first visit on this browser: showing 8 h") : "";
+  const ev = [];
+  S.forEach(s => (s.events||[]).forEach(e => { if (T(e.at) > since) ev.push({...e, s}); }));
+  ev.sort((a,b)=>T(b.at)-T(a.at));
+  // Grouped by question/feature; within it one row per session (latest update, earlier folded).
+  const groups = new Map();
+  ev.forEach(e => { const k=e.s.session_id||e.s.id; if(!groups.has(k)) groups.set(k, []); groups.get(k).push(e); });
+  const byItem = new Map();
+  [...groups.values()].forEach(g => { const k=g[0].s.item||"_other"; if(!byItem.has(k)) byItem.set(k,[]); byItem.get(k).push(g); });
+  const when = e => new Date(T(e.at)).toLocaleString([], {month:"2-digit",day:"2-digit",hour:"2-digit",minute:"2-digit"});
+  const word = e => e.state==="done"?"finished":e.state==="blocked"?"asked you":"failed";
+  const rowOf = g => { const e=g[0];
+    const older = g.slice(1).map(o=>`<div class="small"><span class="t">${when(o)}</span>${esc(word(o))} — ${esc(o.detail)}</div>`).join("");
+    return `<div><span class="t">${when(e)}</span><span class="st-${e.state}">${word(e)}</span><span><span class="muted small">${esc(e.s.name)} (${esc(e.s.live)})</span> — ${esc(e.detail)}${older?`<details><summary>${g.length-1} earlier update(s)</summary>${older}</details>`:''}</span></div>`; };
+  const itemsById = Object.fromEntries((D.items||[]).map(i=>[i.id,i]));
+  const keys=[...byItem.keys()].sort((a,b)=>(a==="_other")-(b==="_other"));
+  $("feed").innerHTML = byItem.size ? keys.map(k=>`<div class="grp">${k==="_other"?"Not tied to a question or feature":esc(itemsById[k].title)}</div>`+byItem.get(k).map(rowOf).join("")).join("") : '<div class="empty">nothing finished or asked in this window</div>';
+  renderItems(since);
+  const by = k => S.filter(s => k.includes(s.bucket)).sort((a,b)=>T(b.updated_at)-T(a.updated_at));
+  const fill = (id, list) => $(id).innerHTML = list.length ? list.map(card).join("") : '<div class="empty">none</div>';
+  const W = by(["waiting","asked"]);
+  fill("b-waiting", W.filter(s=>s.live!=="gone"));
+  const orphans = W.filter(s=>s.live==="gone"); $("orphan-sum").textContent = `Questions left by sessions that have since exited (${orphans.length})`;
+  $("b-orphan").innerHTML = orphans.length ? orphans.map(card).join("") : '<div class="empty">none</div>'; fill("b-working", by(["working"]));
+  fill("b-finished", by(["finished","failed"])); fill("b-parked", by(["parked"]));
+  const order = {"end of decided work":0,"stalled":1,"decided work left":2,"waiting or blocked":3,"no stage table":4};
+  $("programs").innerHTML = D.briefs.slice().sort((a,b)=>(b.sessions.length>0)-(a.sessions.length>0)||order[a.road]-order[b.road]).map(progCard).join("");
+  $("unowned").innerHTML = D.unowned_board.map(i=>`<div class="card"><h3>${esc(i.glyph)} ${esc(i.name)}</h3><div class="meta">${esc(i.repo)} · program ${esc(i.program)} · ${esc(i.date||'?')}${i.stale?` · <span class="stale">stale ${i.age} d</span>`:''}</div><div class="small">${esc(i.next.slice(0,300))}</div></div>`).join("") || '<div class="empty">none</div>';
+  const c = k => S.filter(s=>k.includes(s.bucket)).length;
+  $("counts").innerHTML = `<span class="chip">waiting on you <span class="count">${c(["waiting","asked"])}</span></span><span class="chip">working <span class="count">${c(["working"])}</span></span><span class="chip">just finished <span class="count">${c(["finished","failed"])}</span></span><span class="chip">new since ${$("since").value==="visit"?"visit":$("since").value+" h"} <span class="count">${S.filter(s=>T(s.updated_at)>since && s.bucket!=="parked").length}</span></span>`;
+  filt();
+}
+function lsGet(k,d){try{return JSON.parse(localStorage.getItem(k)||"null")??d}catch(e){return d}}
+function lsSet(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}}
+function hkey(s){let x=0;for(const c of s)x=(x*31+c.charCodeAt(0))|0;return "k"+(x>>>0).toString(36)}
+const NEEDMETA={};   // key -> {item, decision, text}: stored with each click so sessions can read what Phil closed
+function needAct(k,act){const st=lsGet("wd:needs",{});st[k]={act,at:Date.now(),...(NEEDMETA[k]||{})};lsSet("wd:needs",st);render()}
+function needUndo(k){const st=lsGet("wd:needs",{});delete st[k];lsSet("wd:needs",st);render()}
+const PROBTEXT={};
+function probAct(k,act){const st=lsGet("wd:probs",{});st[k]={act,at:Date.now(),text:PROBTEXT[k]||""};lsSet("wd:probs",st);render()}
+function probUndo(k){const st=lsGet("wd:probs",{});delete st[k];lsSet("wd:probs",st);render()}
+const RUNICON={"waiting on Phil":"🟠 waiting on you","done":"✓ done","running":"▶ running","running, job alive":"▶ running (quiet, job alive)","quiet, can't check the job":"⏸ quiet, can't check the job","possibly died":"⚠ possibly died","failed":"✗ failed","status unknown":"? status unknown","no readback yet":"○ no readback yet","readback not on the mount":"? readback not on the mount"};
+function runsHtml(it){ const R=it.runs_status||[]; if(!R.length) return "";
+  return `<div class="small" style="margin-top:4px">${R.map(r=>`<div style="${['possibly died','failed'].includes(r.state)?'color:var(--fail)':r.state.startsWith('running')?'color:var(--work)':''}"><b>${RUNICON[r.state]||esc(r.state)}</b> · ${esc(r.label)} <span class="muted">· ${esc(r.machine||'?')}${r.newest?' · last written '+ago(T(r.newest)):''}</span>${r.summary?`<div class="muted">${esc(r.summary)}</div>`:''}</div>`).join("")}</div>`; }
+function renderMachines(){
+  const rep = D.hosts.map(h=>{ const m=h.machine||{}; const g=m.gpus; const jobs=(m.jobs||[]);
+    return `<span class="chip ${h.stale?'bad':''}" title="${esc(jobs.map(j=>j.hours+' h · '+j.cmd).join('\n'))}"><b>${esc(h.host)}</b> · load ${m.load?m.load[0]:'?'}/${m.cores||'?'} cores${g?` · GPUs ${g.map(x=>x.util+'%').join(' ')}`:''} · ${jobs.length} long job${jobs.length===1?'':'s'}${m.home_free_gb!=null?` · ${m.home_free_gb} GB free`:''}</span>`; });
+  const known = new Set(D.hosts.map(h=>h.host));
+  const silent = [...new Set((D.items||[]).flatMap(i=>(i.runs_status||[]).map(r=>r.machine)).filter(x=>x && !known.has(x)))];
+  $("machines").innerHTML = `<b>Machines:</b> ${rep.join("")}${silent.length?` <span class="muted">· not reporting (runs judged from the mount only): ${silent.map(esc).join(", ")}</span>`:''}`;
+}
+function renderItems(since){
+  renderMachines();
+  const I = D.items||[]; const sById = Object.fromEntries(S.map(s=>[s.id,s]));
+  const href = p => p ? `href="${esc(p)}"` : "";
+  const lastChange = it => Math.max(T(it.file_updated), ...it.sessions.map(id=>T((sById[id]||{}).updated_at)));
+  // banner: stale machines or stale page
+  const bad=[]; D.hosts.forEach(h=>{ if(h.stale) bad.push(`${h.host} last reported ${h.age_min} min before this page was built`); if(!h.liveness_ok) bad.push(`${h.host}: live-session list unavailable, so busy/waiting may be wrong`); });
+  if(now-T(D.generated_at) > 15*60000) bad.push(`this page was built ${ago(T(D.generated_at))}: the refresh may have stopped`);
+  if(!D.hosts.length) bad.push("no machine is reporting sessions");
+  $("banner").innerHTML = bad.map(x=>`<div class="banner">⚠ ${esc(x)}</div>`).join("");
+  // Needs you
+  const st = lsGet("wd:needs",{}); const shown=[], hidden=[];
+  const add = (key, kind, title, page, what, sinceT, extra, itemId, decId) => {
+    NEEDMETA[key] = {item:itemId||null, decision:decId||null, kind, text:what};
+    const s0 = st[key]; const it = I.find(i=>i.id===itemId);
+    const activity = it ? lastChange(it) : 0;
+    let hide = false, why = "";
+    if (s0 && s0.act==="done") { hide=true; why="done"; }
+    if (s0 && s0.act==="snooze" && Date.now()-s0.at < 24*3600e3 && !(activity > s0.at)) { hide=true; why="snoozed"; }
+    const row = `<div class="need"><span class="kind">${esc(kind)}</span><span class="what">${page!==null?`<a ${href(page)}><b>${esc(title)}</b></a>`:`<b>${esc(title)}</b>`}<br>${esc(what)}</span>${extra||""}<span class="age">${sinceT?(kind.startsWith("session")||kind.startsWith("run")||kind==="decision"||kind==="read"?"waiting "+ago(sinceT).replace(" ago",""):"listed "+ago(sinceT)):""}</span>${hide?`<button onclick="needUndo('${key}')">bring back</button> <span class="small muted">${why}</span>`:`<button onclick="needAct('${key}','done')">Done</button><button onclick="needAct('${key}','snooze')">Snooze</button>`}</div>`;
+    (hide?hidden:shown).push({t:sinceT||now,row});
+  };
+  I.forEach(it => {
+    (it.needs_you||[]).forEach(([kind,what,since,decId]) => add(decId?`${it.id}:${decId}`:`${it.id}:${hkey(what)}`, kind, it.title, it.page, what, since?T(since):T(it.file_updated), "", it.id, decId));
+    it.sessions.map(id=>sById[id]).filter(s=>s && s.bucket==="waiting" && s.live!=="gone").forEach(s => {
+      const ev=(s.events||[]).filter(e=>e.state==="blocked").pop();
+      add(hkey(s.id+(s.needs||"")), "session stopped on a question", it.title, it.page, s.needs||s.parsed?.needs_input||"", ev?T(ev.at):T(s.updated_at), `<code>${esc(s.name)} · ${esc(s.host)}</code>`, it.id); });
+  });
+  S.filter(s=>!s.item && s.bucket==="waiting" && s.live!=="gone").forEach(s=>{ const ev=(s.events||[]).filter(e=>e.state==="blocked").pop();
+    add(hkey(s.id+(s.needs||"")), "session stopped on a question", s.name+" (not tied to a question)", null, s.needs||"", ev?T(ev.at):T(s.updated_at), `<code>${esc(s.host)}</code>`, null); });
+  shown.sort((a,b)=>a.t-b.t); // longest waiting first
+  if ((D.drafts||[]).length) shown.push({t:now,row:`<div class="need"><span class="kind">approve wording</span><span class="what"><b>${D.drafts.length} question/feature page(s) still show draft wording</b><br><span class="small muted">open a page and press Approve wording, or edit it via its 💬: ${D.drafts.slice(0,5).map(esc).join(" · ")}${D.drafts.length>5?" …":""}</span></span></div>`});
+  const TOP=8; const extra=shown.length>TOP?shown.slice(TOP):[];
+  $("needs").innerHTML = (shown.slice(0,TOP).map(x=>x.row).join("") || '<div class="empty">nothing needs you</div>')
+    + (extra.length?`<details><summary>${extra.length} more waiting on you</summary>${extra.map(x=>x.row).join("")}</details>`:"");
+  $("needs-hidden").innerHTML = hidden.map(x=>x.row).join("") || '<div class="empty small">none</div>';
+  $("hidden-sum").textContent = `Done and snoozed (${hidden.length})`;
+  // compact table, most recently changed first
+  const rows = I.slice().sort((a,b)=>lastChange(b)-lastChange(a)).map(it => {
+    const ss = it.sessions.map(id=>sById[id]).filter(s=>s && s.bucket!=="parked");
+    const lc = lastChange(it); const isNew = lc > since; const stale = now-lc > 7*86400e3;
+    const c = it.cells; const tot = c ? c.done+c.running+c.not_run : 0;
+    const bar = c ? `<div class="bar3" style="width:140px"><span style="width:${100*c.done/tot}%;background:var(--done)"></span><span style="width:${100*c.running/tot}%;background:var(--new)"></span><span style="width:${100*c.not_run/tot}%;background:var(--wait);opacity:.35"></span></div><div class="small muted">${c.done}/${tot} in · ${c.not_run} not run</div>` : '<span class="small muted">—</span>';
+    const icons = ss.map(s=>s.bucket==="working"?"🔵":["waiting","asked"].includes(s.bucket)?"🟠":"✓").join("");
+    const nn=(it.needs_you||[]).length;
+    return `<tr data-q="${esc((it.title+' '+it.program).toLowerCase())}"><td>${isNew?'<span class="new">NEW</span> ':''}<span class="chip">${esc(it.kind)}</span><br><a ${href(it.page)}><b>${esc(it.title)}</b></a><div class="small muted">${esc(it.program)}</div></td>
+      <td class="st">${esc(it.status)}${runsHtml(it)}${it.owed?`<div class="small muted">owed: ${esc(it.owed)}</div>`:''}</td><td>${bar}</td>
+      <td>${nn?`<b style="color:var(--wait)">${nn}</b>`:'<span class="muted">0</span>'}</td><td title="${esc(ss.map(s=>s.name+' ('+s.bucket+')').join('\n'))}">${icons||'<span class="small muted">none</span>'}</td>
+      <td class="small ${stale?'stale':''}">${ago(lc)}${stale?'<br>nothing moved in a week':''}</td></tr>`; }).join("");
+  $("qtable").innerHTML = `<tr><th>question or feature</th><th>where it stands</th><th>results</th><th>needs you</th><th>sessions</th><th>last change</th></tr>`+rows;
+  // problems with triage
+  const ps = lsGet("wd:probs",{}); const open=[], done=[];
+  (D.problems||[]).forEach(p=>{ const k=hkey(p.replace(/^\[daily review [0-9-]+\]\s*/,"")); PROBTEXT[k]=p; const s0=ps[k];
+    const snoozed = s0 && s0.act==="snooze" && Date.now()-s0.at<24*3600e3;
+    if (s0 && (s0.act!=="snooze"||snoozed)) done.push(`<div class="prob"><span class="tri">${esc(s0.act==="accept"?"accepted":s0.act==="dismiss"?"dismissed":s0.act==="dup"?"duplicate":"snoozed")}</span> ${esc(p)} <button onclick="probUndo('${k}')">undo</button></div>`);
+    else open.push(`<div class="prob">${esc(p)}<div><button onclick="probAct('${k}','accept')">accept: worth fixing</button><button onclick="probAct('${k}','dismiss')">dismiss</button><button onclick="probAct('${k}','dup')">duplicate</button><button onclick="probAct('${k}','snooze')">snooze</button></div></div>`); });
+  $("problems").innerHTML = open.join("") || '<div class="empty">none open</div>';
+  $("problems-done").innerHTML = done.join("") || '<div class="empty small">none</div>';
+  $("ptri-sum").textContent = `Triaged (${done.length})`;
+  const un = S.filter(s=>!s.item && s.bucket!=="parked");
+  $("unattached").innerHTML = un.length ? `<div class="prob" style="border-left-color:var(--wait)"><b>${un.length} recent session(s) not tied to any question or feature:</b> ${un.map(s=>esc(s.name)).join(" · ")}</div>` : "";
+  $("sess-sum").textContent = `Sessions: ${S.filter(s=>s.bucket==="working").length} working · ${S.filter(s=>["waiting","asked"].includes(s.bucket)).length} waiting on you · ${S.filter(s=>s.bucket==="finished").length} finished recently`;
+  // quiet working sessions go grey
+  document.querySelectorAll(".card.working").forEach(c=>{});
+}
+function filt(){ const q=$("q").value.toLowerCase(); document.querySelectorAll(".card, table.qt tr[data-q]").forEach(c=>c.style.display=!q||(c.dataset.q||"").includes(q)?"":"none"); }
+$("since").onchange = ()=>{ $("sinceAt").style.display=$("since").value==="at"?"":"none"; render(); }; $("sinceAt").onchange = render; $("q").oninput = filt;
+render();
+// ---- item view: on the served site, question/feature pages open inside this page so the review server saves comments
+(function(){
+  const st=document.createElement("style"); st.textContent=D.item_css||""; document.head.appendChild(st);
+  const sc=document.createElement("script"); sc.textContent="(function(){"+(D.item_js||"")+"\n;window.initItem=initItem;window.pop=pop;window.approve=approve;window.acceptDraft=acceptDraft;})();"; document.head.appendChild(sc);
+})();
+const SERVED = location.protocol.startsWith("http");
+function route(){
+  const m=location.hash.match(/^#i=([\w.-]+)/); const v=$("itemview"), mainEl=$("statusmain");
+  if(m && D.item_html[m[1]]){ v.innerHTML=D.item_html[m[1]]; v.style.display=""; mainEl.style.display="none"; window.scrollTo(0,0);
+    const it=(D.items||[]).find(i=>i.id===m[1]); initItem(m[1], {title:it.title,why:it.why,answer:it.answer}, (D.item_comments||{})[m[1]]||{}, it.draft_seen||null); }
+  else { v.style.display="none"; v.innerHTML=""; mainEl.style.display=""; }
+}
+document.addEventListener("click", e=>{ const a=e.target.closest("a[href]"); if(!a||!SERVED) return;
+  const h=a.getAttribute("href"); const mm=h&&h.match(/^([\w.-]+)\.html$/);
+  if(h==="index.html"){ e.preventDefault(); location.hash=""; return; }
+  if(mm && D.item_html[mm[1]]){ e.preventDefault(); location.hash="i="+mm[1]; } });
+window.addEventListener("hashchange", route); route();
+// Reload every 3 minutes while visible, to pick up a rebuilt page.
+setInterval(()=>{ if(document.visibilityState==="visible" && !location.hash.startsWith("#i=") && !document.querySelector("textarea:focus")) location.reload(); }, 180000);
+</script>
+</body>
+</html>

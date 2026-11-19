@@ -57,7 +57,8 @@ JSON, one file per item. **Who may change a field matters**: Phil owns the meani
   "runs": [{"label": "Ladder test passes", "machine": "phil-sllm-02",
             "readback": "planning/vista_eval_vlm/session/...-readback.md",
             "job": "alo-run",                 // text to look for in the machine's job list
-            "quiet_h": 6}],                   // how long it may write nothing while the job is alive
+            "quiet_h": 6,                     // how long it may write nothing while the job is alive
+            "next": "Score against LOCKED_X.txt; start from <originator readback>"}],   // result goes to: a test/readback, never a session
   "code": [{"what": "Agent over time", "where": "vista_eval_vlm feat/died-ehr-over-time",
             "state": "unmerged", "used_by": ["agents-vs-embeddings"]}],   // throwaway | unmerged | permanent
   "match": ["agents-vs-embeddings"],       // session names/asks that belong here (until hand-offs name the item)

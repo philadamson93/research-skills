@@ -179,7 +179,7 @@ For each in-flight task advanced this session, write (or update) a state doc at 
 If the work belongs to a question or feature (`/mnt/su-vista-uscentral1/chaudhari_lab/phil/planning/dashboard/items/<id>.json`),
 update the parts sessions own, following the format in `research-skills/scripts/dashboard/README.md`:
 fill the result cells, findings or checklist steps you produced (with session name and commit), rewrite
-`status` in one plain line, add or close `decisions`, and list any run you started under `runs` (its readback must be on the mount, under `planning/<repo>/session/`, not a repo's `docs/session/`, which other machines can't read). Never edit
+`status` in one plain line, add or close `decisions`, and list any run you started under `runs`, with a `next` line saying what happens to its result and which test or readback defines that (name files, never a session, since sessions exit) (its readback must be on the mount, under `planning/<repo>/session/`, not a repo's `docs/session/`, which other machines can't read). Never edit
 `title`, `why` or `answer` directly: put proposed wording under `draft` (with `by` and `at`), and when you
 filled a cell, draft the updated answer there. If no item fits, write a new one with no `approved` field
 (a draft for Phil). Plain English only: no run labels or code names as the subject of a sentence.

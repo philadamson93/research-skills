@@ -8,8 +8,12 @@ the line `Reference: docs/claude_ops.md`.
 1. **Open the session.** `/next` if no task is named. Check the start-of-session items below.
    Coming back after time away, across all sessions: `/dashboard` (who is working, what's waiting
    on me, what finished and where its results are, which programs need a direction). In your first
-   reply, name the question or feature this work belongs to (`planning/dashboard/items/<id>.json`);
-   if none fits, propose one as a draft. Quick one-off lookups may stay unattached.
+   reply, name the program, the question or feature (`planning/dashboard/items/<id>.json`) and the
+   experiments this work touches. Find them by searching the items and the mount readbacks for what
+   was named (a figure, model, task or run), since one figure or result often draws on several
+   items. If none fits, propose one as a draft. Status questions ("remind me", "is X updated") count:
+   answer from those items, and when a readback is newer than what an item or figure says, say so
+   and fix the item's status. Only a lookup that touches no program may stay unattached.
 2. **Size it.** Small work (reversible in under an hour): ask one or two questions, do it, skip
    to step 6. Bigger work: go on.
 3. **Interview.** `/grill` asks me what changes the outcome and writes a one-page spec to
@@ -272,6 +276,9 @@ either, like an interactive `gcloud auth login`.
 - **Every readback starts with one status line**, rewritten every time the readback changes:
   `Status: running | waiting on Phil | done | failed — <one plain sentence>`. The dashboard trusts this
   line, unless the run names a log whose done or failed text has appeared; without either the run shows "status unknown".
+- **A session that finishes or scores a run updates every item that uses its numbers**, not only the
+  item that launched it: the status line of each linked item, and any figure or outline item that will
+  need redrawing because of it.
 - It writes results to the shared bucket mount (`su-vista-uscentral1`, mounted on the Mac and on
   the Claude-capable VMs), not into a document. Whichever session needs the numbers reads them
   off the mount.

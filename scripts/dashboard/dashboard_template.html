@@ -253,6 +253,20 @@ function renderMachines(){
   const silent = [...new Set((D.items||[]).flatMap(i=>(i.runs_status||[]).map(r=>r.machine)).filter(x=>x && !known.has(x)))];
   $("machines").innerHTML = `<b>Machines:</b> ${rep.join("")}${silent.length?` <span class="muted">· not reporting (runs judged from the mount only): ${silent.map(esc).join(", ")}</span>`:''}`;
 }
+const DASH_DIR="/mnt/su-vista-uscentral1/chaudhari_lab/phil/planning/dashboard";
+// Follow up: reuse a live, recent session if there is one; otherwise start fresh from the written record.
+function followUp(it, sessions){
+  const recent = (sessions||[]).filter(s=>s.live!=="gone" && now-T(s.updated_at)<DAY).sort((a,b)=>T(b.updated_at)-T(a.updated_at))[0];
+  if (recent) return {how:`In agent view on <b>${esc(recent.host)}</b>: type <code>n:${esc(recent.name)}</code>, then Enter (it's ${esc(recent.live)}, active ${ago(T(recent.updated_at))}).`, line:`n:${recent.name}`};
+  const rbs=(it.runs||[]).map(r=>r.readback).filter(Boolean).slice(-3);
+  const line=`Read ${DASH_DIR}/items/${it.id}.json and the newest readbacks it names${rbs.length?` (${rbs.join(", ")})`:""}, then take its next step: ${it.status||"see the item"}${(it.runs||[]).filter(r=>r.next).map(r=>` For "${r.label}": ${r.next}`).join("")} Report on the dashboard per ${DASH_DIR}/TELL-A-SESSION.md.`;
+  const last = (sessions||[]).slice().sort((a,b)=>T(b.updated_at)-T(a.updated_at))[0];
+  const prev = last ? `Its last session was <b>${esc(last.name)}</b> on ${esc(last.host)} (${esc(last.live)}, ${ago(T(last.updated_at))}${last.tokens?`, about ${Math.round(last.tokens/1000)}k tokens`:""}); find it in agent view with <code>n:${esc(last.name)}</code>. Reopening an exited session reloads its whole conversation, so for a long one prefer a fresh start: ` : "";
+  return {how:`${prev}In agent view on <b>phil-sllm-01</b> (or any box with the mount), paste this as a new session:`, line};
+}
+function fuBox(id){ const it=(D.items||[]).find(i=>i.id===id); if(!it) return "";
+  const ss=(it.sessions||[]).map(x=>S.find(s=>s.id===x)).filter(Boolean); const f=followUp(it,ss);
+  return `<details class="small" style="margin-top:4px"><summary>Follow up</summary><div>${f.how}</div><div class="cmd"><code>${esc(f.line)}</code><button onclick="cp(this)">copy</button></div></details>`; }
 function renderNow(since){
   const I=D.items||[]; const byId=Object.fromEntries(I.map(i=>[i.id,i])); const G=new Map();
   const g=(key,title,page,sub)=>{ if(!G.has(key)) G.set(key,{title,page,sub,lines:[],last:0}); return G.get(key); };
@@ -269,7 +283,7 @@ function renderNow(since){
     const res=s.result||s.parsed?.result;
     if(live) grp.lines.push({t:upd,cls:"work",html:`🔵 <b>working</b> · ${esc(s.name)} <span class="muted">· ${esc(s.host)}</span><div class="small">${esc(s.detail||"")}</div>`});
     else if(asking) grp.lines.push({t:upd,cls:"wait",html:`🟠 <b>asking you</b> · ${esc(s.name)} <span class="muted">· ${esc(s.host)} · ${ago(upd)}</span><div class="small">${esc(s.needs||s.parsed?.needs_input||s.parsed?.close_yours||res||"")}</div>`});
-    else grp.lines.push({t:upd,cls:"done",html:`✓ <b>wrapped</b> ${ago(upd)} · ${esc(s.name)} <span class="muted">· ${esc(s.host)}</span>${it&&upd<T(it.file_updated)?' <span class="small muted">(older than the page\'s status above)</span>':''}<div class="small">${esc(res||s.detail||"")}</div>`});
+    else grp.lines.push({t:upd,cls:"done",old:!!(it&&upd<T(it.file_updated)),html:`✓ <b>wrapped</b> ${ago(upd)} · ${esc(s.name)} <span class="muted">· ${esc(s.host)}</span><div class="small">${esc(res||s.detail||"")}</div>`});
   });
   I.forEach(it=>{ if(PK[it.id]) return; (it.runs_status||[]).forEach(r=>{
     const nt=T(r.newest); const running=r.state.startsWith("running")||r.state==="quiet, can't check the job";
@@ -281,7 +295,10 @@ function renderNow(since){
   const cards=[...G.values()].filter(x=>x.lines.length).sort((a,b)=>b.last-a.last);
   $("nowhint").textContent=`running now, or wrapped up / asked in the window (${$("since").selectedOptions[0].text}) · newest first · ${cards.length} effort(s)`;
   const staleOf = c => { const it=I.find(i=>i.page===c.page); return it&&(it.maybe_stale||[]).length ? `<div class="small stale">may be out of date: ${it.maybe_stale.length} file(s) it names changed after this page (newest ${ago(Math.max(...it.maybe_stale.map(x=>T(x.changed))))})</div>` : ""; };
-  $("now").innerHTML = (cards.map(c=>`<div class="card item"><h3>${c.page?`<a href="${esc(c.page)}">${esc(c.title)}</a>`:esc(c.title)}</h3><div class="meta">${esc(c.sub||"")}</div>${staleOf(c)}${c.lines.sort((a,b)=>b.t-a.t).map(l=>`<div class="${l.cls==="work"?"doing":l.cls==="wait"?"q":"res"}">${l.html}</div>`).join("")}</div>`).join("") || '<div class="empty">nothing running or wrapped in this window</div>')
+  $("now").innerHTML = (cards.map(c=>`<div class="card item"><h3>${c.page?`<a href="${esc(c.page)}">${esc(c.title)}</a>`:esc(c.title)}</h3><div class="meta">${esc(c.sub||"")}</div>${staleOf(c)}${c.page?fuBox(c.page.replace("index.html#i=","")):""}${(()=>{ const L=c.lines.sort((a,b)=>b.t-a.t), cur=L.filter(l=>!l.old), old=L.filter(l=>l.old);
+      const line=l=>`<div class="${l.cls==="work"?"doing":l.cls==="wait"?"q":"res"}">${l.html}</div>`;
+      // Messages older than the page's own status are superseded by it: fold them away.
+      return cur.map(line).join("")+(old.length?`<details><summary class="small">${old.length} earlier message(s), older than the status above</summary>${old.map(line).join("")}</details>`:""); })()}</div>`).join("") || '<div class="empty">nothing running or wrapped in this window</div>')
     + (hkCard?`<div class="card"><details><summary>Housekeeping: ${hkCard.lines.length} manager, dashboard and machine-setup update(s)</summary>${hkCard.lines.sort((a,b)=>b.t-a.t).map(l=>`<div class="small" style="margin-top:4px">${l.html}</div>`).join("")}</details></div>`:"");
 }
 function renderItems(since){
@@ -309,7 +326,7 @@ function renderItems(since){
     let hide = false, why = "";
     if (s0 && s0.act==="done") { hide=true; why="done"; }
     if (s0 && s0.act==="snooze" && Date.now() < until(s0) && !(activity > s0.at)) { hide=true; why="snoozed until "+new Date(until(s0)).toLocaleDateString(); }
-    const row = `<div class="need"><span class="kind">${esc(kind)}</span><span class="what">${page!==null?`<a ${href(page)}><b>${esc(title)}</b></a>`:`<b>${esc(title)}</b>`}<br>${esc(what)}</span>${extra||""}<span class="age">${sinceT?(kind.startsWith("session")||kind.startsWith("run")||kind==="decision"||kind==="read"?"waiting "+ago(sinceT).replace(" ago",""):"listed "+ago(sinceT)):""}</span>${hide?`<button onclick="needUndo('${key}')">bring back</button> <span class="small muted">${why}</span>`:`<button onclick="needAct('${key}','done')">Done</button>${snoozeMenu("needAct",key)}${it?`<button title="Set this whole question aside; nothing is marked decided" onclick="parkAct('${it.id}','${esc(it.title).replace(/'/g,"&#39;")}')">Park</button>`:""}`}</div>`;
+    const row = `<div class="need"><span class="kind">${esc(kind)}</span><span class="what">${page!==null?`<a ${href(page)}><b>${esc(title)}</b></a>`:`<b>${esc(title)}</b>`}<br>${esc(what)}</span>${extra||""}<span class="age">${sinceT?(kind.startsWith("session")||kind.startsWith("run")||kind.startsWith("result")||kind==="decision"||kind==="read"?"waiting "+ago(sinceT).replace(" ago",""):"listed "+ago(sinceT)):""}</span>${hide?`<button onclick="needUndo('${key}')">bring back</button> <span class="small muted">${why}</span>`:`<button onclick="needAct('${key}','done')">Done</button>${snoozeMenu("needAct",key)}${it?`<button title="Set this whole question aside; nothing is marked decided" onclick="parkAct('${it.id}','${esc(it.title).replace(/'/g,"&#39;")}')">Park</button>`:""}`}</div>`;
     (hide?hidden:shown).push({t:sinceT||now,row});
   };
   I.forEach(it => {
@@ -318,6 +335,11 @@ function renderItems(since){
       const ev=(s.events||[]).filter(e=>e.state==="blocked").pop();
       add(hkey(s.id+(s.needs||"")), "session stopped on a question", it.title, it.page, s.needs||s.parsed?.needs_input||"", ev?T(ev.at):T(s.updated_at), `<code>${esc(s.name)} · ${esc(s.host)}</code>`, it.id); });
   });
+  // A run that finished with nobody active on its question since: its result is waiting for someone to use it.
+  I.forEach(it=>{ const active=it.sessions.map(id=>sById[id]).filter(s=>s&&s.live!=="gone");
+    (it.runs_status||[]).filter(r=>r.state==="done").forEach(r=>{ const fin=T(r.newest);
+      if(!fin || now-fin>14*DAY || active.some(s=>T(s.updated_at)>fin)) return;
+      add(`${it.id}:result:${hkey(r.label)}`, "result waiting", it.title, it.page, `${r.label} finished ${ago(fin)} on ${r.machine||"?"}; nobody has picked it up.${r.next?" Next: "+r.next:""}`, fin, `<span style="flex-basis:100%">${fuBox(it.id)}</span>`, it.id); }); });
   S.filter(s=>!s.item && s.bucket==="waiting" && s.live!=="gone").forEach(s=>{ const ev=(s.events||[]).filter(e=>e.state==="blocked").pop();
     add(hkey(s.id+(s.needs||"")), "session stopped on a question", s.name+" (not tied to a question)", null, s.needs||"", ev?T(ev.at):T(s.updated_at), `<code>${esc(s.host)}</code>`, null); });
   shown.sort((a,b)=>a.t-b.t); // longest waiting first

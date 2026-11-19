@@ -575,6 +575,8 @@ def main() -> None:
 
 
 TEMPLATE = (Path(__file__).with_name("dashboard_template.html")).read_text()
+if len(TEMPLATE) < 20000 or "__DATA__" not in TEMPLATE:   # never publish a blank page from a broken template
+    raise SystemExit("dashboard_template.html looks empty or truncated; not rebuilding the page")
 
 if __name__ == "__main__":
     main()

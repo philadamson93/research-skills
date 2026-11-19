@@ -267,11 +267,11 @@ either, like an interactive `gcloud auth login`.
   Readback:  <the readback's path on the mount, under planning/<repo>/session/>
   ```
 
-  Add the run to that item file's `runs` in the same step. A run that never names its item is invisible
+  Add the run to that item file's `runs` in the same step. A session that starts a long job and then waits on it runs `/long-job` before it goes quiet: the run gets its log on the mount plus what in that log means done or failed, so the dashboard follows the job while the session sleeps. A hand-off for a training or long hcpu run says "run `/long-job` once it starts", and "then `/vm-off` after it" when the box should switch itself off. A run that never names its item is invisible
   on the dashboard.
 - **Every readback starts with one status line**, rewritten every time the readback changes:
   `Status: running | waiting on Phil | done | failed — <one plain sentence>`. The dashboard trusts this
-  line and nothing else; without it the run shows "status unknown".
+  line, unless the run names a log whose done or failed text has appeared; without either the run shows "status unknown".
 - It writes results to the shared bucket mount (`su-vista-uscentral1`, mounted on the Mac and on
   the Claude-capable VMs), not into a document. Whichever session needs the numbers reads them
   off the mount.

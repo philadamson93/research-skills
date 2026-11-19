@@ -10,6 +10,8 @@ Personal Claude Code skills, shared in case they're useful. These are slash comm
   - [`review-plan.md`](commands/review-plan.md) — second-opinion design audit, only for older long-format plans or when you ask about a spec: can each check fail, are the deliverables complete, could a fresh session build it
   - [`wrapup.md`](commands/wrapup.md) — end-of-session cleanup
   - [`next.md`](commands/next.md) — "where did we leave off?" session-opener
+  - [`long-job.md`](commands/long-job.md) — before a session sleeps on a long job: register it so the dashboard follows it from its log (done / failed / progress)
+  - [`vm-off.md`](commands/vm-off.md) — final dashboard snapshot, then switch this VM off now or when a job ends; never on weill
   - [`dashboard.md`](commands/dashboard.md) — one page on the mount across every session and program: working, waiting on Phil, just finished, stalled
   - [`commit-review.md`](commands/commit-review.md) — commit workflow with an appropriateness review (catches accidentally-leaked private content) before commit + push
   - [`phi-vet.md`](commands/phi-vet.md) — hard pre-commit gate for medical-data repos that scans files for PHI leakage (patient/encounter/study identifiers, sample row data, free-text excerpts, image files); `commit-review` escalates to this when working in an OMOP/NeuralFrame/EHR/DICOM context. Adapts to the machine (fail-closed): inert on machines in the PHI-FREE allowlist (`hooks/lib/is-phi-free-machine.sh`), active everywhere else

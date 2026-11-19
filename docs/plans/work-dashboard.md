@@ -35,9 +35,12 @@ Stop and come back if: after the week Phil still opens agent view or sessions to
 - Skill changes land together: hand-off template and /wrapup (readback status line; name question, cell, machine, job, quiet period; fill the cell and draft the answer), /grill (writes the item file), close-out Program line names the brief file, /dashboard, and /manage reads dashboard data instead of its own sweep (2026-11-18)
 - Item format is general (Phil 2026-11-18: "don't overfit to these VISTA-Bench experiments"): a common core (title, kind, program, status, needs you, runs, sessions, code, links) plus one optional result layout per item: grid (methods × axes), findings list (result + number per line), or build checklist (features). No field may assume VISTA-Bench (2026-11-18)
 - Every machine with Claude runs the snapshot every 5 minutes; the builder runs only on phil-sllm-01 (2026-11-18)
+- A session that sleeps on a long job registers the run with its log on the mount and what in the log means done, failed or progress; the dashboard judges the run from that log. A machine that stops reporting with nothing running at its last snapshot shows as off, not as a warning; an empty live-session list is not a failure (Phil, 2026-11-19)
+- Shared always-on boxes (weill) don't snapshot forever: the cron line removes itself after 12 h with nothing running there; `bin/start_snapshot.sh` turns it back on for new work (Phil, 2026-11-19)
 - Served address is /phil-dashboard/, not /dashboard/ (Phil, 2026-11-18)
 - Park sets a whole question aside with nothing decided, and it returns on new session activity; Snooze lasts 1 day, 1 week or 1 month (Phil, 2026-11-18)
 - First screen is "Now and recent": what is running or wrapped up in the last 24 h, by question, housekeeping folded; Needs you shows the last 7 days, older decisions fold below (Phil, 2026-11-18)
+- Tabs, not one long scroll: Now (running, plus asks and wrap-ups in the window, each card with Done / Snooze) · Backlog (grouped by question or feature: its purpose and status, then what waits on Phil from before the window; quiet 3+ days counts too; then ideas with no plan and problems) · Questions and features · More. The separate Needs you list is gone: recent asks sit on their Now card, older ones in the Backlog (Phil, 2026-11-19)
 - Staleness: a free check flags a page whose readbacks or results changed after it; no history, overwrite check or locked editor yet, watch for a week (Phil, 2026-11-18)
 
 ## Out of scope

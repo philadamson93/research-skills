@@ -89,8 +89,8 @@ table.qt td.st{max-width:460px}.wrap{overflow-x:auto}
   <span id="counts"></span>
   <label class="small">changes since
     <select id="since">
-      <option value="visit">my last visit</option><option value="2">2 h</option>
-      <option value="8">8 h</option><option value="24">24 h</option><option value="72">3 days</option><option value="at">since a time today…</option>
+      <option value="24" selected>24 h</option><option value="visit">my last visit</option><option value="2">2 h</option>
+      <option value="8">8 h</option><option value="72">3 days</option><option value="at">since a time today…</option>
     </select><input type="time" id="sinceAt" style="display:none"></label>
   <input id="q" placeholder="filter (name, program, repo)" size="24">
 </header>
@@ -98,11 +98,13 @@ table.qt td.st{max-width:460px}.wrap{overflow-x:auto}
 <main id="statusmain">
   <div id="banner"></div>
   <div id="machines" class="small" style="margin:6px 0"></div>
+  <section><h2>Now and recent <span class="hint" id="nowhint"></span></h2><div class="grid" id="now"></div></section>
   <section><h2>Needs you <span class="hint">longest waiting first · Done = handled (a decision counts as closed) · Snooze = hide for 1 day, 1 week or 1 month (back early on new activity) · Park = set the whole question aside, nothing decided · to answer a stopped session, use <code>claude agents</code> on its machine</span></h2><div id="needs"></div>
+    <details style="margin-top:4px"><summary id="old-sum">Older open decisions</summary><div id="needs-old"></div></details>
     <details style="margin-top:4px"><summary id="hidden-sum">Done and snoozed</summary><div id="needs-hidden"></div></details></section>
   <section><h2>Questions and features <span class="hint">click a title for its page</span></h2><div class="wrap"><table class="qt" id="qtable"></table></div>
     <details style="margin-top:6px"><summary id="parked-sum">Parked</summary><div class="wrap" id="parked"></div></details></section>
-  <section><h2>What changed <span class="hint" id="awayhint"></span> <button onclick="markSeen()">mark all seen</button></h2><div class="feed" id="feed"></div></section>
+  <section><details><summary>Timeline: every finish and question in the window <span id="awayhint"></span></summary><div style="margin:6px 0"><button onclick="markSeen()">mark all seen</button></div><div class="feed" id="feed"></div></details></section>
   <section><h2>Problems spotted <span class="hint">for discussion · your triage saves to the mount on the served page (this browser only when opened as a file)</span></h2><div id="problems"></div>
     <details style="margin-top:4px"><summary id="ptri-sum">Triaged</summary><div id="problems-done"></div></details></section>
   <section><details><summary id="sess-sum">Sessions</summary>
@@ -246,18 +248,49 @@ function runsHtml(it){ const R=it.runs_status||[]; if(!R.length) return "";
   return `<div class="small" style="margin-top:4px">${R.map(r=>`<div style="${['possibly died','failed'].includes(r.state)?'color:var(--fail)':r.state.startsWith('running')?'color:var(--work)':''}"><b>${RUNICON[r.state]||esc(r.state)}</b> · ${esc(r.label)} <span class="muted">· ${esc(r.machine||'?')}${r.newest?' · last written '+ago(T(r.newest)):''}</span>${r.summary?`<div class="muted">${esc(r.summary)}</div>`:''}</div>`).join("")}</div>`; }
 function renderMachines(){
   const rep = D.hosts.map(h=>{ const m=h.machine||{}; const g=m.gpus; const jobs=(m.jobs||[]);
-    return `<span class="chip ${h.stale?'bad':''}" title="${esc(jobs.map(j=>j.hours+' h · '+j.cmd).join('\n'))}"><b>${esc(h.host)}</b> · load ${m.load?m.load[0]:'?'}/${m.cores||'?'} cores${g?` · GPUs ${g.map(x=>x.util+'%').join(' ')}`:''} · ${jobs.length} long job${jobs.length===1?'':'s'}${m.home_free_gb!=null?` · ${m.home_free_gb} GB free`:''}</span>`; });
+    return `<span class="chip ${h.stale?'bad':''}" title="${esc(jobs.map(j=>j.hours+' h · '+j.cmd).join('\n'))}"><b>${esc(h.host)}</b> · load ${m.load?m.load[0]:'?'}/${m.cores||'?'} cores${g?` · GPUs in use ${g.filter(x=>x.mem_used>0.2*x.mem_total||x.util>=5).length}/${g.length} (memory ${g.map(x=>Math.round(x.mem_used/1024)+'/'+Math.round(x.mem_total/1024)+' GB').join(', ')})`:''} · ${jobs.length} long job${jobs.length===1?'':'s'}${m.home_free_gb!=null?` · ${m.home_free_gb} GB free`:''}</span>`; });
   const known = new Set(D.hosts.map(h=>h.host));
   const silent = [...new Set((D.items||[]).flatMap(i=>(i.runs_status||[]).map(r=>r.machine)).filter(x=>x && !known.has(x)))];
   $("machines").innerHTML = `<b>Machines:</b> ${rep.join("")}${silent.length?` <span class="muted">· not reporting (runs judged from the mount only): ${silent.map(esc).join(", ")}</span>`:''}`;
 }
+function renderNow(since){
+  const I=D.items||[]; const byId=Object.fromEntries(I.map(i=>[i.id,i])); const G=new Map();
+  const g=(key,title,page,sub)=>{ if(!G.has(key)) G.set(key,{title,page,sub,lines:[],last:0}); return G.get(key); };
+  const PK=lsGet("wd:park",{});
+  S.forEach(s=>{
+    const upd=T(s.updated_at||s.last_text_at); const live=s.bucket==="working";
+    const asking=["waiting","asked"].includes(s.bucket);
+    if(!(live || (upd>since && s.bucket!=="parked"))) return;
+    const it=s.item&&byId[s.item]; if(it && PK[it.id] && !(upd>PK[it.id].at)) return;
+    // Housekeeping (the manager, this dashboard, machine setup) is not experiment status: one folded card at the end.
+    const hk=!it && /manager|dashboard|host-setup|tell-a-session|setup.handoff/i.test((s.name||"")+" "+(s.intent||"").slice(0,200));
+    const grp=hk?g("_hk","Housekeeping",null,"manager, dashboard and machine setup sessions"):it?g(it.id,it.title,it.page,it.status):g("s:"+s.id,s.name,null,"not tied to a question yet");
+    grp.last=Math.max(grp.last,upd);
+    const res=s.result||s.parsed?.result;
+    if(live) grp.lines.push({t:upd,cls:"work",html:`🔵 <b>working</b> · ${esc(s.name)} <span class="muted">· ${esc(s.host)}</span><div class="small">${esc(s.detail||"")}</div>`});
+    else if(asking) grp.lines.push({t:upd,cls:"wait",html:`🟠 <b>asking you</b> · ${esc(s.name)} <span class="muted">· ${esc(s.host)} · ${ago(upd)}</span><div class="small">${esc(s.needs||s.parsed?.needs_input||s.parsed?.close_yours||res||"")}</div>`});
+    else grp.lines.push({t:upd,cls:"done",html:`✓ <b>wrapped</b> ${ago(upd)} · ${esc(s.name)} <span class="muted">· ${esc(s.host)}</span>${it&&upd<T(it.file_updated)?' <span class="small muted">(older than the page\'s status above)</span>':''}<div class="small">${esc(res||s.detail||"")}</div>`});
+  });
+  I.forEach(it=>{ if(PK[it.id]) return; (it.runs_status||[]).forEach(r=>{
+    const nt=T(r.newest); const running=r.state.startsWith("running")||r.state==="quiet, can't check the job";
+    if(!(running || nt>since)) return;
+    const grp=g(it.id,it.title,it.page,it.status); grp.last=Math.max(grp.last,nt);
+    grp.lines.push({t:nt,cls:running?"work":"done",html:`${running?"▶":RUNICON[r.state]?.split(" ")[0]||"•"} <b>run: ${esc(r.state)}</b> · ${esc(r.label)} <span class="muted">· ${esc(r.machine||"?")}${nt?" · last written "+ago(nt):""}</span>${r.summary?`<div class="small">${esc(r.summary)}</div>`:""}`});
+  }); });
+  const hkCard=G.get("_hk"); G.delete("_hk");
+  const cards=[...G.values()].filter(x=>x.lines.length).sort((a,b)=>b.last-a.last);
+  $("nowhint").textContent=`running now, or wrapped up / asked in the window (${$("since").selectedOptions[0].text}) · newest first · ${cards.length} effort(s)`;
+  const staleOf = c => { const it=I.find(i=>i.page===c.page); return it&&(it.maybe_stale||[]).length ? `<div class="small stale">may be out of date: ${it.maybe_stale.length} file(s) it names changed after this page (newest ${ago(Math.max(...it.maybe_stale.map(x=>T(x.changed))))})</div>` : ""; };
+  $("now").innerHTML = (cards.map(c=>`<div class="card item"><h3>${c.page?`<a href="${esc(c.page)}">${esc(c.title)}</a>`:esc(c.title)}</h3><div class="meta">${esc(c.sub||"")}</div>${staleOf(c)}${c.lines.sort((a,b)=>b.t-a.t).map(l=>`<div class="${l.cls==="work"?"doing":l.cls==="wait"?"q":"res"}">${l.html}</div>`).join("")}</div>`).join("") || '<div class="empty">nothing running or wrapped in this window</div>')
+    + (hkCard?`<div class="card"><details><summary>Housekeeping: ${hkCard.lines.length} manager, dashboard and machine-setup update(s)</summary>${hkCard.lines.sort((a,b)=>b.t-a.t).map(l=>`<div class="small" style="margin-top:4px">${l.html}</div>`).join("")}</details></div>`:"");
+}
 function renderItems(since){
-  renderMachines();
+  renderMachines(); renderNow(since);
   const I = D.items||[]; const sById = Object.fromEntries(S.map(s=>[s.id,s]));
   const href = p => p ? `href="${esc(p)}"` : "";
   const lastChange = it => Math.max(T(it.file_updated), ...it.sessions.map(id=>T((sById[id]||{}).updated_at)));
   // banner: stale machines or stale page
-  const bad=[]; D.hosts.forEach(h=>{ if(h.stale) bad.push(`${h.host} last reported ${h.age_min} min before this page was built`); if(!h.liveness_ok) bad.push(`${h.host}: live-session list unavailable, so busy/waiting may be wrong`); });
+  const bad=[]; D.hosts.forEach(h=>{ if(h.stale) bad.push(`${h.host}: its 5-minute update isn't running (last snapshot ${h.age_min} min before this page was built), so everything shown for it is from then. Check its cron.`); if(!h.liveness_ok) bad.push(`${h.host}: live-session list unavailable, so busy/waiting may be wrong`); });
   if(now-T(D.generated_at) > 15*60000) bad.push(`this page was built ${ago(T(D.generated_at))}: the refresh may have stopped`);
   if(!D.hosts.length) bad.push("no machine is reporting sessions");
   $("banner").innerHTML = bad.map(x=>`<div class="banner">⚠ ${esc(x)}</div>`).join("");
@@ -289,6 +322,11 @@ function renderItems(since){
     add(hkey(s.id+(s.needs||"")), "session stopped on a question", s.name+" (not tied to a question)", null, s.needs||"", ev?T(ev.at):T(s.updated_at), `<code>${esc(s.host)}</code>`, null); });
   shown.sort((a,b)=>a.t-b.t); // longest waiting first
   if ((D.drafts||[]).length) shown.push({t:now,row:`<div class="need"><span class="kind">approve wording</span><span class="what"><b>${D.drafts.length} question/feature page(s) still show draft wording</b><br><span class="small muted">open a page and press Approve wording, or edit it via its 💬: ${D.drafts.slice(0,5).map(esc).join(" · ")}${D.drafts.length>5?" …":""}</span></span></div>`});
+  // Only the last 7 days up top; older open decisions are backlog, folded below.
+  const WEEK=7*DAY; const recentN=shown.filter(x=>now-x.t<WEEK), older=shown.filter(x=>now-x.t>=WEEK);
+  shown.length=0; shown.push(...recentN.sort((a,b)=>b.t-a.t));
+  $("needs-old").innerHTML = older.map(x=>x.row).join("") || '<div class="empty small">none</div>';
+  $("old-sum").textContent = `Older open decisions, waiting over a week (${older.length})`;
   const TOP=8; const extra=shown.length>TOP?shown.slice(TOP):[];
   $("needs").innerHTML = (shown.slice(0,TOP).map(x=>x.row).join("") || '<div class="empty">nothing needs you</div>')
     + (extra.length?`<details><summary>${extra.length} more waiting on you</summary>${extra.map(x=>x.row).join("")}</details>`:"");
@@ -303,7 +341,7 @@ function renderItems(since){
     const icons = ss.map(s=>s.bucket==="working"?"🔵":["waiting","asked"].includes(s.bucket)?"🟠":"✓").join("");
     const nn=(it.needs_you||[]).length;
     return `<tr data-q="${esc((it.title+' '+it.program).toLowerCase())}"><td>${isNew?'<span class="new">NEW</span> ':''}<span class="chip">${esc(it.kind)}</span><br><a ${href(it.page)}><b>${esc(it.title)}</b></a><div class="small muted">${esc(it.program)}</div></td>
-      <td class="st">${esc(it.status)}${runsHtml(it)}${it.owed?`<div class="small muted">owed: ${esc(it.owed)}</div>`:''}</td><td>${bar}</td>
+      <td class="st">${esc(it.status)}${(it.maybe_stale||[]).length?`<div class="small stale">may be out of date: ${it.maybe_stale.map(x=>esc(x.path.replace(/\/+$/,"").split("/").pop())).slice(0,3).join(", ")} changed after this page</div>`:""}${runsHtml(it)}${it.owed?`<div class="small muted">owed: ${esc(it.owed)}</div>`:''}</td><td>${bar}</td>
       <td>${nn?`<b style="color:var(--wait)">${nn}</b>`:'<span class="muted">0</span>'}</td><td title="${esc(ss.map(s=>s.name+' ('+s.bucket+')').join('\n'))}">${icons||'<span class="small muted">none</span>'}</td>
       <td class="small ${stale&&!isParked(it)?'stale':''}">${ago(lc)}${stale&&!isParked(it)?'<br>nothing moved in a week':''}${backFromPark(it)?'<br><b>back from parked: new activity</b>':''}<br>${isParked(it)?`<button onclick="unpark('${it.id}')">Unpark</button>`:`<button title="Set this whole question aside; nothing is marked decided" onclick="parkAct('${it.id}','${esc(it.title).replace(/'/g,"&#39;")}')">Park</button>`}</td></tr>`; };
   const sorted = I.slice().sort((a,b)=>lastChange(b)-lastChange(a));

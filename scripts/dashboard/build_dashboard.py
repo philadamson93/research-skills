@@ -366,7 +366,7 @@ def apply_phil_actions(items: list, files: dict, acts: dict) -> list[str]:
     return changed
 
 
-DERIVED = {"file_updated", "sessions", "runs_status", "page", "needs_you", "cells", "code_summary", "approved_stale", "draft_seen"}
+DERIVED = {"file_updated", "sessions", "runs_status", "page", "needs_you", "cells", "code_summary", "approved_stale", "draft_seen", "maybe_stale"}
 
 
 def derive(it: dict, now: float) -> None:
@@ -482,6 +482,19 @@ def main() -> None:
         it["sessions"] = [s["id"] for s in sessions if s.get("item") == it["id"]]
         it["runs_status"] = [run_status(r, plan, now, hosts_by_name) for r in it.get("runs", [])]
         derive(it, now)
+        # Free staleness check: a readback, results folder or source the page names changed after the page did.
+        page_t = epoch(it["file_updated"]) or 0
+        newer = []
+        for p_ in [r.get("readback") for r in it.get("runs", [])] + [w for r in it.get("runs", []) for w in r.get("watch", [])] + it.get("sources", []):
+            if not p_ or not (p_.startswith("/mnt/") or p_.startswith("planning/")) or "/programs/" in p_ or p_.startswith("planning/programs"):
+                continue   # briefs change for many reasons; they don't mean this page is stale
+            try:
+                mt = resolve(p_, plan).stat().st_mtime
+            except OSError:
+                continue
+            if mt > page_t + 600:
+                newer.append({"path": p_, "changed": datetime.fromtimestamp(mt, timezone.utc).isoformat()})
+        it["maybe_stale"] = newer
     edited = [it for it in items if it.get("approved") and it["approved"].get("wording") not in (None, pages.wording_hash(it))]
     for it in edited:
         it["approved_stale"] = True
@@ -509,8 +522,13 @@ def main() -> None:
             auto.append(f"'{it['title']}' has {len(open_d)} open decision(s) and nothing has moved in {int((now - last) / 86400)} days.")
     for h in hosts:
         m = h.get("machine") or {}
-        if m.get("gpus") and all(g["util"] < 5 for g in m["gpus"]) and not any(j.get("gpu") for j in m.get("jobs", [])):
+        if m.get("gpus") and all(g["util"] < 5 and g["mem_used"] < 0.2 * g["mem_total"] for g in m["gpus"]) \
+                and not any(j.get("gpu") for j in m.get("jobs", [])):   # idle = no activity AND no memory held
             auto.append(f"{h['host']}: all {len(m['gpus'])} GPUs idle and no GPU job running.")
+    stale_pages = [it for it in items if it.get("maybe_stale")]
+    if stale_pages:
+        auto.append(f"{len(stale_pages)} question page(s) may be out of date (a readback or result they name changed after the page): "
+                    + ", ".join(f"'{it['title']}'" for it in stale_pages[:6]) + ". The session that owns each should update it.")
     for it in edited:
         auto.append(f"'{it['title']}': its wording changed after you approved it (a session edited a field you own). Re-approve it, or restore the approved wording.")
     unatt = [s["name"] for s in sessions if not s.get("item") and s["bucket"] in ("working", "waiting", "asked")]

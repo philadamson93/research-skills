@@ -2,7 +2,7 @@ Reference: docs/claude_ops.md
 Program: /mnt/su-vista-uscentral1/chaudhari_lab/phil/planning/programs/planning-layer.md — stage 7 (new: the work dashboard)
 
 # Work dashboard: one status view built around questions and features
-Status: Approved (2026-11-18); built 2026-11-18, evaluator rounds 1–2 fixed (see reviews/work-dashboard-implementation-feedback.md); served site + other machines pending
+Status: Completed (2026-11-19). Built 2026-11-18. Evaluator round 1 NEEDS_WORK (12 findings, fixed); round 2 NEEDS_WORK on one fix, fixed with a test that failed first; Phil chose to land without a third round (2026-11-18). Reviews: planning/research-skills/reviews/work-dashboard-implementation-feedback.md. Explainer: plan-explainers/research-skills/work-dashboard.html. Still open from Done when: a week of use; hcpu-c4d not reporting yet
 
 ## Goal
 Phil comes back from meetings and, from one screen, knows what finished, what needs him, what is running
@@ -35,6 +35,10 @@ Stop and come back if: after the week Phil still opens agent view or sessions to
 - Skill changes land together: hand-off template and /wrapup (readback status line; name question, cell, machine, job, quiet period; fill the cell and draft the answer), /grill (writes the item file), close-out Program line names the brief file, /dashboard, and /manage reads dashboard data instead of its own sweep (2026-11-18)
 - Item format is general (Phil 2026-11-18: "don't overfit to these VISTA-Bench experiments"): a common core (title, kind, program, status, needs you, runs, sessions, code, links) plus one optional result layout per item: grid (methods × axes), findings list (result + number per line), or build checklist (features). No field may assume VISTA-Bench (2026-11-18)
 - Every machine with Claude runs the snapshot every 5 minutes; the builder runs only on phil-sllm-01 (2026-11-18)
+- Served address is /phil-dashboard/, not /dashboard/ (Phil, 2026-11-18)
+- Park sets a whole question aside with nothing decided, and it returns on new session activity; Snooze lasts 1 day, 1 week or 1 month (Phil, 2026-11-18)
+- First screen is "Now and recent": what is running or wrapped up in the last 24 h, by question, housekeeping folded; Needs you shows the last 7 days, older decisions fold below (Phil, 2026-11-18)
+- Staleness: a free check flags a page whose readbacks or results changed after it; no history, overwrite check or locked editor yet, watch for a week (Phil, 2026-11-18)
 
 ## Out of scope
 - Replying to sessions from the page: Claude Code's agent view does that. Access control. A new server.
@@ -57,7 +61,7 @@ Stop and come back if: after the week Phil still opens agent view or sessions to
 - [x] Rule checks + daily review writing proposed problems — `build_dashboard.py:490`; `daily_review.py:45` (live run 11-18: 8 problems, $0.08); test `DailyCap`
 - [x] Draft item files for all four areas (~35), plus at least one each from agentic labelers, the Cohort Explorer and RadLex — 29 files in `planning/dashboard/items/` (24 in the four areas; progression-labeler, explorer-variable-builder, radlex-silver-regex, radgraph-labeler-radlex)
 - [x] Skill and template wording changes, as one set — `claude_ops.md:259`, `:272`; `commands/wrapup.md:177`; `commands/grill.md:46`; `commands/manage.md:128`; `commands/dashboard.md`
-- [ ] /phil-dashboard/ site on vista-cohort and front-door entry — half: entry at `vista-deploy/front-door/apps.json:39` (uncommitted, tests pass); site waits on `planning/dashboard/VISTA-COHORT-site-handoff.md`, deploy is Phil's
+- [x] /phil-dashboard/ site on vista-cohort and front-door entry — site added on vista-cohort (`planning/dashboard/VISTA-COHORT-site-readback.md`, 11-18 23:13, all pages 200); route on vista-deploy main 89f00b8, deployed by Phil 11-18; first save from his browser seen in `planning/review_answers/` 11-18 23:25
 
 ## Expensive steps
 - phil-sllm-01: daily review cron, Sonnet, $5/day cap → one problems file per day — approved 2026-11-18

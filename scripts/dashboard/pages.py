@@ -165,6 +165,7 @@ def item_body(it: dict, by_id: dict, sessions: list, generated: str) -> str:
 <section><h2>Answer so far</h2><div class="box answer" data-icon="answer" data-label="Answer so far">{E(it.get("answer") or "No answer yet.")}</div>
 <div class="small muted">Now: {E(it.get("status", ""))}</div>{draft_html}</section>
 <section><h2>{res_title}</h2>{body}</section>
+{f'<section><h2>Results</h2>{_findings(it["findings"])}</section>' if lay != "findings" and it.get("findings") else ""}
 <section><h2>Decisions for you</h2>{dec_html}</section>
 <section><h2>Runs</h2>{runs_html}</section>
 <section><h2>Code</h2>{code_html}</section>

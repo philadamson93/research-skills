@@ -10,7 +10,7 @@ import re
 import json
 from pathlib import Path
 
-E = html.escape
+E = lambda s, quote=True: html.escape("" if s is None else str(s), quote)   # a session may leave a field null
 
 CSS = """
 :root{--bg:#f6f7f9;--panel:#fff;--ink:#1c2230;--muted:#5d6676;--line:#e2e5ea;--chip:#eef1f5;

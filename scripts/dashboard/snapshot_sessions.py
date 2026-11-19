@@ -40,8 +40,13 @@ def iso_to_epoch(s: str | None) -> float | None:
         return None
 
 
-def live_agents() -> dict[str, dict]:
-    """sessionId -> row from `claude agents --json` (the authority on liveness)."""
+LIVENESS_ERR = None
+QUEUED = HOME / ".cache" / "work-dashboard.poweroff.json"
+
+
+def live_agents() -> dict[str, dict] | None:
+    """sessionId -> row from `claude agents --json` (the authority on liveness); None if the command failed.
+    An empty dict is a real answer: nothing open, e.g. the session went to sleep while its training runs."""
     try:
         out = subprocess.run(
             ["claude", "agents", "--json"], capture_output=True, text=True, timeout=90
@@ -49,7 +54,9 @@ def live_agents() -> dict[str, dict]:
         return {a["sessionId"]: a for a in json.loads(out) if a.get("sessionId")}
     except Exception as e:  # noqa: BLE001 - a missing CLI just means no liveness column
         print(f"warning: claude agents --json failed: {e}")
-        return {}
+        global LIVENESS_ERR
+        LIVENESS_ERR = f"{type(e).__name__}: {e}"[:200]   # e.g. claude not on cron's PATH
+        return None
 
 
 def find_transcript(session_id: str, hint: str | None) -> Path | None:
@@ -229,12 +236,18 @@ def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--days", type=float, default=7, help="include sessions touched in this window")
     ap.add_argument("--out", default=DEFAULT_OUT)
+    ap.add_argument("--stand-down-after", type=float, default=None, metavar="HOURS",
+                    help="for always-on shared boxes (weill): once no session is busy, no long job of yours is running "
+                         "and no session has moved for this many hours, write a last snapshot marked stood down and "
+                         "remove this snapshot's own cron line. bin/start_snapshot.sh turns it back on.")
     args = ap.parse_args()
 
     host = socket.gethostname()
     now = time.time()
     since = now - args.days * 86400
     agents = live_agents()
+    liveness_ok = agents is not None
+    agents = agents or {}
     sessions: dict[str, dict] = {}
 
     for sj in JOBS.glob("*/state.json"):
@@ -301,14 +314,42 @@ def main() -> None:
     payload = {
         "host": host,
         "written_at": datetime.now(timezone.utc).isoformat(),
-        "liveness_ok": bool(agents),
+        "liveness_ok": liveness_ok,
+        "liveness_error": LIVENESS_ERR,
+        # power_off.py is waiting for a job, then switches this VM off
+        "power_off_queued": json.loads(QUEUED.read_text()) if QUEUED.exists() else None,
         "machine": machine_state(),
         "sessions": sorted(sessions.values(), key=lambda r: r.get("updated_at") or "", reverse=True),
     }
+    if args.stand_down_after is not None:
+        busy = any(r.get("live") == "busy" for r in sessions.values()) or bool(payload["machine"].get("jobs"))
+        # start_snapshot.sh leaves a timestamp, so a restart before any session exists still gets the full window.
+        started = HOME / ".cache" / "work-dashboard.started"
+        last = max([iso_to_epoch(r.get("updated_at")) or 0 for r in sessions.values()]
+                   + [started.stat().st_mtime if started.exists() else 0])
+        idle_h = (now - last) / 3600
+        if not busy and idle_h >= args.stand_down_after:
+            payload["stood_down"] = {"at": payload["written_at"], "idle_hours": round(idle_h, 1),
+                                     "restart": f"bash {Path(__file__).resolve().parent / 'start_snapshot.sh'}"}
     tmp = out_dir / f".{host}.json.tmp"
     tmp.write_text(json.dumps(payload, indent=1))
     os.replace(tmp, out_dir / f"{host}.json")
     print(f"{host}: {len(sessions)} sessions -> {out_dir / (host + '.json')}")
+    if payload.get("stood_down"):
+        remove_own_cron()
+        print(f"{host}: nothing running for {payload['stood_down']['idle_hours']} h; stood down (cron line removed). "
+              f"Restart: {payload['stood_down']['restart']}")
+
+
+def remove_own_cron() -> None:
+    """Drop every crontab line that runs this snapshot; leave the rest of the crontab alone."""
+    try:
+        cur = subprocess.run(["crontab", "-l"], capture_output=True, text=True, timeout=20).stdout
+    except (OSError, subprocess.TimeoutExpired):
+        return
+    keep = [ln for ln in cur.splitlines() if "snapshot_sessions.py" not in ln]
+    if len(keep) != len(cur.splitlines()):
+        subprocess.run(["crontab", "-"], input="\n".join(keep) + ("\n" if keep else ""), text=True, timeout=20)
 
 
 if __name__ == "__main__":

@@ -78,6 +78,14 @@ table.qt td.st{max-width:460px}.wrap{overflow-x:auto}
 .bar3{display:flex;height:8px;border-radius:4px;overflow:hidden;margin:6px 0 2px;background:var(--chip)}
 .bar3 span{display:block}.prob{background:var(--panel);border:1px solid var(--line);border-left:4px solid var(--fail);border-radius:8px;padding:6px 10px;margin:5px 0}
 .grp{font-weight:700;margin-top:4px}.feed .grp{display:block;padding-top:6px;border:0}
+nav.tabs{display:flex;gap:4px;flex-wrap:wrap;flex-basis:100%;margin:0 0 -10px}
+nav.tabs button{background:none;border:0;border-bottom:3px solid transparent;border-radius:0;font-size:14px;padding:8px 12px;color:var(--muted)}
+nav.tabs button.on{color:var(--ink);border-bottom-color:var(--work);font-weight:600}
+.tc{font-size:11px;background:var(--chip);border-radius:9px;padding:0 6px;margin-left:2px}.tc.hot{background:var(--wait-bg);color:var(--wait);font-weight:700}
+.tab{display:none}.tab.on{display:block}
+.bgrp{margin:8px 0}.bgrp .need.sub{border-left-width:3px;margin:4px 0;padding:4px 8px}.bgrp .need.sub .what{min-width:200px}
+.intent{font-size:13px;margin:2px 0}
+.cact{display:flex;gap:4px;align-items:center;margin-top:6px;flex-wrap:wrap}.cact select{font-size:11px;padding:1px 4px}.cact button{font-size:11px;padding:1px 7px}
 </style>
 <script>/*__MOUNT_LINKS__*/</script>
 </head>
@@ -93,20 +101,36 @@ table.qt td.st{max-width:460px}.wrap{overflow-x:auto}
       <option value="8">8 h</option><option value="72">3 days</option><option value="at">since a time today…</option>
     </select><input type="time" id="sinceAt" style="display:none"></label>
   <input id="q" placeholder="filter (name, program, repo)" size="24">
+  <nav class="tabs" id="tabs">
+    <button data-tab="now">Now <span class="tc" id="tc-now"></span></button>
+    <button data-tab="backlog">Backlog <span class="tc" id="tc-backlog"></span></button>
+    <button data-tab="questions">Questions and features <span class="tc" id="tc-questions"></span></button>
+    <button data-tab="more">More</button>
+  </nav>
 </header>
 <div id="itemview" style="display:none"></div>
 <main id="statusmain">
   <div id="banner"></div>
+  <div class="tab" id="tab-now">
   <div id="machines" class="small" style="margin:6px 0"></div>
-  <section><h2>Now and recent <span class="hint" id="nowhint"></span></h2><div class="grid" id="now"></div></section>
-  <section><h2>Needs you <span class="hint">longest waiting first · Done = handled (a decision counts as closed) · Snooze = hide for 1 day, 1 week or 1 month (back early on new activity) · Park = set the whole question aside, nothing decided · to answer a stopped session, use <code>claude agents</code> on its machine</span></h2><div id="needs"></div>
-    <details style="margin-top:4px"><summary id="old-sum">Older open decisions</summary><div id="needs-old"></div></details>
+  <section><h2>Now and recent <span class="hint" id="nowhint"></span></h2>
+    <div class="hint small muted" style="margin:-4px 0 8px">Done = handled, card goes away until something new happens on it · Snooze = hide for 1 day, 1 week or 1 month (back early on new activity) · either one also clears its questions from the Backlog · runs still running stay visible · to answer a stopped session, use <code>claude agents</code> on its machine</div>
+    <div class="grid" id="now"></div>
+    <details style="margin-top:6px"><summary id="now-hidden-sum">Done and snoozed</summary><div class="grid" id="now-hidden" style="margin-top:6px"></div></details></section>
+  </div>
+  <div class="tab" id="tab-backlog">
+  <section><h2>Waiting on you, by question and feature <span class="hint">what each one is for, then what it waits on from you (older than the Now window) · longest waiting first · also ones quiet for 3+ days · Done = handled (a decision counts as closed) · Snooze · Park = set the whole question aside, nothing decided</span></h2><div id="needs"></div>
     <details style="margin-top:4px"><summary id="hidden-sum">Done and snoozed</summary><div id="needs-hidden"></div></details></section>
-  <section><h2>Questions and features <span class="hint">click a title for its page</span></h2><div class="wrap"><table class="qt" id="qtable"></table></div>
-    <details style="margin-top:6px"><summary id="parked-sum">Parked</summary><div class="wrap" id="parked"></div></details></section>
-  <section><details><summary>Timeline: every finish and question in the window <span id="awayhint"></span></summary><div style="margin:6px 0"><button onclick="markSeen()">mark all seen</button></div><div class="feed" id="feed"></div></details></section>
+  <section><h2>Ideas with no plan yet <span class="hint">future stages in program briefs, draft specs, and pages still in draft wording</span></h2><div id="ideas"></div></section>
   <section><h2>Problems spotted <span class="hint">for discussion · your triage saves to the mount on the served page (this browser only when opened as a file)</span></h2><div id="problems"></div>
     <details style="margin-top:4px"><summary id="ptri-sum">Triaged</summary><div id="problems-done"></div></details></section>
+  </div>
+  <div class="tab" id="tab-questions">
+  <section><h2>Questions and features <span class="hint">click a title for its page</span></h2><div class="wrap"><table class="qt" id="qtable"></table></div>
+    <details style="margin-top:6px"><summary id="parked-sum">Parked</summary><div class="wrap" id="parked"></div></details></section>
+  </div>
+  <div class="tab" id="tab-more">
+  <section><details><summary>Timeline: every finish and question in the window <span id="awayhint"></span></summary><div style="margin:6px 0"><button onclick="markSeen()">mark all seen</button></div><div class="feed" id="feed"></div></details></section>
   <section><details><summary id="sess-sum">Sessions</summary>
     <div id="unattached" style="margin-top:8px"></div>
     <h3 class="small">Waiting on you</h3><div class="grid" id="b-waiting"></div>
@@ -117,6 +141,7 @@ table.qt td.st{max-width:460px}.wrap{overflow-x:auto}
   </details></section>
   <section><details><summary>Programs (stage strips from each brief)</summary><div class="grid" id="programs" style="margin-top:8px"></div></details></section>
   <section><details><summary>Board items not tied to any brief</summary><div class="grid" id="unowned" style="margin-top:8px"></div></details></section>
+  </div>
 </main>
 <script>
 const D = __DATA__;
@@ -142,7 +167,10 @@ function sinceMs(){ const v=$("since").value; if(v==="visit") return prevVisit |
 function markSeen(){ prevVisit=Date.now(); try{localStorage.setItem("wd:prev",prevVisit)}catch(e){} $("since").value="visit"; render(); }
 
 $("ago").textContent = ago(T(D.generated_at));
-$("hosts").innerHTML = D.hosts.map(h => `<span class="chip ${h.stale||!h.liveness_ok?'bad':''}" title="snapshot ${esc(h.written_at)}">${esc(h.host)} · ${h.n} · ${h.age_min} min${h.liveness_ok?'':' · no live list'}</span>`).join("") || '<span class="chip bad">no host snapshots</span>';
+const HOST_GRACE = 3;   // minutes: a powered_off record younger than this may still be the box finishing up
+const offChip = h => `<span class="chip" style="opacity:.6" title="last snapshot ${esc(h.written_at)} showed no busy session and no long job, so the VM is most likely switched off">${esc(h.host)} · quiet ${ago(T(h.written_at)).replace(" ago","")}, off or idle</span>`;
+const pwChip = h => `<span class="chip" style="opacity:.6" title="${esc(h.powered_off.reason)}${h.powered_off.by?' (session '+esc(h.powered_off.by)+')':''}">${esc(h.host)} · switched off ${ago(T(h.powered_off.at))}${h.powered_off.after?' after '+esc(h.powered_off.after):''}</span>`;
+$("hosts").innerHTML = D.hosts.map(h => (h.powered_off && h.stale===false && h.age_min>HOST_GRACE) ? pwChip(h) : (h.stale && !h.was_busy) ? offChip(h) : h.stood_down ? `<span class="chip" style="opacity:.6" title="nothing running there for ${h.stood_down.idle_hours} h, so its snapshot turned itself off at ${esc(h.stood_down.at)}. To turn it back on, run on that machine: ${esc(h.stood_down.restart)}">${esc(h.host)} · stood down ${ago(T(h.stood_down.at))}</span>` : `<span class="chip ${h.stale||!h.liveness_ok?'bad':''}" title="snapshot ${esc(h.written_at)}">${esc(h.host)} · ${h.n} · ${h.age_min} min${h.liveness_ok?'':' · no live list'}${h.power_off_queued?` · switches off after ${esc(h.power_off_queued.after)}`:''}${h.power_off_skipped?' · did not switch off: still busy':''}</span>`).join("") || '<span class="chip bad">no host snapshots</span>';
 const S = D.sessions;
 const progTitle = Object.fromEntries(D.briefs.map(b => [b.slug, b.title]));
 
@@ -247,11 +275,14 @@ const RUNICON={"waiting on Phil":"🟠 waiting on you","done":"✓ done","runnin
 function runsHtml(it){ const R=it.runs_status||[]; if(!R.length) return "";
   return `<div class="small" style="margin-top:4px">${R.map(r=>`<div style="${['possibly died','failed'].includes(r.state)?'color:var(--fail)':r.state.startsWith('running')?'color:var(--work)':''}"><b>${RUNICON[r.state]||esc(r.state)}</b> · ${esc(r.label)} <span class="muted">· ${esc(r.machine||'?')}${r.newest?' · last written '+ago(T(r.newest)):''}</span>${r.summary?`<div class="muted">${esc(r.summary)}</div>`:''}</div>`).join("")}</div>`; }
 function renderMachines(){
-  const rep = D.hosts.map(h=>{ const m=h.machine||{}; const g=m.gpus; const jobs=(m.jobs||[]);
+  const down = D.hosts.filter(h=>h.stood_down);
+  const pw = D.hosts.filter(h=>h.powered_off && h.age_min>HOST_GRACE);
+  const off = D.hosts.filter(h=>h.stale && !h.was_busy && !h.stood_down && !pw.includes(h));
+  const rep = D.hosts.filter(h=>!h.stood_down && !off.includes(h) && !pw.includes(h)).map(h=>{ const m=h.machine||{}; const g=m.gpus; const jobs=(m.jobs||[]);
     return `<span class="chip ${h.stale?'bad':''}" title="${esc(jobs.map(j=>j.hours+' h · '+j.cmd).join('\n'))}"><b>${esc(h.host)}</b> · load ${m.load?m.load[0]:'?'}/${m.cores||'?'} cores${g?` · GPUs in use ${g.filter(x=>x.mem_used>0.2*x.mem_total||x.util>=5).length}/${g.length} (memory ${g.map(x=>Math.round(x.mem_used/1024)+'/'+Math.round(x.mem_total/1024)+' GB').join(', ')})`:''} · ${jobs.length} long job${jobs.length===1?'':'s'}${m.home_free_gb!=null?` · ${m.home_free_gb} GB free`:''}</span>`; });
   const known = new Set(D.hosts.map(h=>h.host));
   const silent = [...new Set((D.items||[]).flatMap(i=>(i.runs_status||[]).map(r=>r.machine)).filter(x=>x && !known.has(x)))];
-  $("machines").innerHTML = `<b>Machines:</b> ${rep.join("")}${silent.length?` <span class="muted">· not reporting (runs judged from the mount only): ${silent.map(esc).join(", ")}</span>`:''}`;
+  $("machines").innerHTML = `<b>Machines:</b> ${rep.join("")}${pw.map(h=>` <span class="chip" style="opacity:.6">${esc(h.host)} · switched off ${ago(T(h.powered_off.at))}: ${esc(h.powered_off.reason)}</span>`).join("")}${off.map(h=>` <span class="chip" style="opacity:.6">${esc(h.host)} · not reporting for ${ago(T(h.written_at)).replace(" ago","")}, nothing was running: probably switched off</span>`).join("")}${down.map(h=>` <span class="chip" style="opacity:.6">${esc(h.host)} · stood down, nothing running · restart: <code>${esc(h.stood_down.restart)}</code></span>`).join("")}${silent.length?` <span class="muted">· not reporting (runs judged from the mount only): ${silent.map(esc).join(", ")}</span>`:''}`;
 }
 const DASH_DIR="/mnt/su-vista-uscentral1/chaudhari_lab/phil/planning/dashboard";
 // Follow up: reuse a live, recent session if there is one; otherwise start fresh from the written record.
@@ -267,10 +298,18 @@ function followUp(it, sessions){
 function fuBox(id){ const it=(D.items||[]).find(i=>i.id===id); if(!it) return "";
   const ss=(it.sessions||[]).map(x=>S.find(s=>s.id===x)).filter(Boolean); const f=followUp(it,ss);
   return `<details class="small" style="margin-top:4px"><summary>Follow up</summary><div>${f.how}</div><div class="cmd"><code>${esc(f.line)}</code><button onclick="cp(this)">copy</button></div></details>`; }
-function renderNow(since){
+// Now cards: Done / Snooze per card. Kept in wd:now; also closes the card's questions in wd:needs so they don't resurface in the Backlog.
+const CARDKEYS={}, CARDTITLE={};
+function cardAct(g,act,days){const at=Date.now(),u=days?{until:at+days*DAY}:{};const keys=CARDKEYS[g]||[];
+  const nw=lsGet("wd:now",{});nw[g]={act,at,...u,title:CARDTITLE[g]||"",needs:keys};lsSet("wd:now",nw);
+  const st=lsGet("wd:needs",{});keys.forEach(k=>{st[k]={act,at,...u,...(NEEDMETA[k]||{}),via:"now card"}});lsSet("wd:needs",st);render()}
+function cardUndo(g){const nw=lsGet("wd:now",{});const keys=(nw[g]||{}).needs||[];delete nw[g];lsSet("wd:now",nw);
+  const st=lsGet("wd:needs",{});keys.forEach(k=>{if(st[k]&&st[k].via==="now card")delete st[k]});lsSet("wd:needs",st);render()}
+function renderNow(since, NEEDS){
   const I=D.items||[]; const byId=Object.fromEntries(I.map(i=>[i.id,i])); const G=new Map();
-  const g=(key,title,page,sub)=>{ if(!G.has(key)) G.set(key,{title,page,sub,lines:[],last:0}); return G.get(key); };
-  const PK=lsGet("wd:park",{});
+  const g=(key,title,page,sub)=>{ if(!G.has(key)) G.set(key,{key,title,page,sub,lines:[],last:0}); return G.get(key); };
+  const PK=lsGet("wd:park",{}); const NS=lsGet("wd:needs",{});
+  const closed = k => { const s0=NS[k]; return s0 && (s0.act==="done" || (s0.act==="snooze" && Date.now()<until(s0))); };
   S.forEach(s=>{
     const upd=T(s.updated_at||s.last_text_at); const live=s.bucket==="working";
     const asking=["waiting","asked"].includes(s.bucket);
@@ -279,35 +318,58 @@ function renderNow(since){
     // Housekeeping (the manager, this dashboard, machine setup) is not experiment status: one folded card at the end.
     const hk=!it && /manager|dashboard|host-setup|tell-a-session|setup.handoff/i.test((s.name||"")+" "+(s.intent||"").slice(0,200));
     const grp=hk?g("_hk","Housekeeping",null,"manager, dashboard and machine setup sessions"):it?g(it.id,it.title,it.page,it.status):g("s:"+s.id,s.name,null,"not tied to a question yet");
-    grp.last=Math.max(grp.last,upd);
     const res=s.result||s.parsed?.result;
+    const nk=hkey(s.id+(s.needs||""));
+    if(asking && !live && closed(nk)) return;   // already handled from the Backlog
+    grp.last=Math.max(grp.last,upd);
     if(live) grp.lines.push({t:upd,cls:"work",html:`🔵 <b>working</b> · ${esc(s.name)} <span class="muted">· ${esc(s.host)}</span><div class="small">${esc(s.detail||"")}</div>`});
-    else if(asking) grp.lines.push({t:upd,cls:"wait",html:`🟠 <b>asking you</b> · ${esc(s.name)} <span class="muted">· ${esc(s.host)} · ${ago(upd)}</span><div class="small">${esc(s.needs||s.parsed?.needs_input||s.parsed?.close_yours||res||"")}</div>`});
+    else if(asking) grp.lines.push({t:upd,cls:"wait",nk,html:`🟠 <b>asking you</b> · ${esc(s.name)} <span class="muted">· ${esc(s.host)} · ${ago(upd)}</span><div class="small">${esc(s.needs||s.parsed?.needs_input||s.parsed?.close_yours||res||"")}</div>`});
     else grp.lines.push({t:upd,cls:"done",old:!!(it&&upd<T(it.file_updated)),html:`✓ <b>wrapped</b> ${ago(upd)} · ${esc(s.name)} <span class="muted">· ${esc(s.host)}</span><div class="small">${esc(res||s.detail||"")}</div>`});
   });
   I.forEach(it=>{ if(PK[it.id]) return; (it.runs_status||[]).forEach(r=>{
     const nt=T(r.newest); const running=r.state.startsWith("running")||r.state==="quiet, can't check the job";
     if(!(running || nt>since)) return;
+    const nk=r.state==="done"?`${it.id}:result:${hkey(r.label)}`:null; if(nk && closed(nk)) return;
     const grp=g(it.id,it.title,it.page,it.status); grp.last=Math.max(grp.last,nt);
-    grp.lines.push({t:nt,cls:running?"work":"done",html:`${running?"▶":RUNICON[r.state]?.split(" ")[0]||"•"} <b>run: ${esc(r.state)}</b> · ${esc(r.label)} <span class="muted">· ${esc(r.machine||"?")}${nt?" · last written "+ago(nt):""}</span>${r.summary?`<div class="small">${esc(r.summary)}</div>`:""}`});
+    grp.lines.push({t:nt,cls:running?"work":"done",nk,html:`${running?"▶":RUNICON[r.state]?.split(" ")[0]||"•"} <b>run: ${esc(r.state)}</b> · ${esc(r.label)} <span class="muted">· ${esc(r.machine||"?")}${nt?" · last written "+ago(nt):""}</span>${r.summary?`<div class="small">${esc(r.summary)}</div>`:""}`});
   }); });
+  // Decisions and reads an item file asks of Phil, raised inside the window: they belong on the item's card, not a separate list.
+  NEEDS.filter(n=>n.t>since && !n.hide && n.itemId && n.fromItem).forEach(n=>{ const it=byId[n.itemId];
+    const grp=g(it.id,it.title,it.page,it.status); grp.last=Math.max(grp.last,n.t);
+    grp.lines.push({t:n.t,cls:"wait",nk:n.key,html:`🟠 <b>${esc(n.kind)}</b> <span class="muted">· raised ${ago(n.t)}</span><div class="small">${esc(n.what)}</div>`}); });
   const hkCard=G.get("_hk"); G.delete("_hk");
-  const cards=[...G.values()].filter(x=>x.lines.length).sort((a,b)=>b.last-a.last);
-  $("nowhint").textContent=`running now, or wrapped up / asked in the window (${$("since").selectedOptions[0].text}) · newest first · ${cards.length} effort(s)`;
-  const staleOf = c => { const it=I.find(i=>i.page===c.page); return it&&(it.maybe_stale||[]).length ? `<div class="small stale">may be out of date: ${it.maybe_stale.length} file(s) it names changed after this page (newest ${ago(Math.max(...it.maybe_stale.map(x=>T(x.changed))))})</div>` : ""; };
-  $("now").innerHTML = (cards.map(c=>`<div class="card item"><h3>${c.page?`<a href="${esc(c.page)}">${esc(c.title)}</a>`:esc(c.title)}</h3><div class="meta">${esc(c.sub||"")}</div>${staleOf(c)}${c.page?fuBox(c.page.replace("index.html#i=","")):""}${(()=>{ const L=c.lines.sort((a,b)=>b.t-a.t), cur=L.filter(l=>!l.old), old=L.filter(l=>l.old);
-      const line=l=>`<div class="${l.cls==="work"?"doing":l.cls==="wait"?"q":"res"}">${l.html}</div>`;
+  const NW=lsGet("wd:now",{}); const shown=[], hidden=[];
+  [...G.values()].filter(x=>x.lines.length).sort((a,b)=>b.last-a.last).forEach(c=>{
+    CARDKEYS[c.key]=c.lines.map(l=>l.nk).filter(Boolean); CARDTITLE[c.key]=c.title;
+    const s0=NW[c.key]; const on = s0 && (s0.act==="done" || (s0.act==="snooze" && Date.now()<until(s0)));
+    if(on){ const keep=c.lines.filter(l=>l.cls==="work" || l.t>s0.at);
+      const why = s0.act==="done"?"done "+ago(s0.at):"snoozed until "+new Date(until(s0)).toLocaleDateString();
+      c.lines=keep;   // what was there when Phil pressed Done stays handled; only newer lines and live work show
+      if(!keep.some(l=>l.cls!=="work")){ hidden.push({c,why}); if(!keep.length) return; c.dimmed=why; } }
+    shown.push(c); });
+  const I2=I; const staleOf = c => { const it=I2.find(i=>i.page===c.page); return it&&(it.maybe_stale||[]).length ? `<div class="small stale">may be out of date: ${it.maybe_stale.length} file(s) it names changed after this page (newest ${ago(Math.max(...it.maybe_stale.map(x=>T(x.changed))))})</div>` : ""; };
+  const line=l=>`<div class="${l.cls==="work"?"doing":l.cls==="wait"?"q":"res"}">${l.html}</div>`;
+  const acts=c=>c.dimmed?`<div class="cact small muted">${esc(c.dimmed)}, showing only what is still running <button onclick="cardUndo('${c.key}')">bring back</button></div>`
+    :`<div class="cact"><button title="Handled: hide until something new happens on it" onclick="cardAct('${c.key}','done')">Done</button>${snoozeMenu("cardAct",c.key)}</div>`;
+  const cardHtml=c=>`<div class="card item" data-q="${esc((c.title+' '+(c.sub||'')).toLowerCase())}"><h3>${c.page?`<a href="${esc(c.page)}">${esc(c.title)}</a>`:esc(c.title)}</h3><div class="meta">${esc(c.sub||"")}</div>${staleOf(c)}${c.page?fuBox(c.page.replace("index.html#i=","")):""}${(()=>{ const L=c.lines.sort((a,b)=>b.t-a.t), cur=L.filter(l=>!l.old), old=L.filter(l=>l.old);
       // Messages older than the page's own status are superseded by it: fold them away.
-      return cur.map(line).join("")+(old.length?`<details><summary class="small">${old.length} earlier message(s), older than the status above</summary>${old.map(line).join("")}</details>`:""); })()}</div>`).join("") || '<div class="empty">nothing running or wrapped in this window</div>')
+      return cur.map(line).join("")+(old.length?`<details><summary class="small">${old.length} earlier message(s), older than the status above</summary>${old.map(line).join("")}</details>`:""); })()}${acts(c)}</div>`;
+  const waitN=shown.filter(c=>!c.dimmed && c.lines.some(l=>l.cls==="wait")).length;
+  $("nowhint").textContent=`running now, or wrapped up / asked in the window (${$("since").selectedOptions[0].text}) · newest first · ${shown.length} effort(s)${waitN?` · ${waitN} asking you`:""}`;
+  $("now").innerHTML = (shown.map(cardHtml).join("") || '<div class="empty">nothing running or wrapped in this window</div>')
     + (hkCard?`<div class="card"><details><summary>Housekeeping: ${hkCard.lines.length} manager, dashboard and machine-setup update(s)</summary>${hkCard.lines.sort((a,b)=>b.t-a.t).map(l=>`<div class="small" style="margin-top:4px">${l.html}</div>`).join("")}</details></div>`:"");
+  $("now-hidden").innerHTML = hidden.map(({c,why})=>`<div class="card quiet"><h3>${esc(c.title)}</h3><div class="cact small muted">${esc(why)} <button onclick="cardUndo('${c.key}')">bring back</button></div></div>`).join("") || '<div class="empty small">none</div>';
+  $("now-hidden-sum").textContent=`Done and snoozed (${hidden.length})`;
+  tabCount("now", shown.filter(c=>!c.dimmed).length, waitN>0);
 }
+function tabCount(t,n,hot){ const e=$("tc-"+t); if(e){ e.textContent=n; e.className="tc"+(hot?" hot":""); } }
 function renderItems(since){
-  renderMachines(); renderNow(since);
+  renderMachines();
   const I = D.items||[]; const sById = Object.fromEntries(S.map(s=>[s.id,s]));
   const href = p => p ? `href="${esc(p)}"` : "";
   const lastChange = it => Math.max(T(it.file_updated), ...it.sessions.map(id=>T((sById[id]||{}).updated_at)));
   // banner: stale machines or stale page
-  const bad=[]; D.hosts.forEach(h=>{ if(h.stale) bad.push(`${h.host}: its 5-minute update isn't running (last snapshot ${h.age_min} min before this page was built), so everything shown for it is from then. Check its cron.`); if(!h.liveness_ok) bad.push(`${h.host}: live-session list unavailable, so busy/waiting may be wrong`); });
+  const bad=[]; D.hosts.forEach(h=>{ if(h.stale && h.was_busy) bad.push(`${h.host}: its 5-minute update isn't running (last snapshot ${h.age_min} min before this page was built), so everything shown for it is from then. Something was running there at that snapshot, so check the machine and its cron. Runs registered with a log on the mount are still judged from their logs.`); if(!h.liveness_ok && !h.stood_down) bad.push(`${h.host}: live-session list unavailable, so busy/waiting may be wrong`); });
   if(now-T(D.generated_at) > 15*60000) bad.push(`this page was built ${ago(T(D.generated_at))}: the refresh may have stopped`);
   if(!D.hosts.length) bad.push("no machine is reporting sessions");
   $("banner").innerHTML = bad.map(x=>`<div class="banner">⚠ ${esc(x)}</div>`).join("");
@@ -316,8 +378,8 @@ function renderItems(since){
   const isParked = it => !!PK[it.id] && !(lastChange(it) > PK[it.id].at);
   const backFromPark = it => !!PK[it.id] && lastChange(it) > PK[it.id].at;
   // Needs you
-  const st = lsGet("wd:needs",{}); const shown=[], hidden=[];
-  const add = (key, kind, title, page, what, sinceT, extra, itemId, decId) => {
+  const st = lsGet("wd:needs",{}); const shown=[], hidden=[]; const NEEDS=[];
+  const add = (key, kind, title, page, what, sinceT, extra, itemId, decId, fromItem) => {
     NEEDMETA[key] = {item:itemId||null, decision:decId||null, kind, text:what};
     const it = I.find(i=>i.id===itemId);
     if (it && isParked(it)) return;
@@ -327,10 +389,13 @@ function renderItems(since){
     if (s0 && s0.act==="done") { hide=true; why="done"; }
     if (s0 && s0.act==="snooze" && Date.now() < until(s0) && !(activity > s0.at)) { hide=true; why="snoozed until "+new Date(until(s0)).toLocaleDateString(); }
     const row = `<div class="need"><span class="kind">${esc(kind)}</span><span class="what">${page!==null?`<a ${href(page)}><b>${esc(title)}</b></a>`:`<b>${esc(title)}</b>`}<br>${esc(what)}</span>${extra||""}<span class="age">${sinceT?(kind.startsWith("session")||kind.startsWith("run")||kind.startsWith("result")||kind==="decision"||kind==="read"?"waiting "+ago(sinceT).replace(" ago",""):"listed "+ago(sinceT)):""}</span>${hide?`<button onclick="needUndo('${key}')">bring back</button> <span class="small muted">${why}</span>`:`<button onclick="needAct('${key}','done')">Done</button>${snoozeMenu("needAct",key)}${it?`<button title="Set this whole question aside; nothing is marked decided" onclick="parkAct('${it.id}','${esc(it.title).replace(/'/g,"&#39;")}')">Park</button>`:""}`}</div>`;
-    (hide?hidden:shown).push({t:sinceT||now,row});
+    const btns = hide?`<button onclick="needUndo('${key}')">bring back</button> <span class="small muted">${why}</span>`:`<button onclick="needAct('${key}','done')">Done</button>${snoozeMenu("needAct",key)}`;
+    const lite = `<div class="need sub"><span class="kind">${esc(kind)}</span><span class="what">${it?"":`<b>${esc(title)}</b><br>`}${esc(what)}</span>${extra||""}<span class="age">${sinceT?"waiting "+ago(sinceT).replace(" ago",""):""}</span>${btns}</div>`;
+    (hide?hidden:shown).push({t:sinceT||now,row,lite,itemId:it?it.id:null});
+    NEEDS.push({key,kind,what,t:sinceT||now,hide,itemId,fromItem:!!fromItem});
   };
   I.forEach(it => {
-    (it.needs_you||[]).forEach(([kind,what,since,decId]) => add(decId?`${it.id}:${decId}`:`${it.id}:${hkey(what)}`, kind, it.title, it.page, what, since?T(since):T(it.file_updated), "", it.id, decId));
+    (it.needs_you||[]).forEach(([kind,what,since,decId]) => add(decId?`${it.id}:${decId}`:`${it.id}:${hkey(what)}`, kind, it.title, it.page, what, since?T(since):T(it.file_updated), "", it.id, decId, true));
     it.sessions.map(id=>sById[id]).filter(s=>s && s.bucket==="waiting" && s.live!=="gone").forEach(s => {
       const ev=(s.events||[]).filter(e=>e.state==="blocked").pop();
       add(hkey(s.id+(s.needs||"")), "session stopped on a question", it.title, it.page, s.needs||s.parsed?.needs_input||"", ev?T(ev.at):T(s.updated_at), `<code>${esc(s.name)} · ${esc(s.host)}</code>`, it.id); });
@@ -342,18 +407,36 @@ function renderItems(since){
       add(`${it.id}:result:${hkey(r.label)}`, "result waiting", it.title, it.page, `${r.label} finished ${ago(fin)} on ${r.machine||"?"}; nobody has picked it up.${r.next?" Next: "+r.next:""}`, fin, `<span style="flex-basis:100%">${fuBox(it.id)}</span>`, it.id); }); });
   S.filter(s=>!s.item && s.bucket==="waiting" && s.live!=="gone").forEach(s=>{ const ev=(s.events||[]).filter(e=>e.state==="blocked").pop();
     add(hkey(s.id+(s.needs||"")), "session stopped on a question", s.name+" (not tied to a question)", null, s.needs||"", ev?T(ev.at):T(s.updated_at), `<code>${esc(s.host)}</code>`, null); });
-  shown.sort((a,b)=>a.t-b.t); // longest waiting first
-  if ((D.drafts||[]).length) shown.push({t:now,row:`<div class="need"><span class="kind">approve wording</span><span class="what"><b>${D.drafts.length} question/feature page(s) still show draft wording</b><br><span class="small muted">open a page and press Approve wording, or edit it via its 💬: ${D.drafts.slice(0,5).map(esc).join(" · ")}${D.drafts.length>5?" …":""}</span></span></div>`});
-  // Only the last 7 days up top; older open decisions are backlog, folded below.
-  const WEEK=7*DAY; const recentN=shown.filter(x=>now-x.t<WEEK), older=shown.filter(x=>now-x.t>=WEEK);
-  shown.length=0; shown.push(...recentN.sort((a,b)=>b.t-a.t));
-  $("needs-old").innerHTML = older.map(x=>x.row).join("") || '<div class="empty small">none</div>';
-  $("old-sum").textContent = `Older open decisions, waiting over a week (${older.length})`;
-  const TOP=8; const extra=shown.length>TOP?shown.slice(TOP):[];
-  $("needs").innerHTML = (shown.slice(0,TOP).map(x=>x.row).join("") || '<div class="empty">nothing needs you</div>')
-    + (extra.length?`<details><summary>${extra.length} more waiting on you</summary>${extra.map(x=>x.row).join("")}</details>`:"");
+  // Backlog: anything waiting on Phil from before the Now window (inside the window it sits on its Now card instead).
+  renderNow(since, NEEDS);
+  // Backlog, by question or feature: what each one is for, then what is waiting on Phil under it (older than the Now window), plus ones gone quiet 3+ days.
+  const older=shown.filter(x=>x.t<=since);
+  const BG=new Map(); const grp=k=>{ if(!BG.has(k)) BG.set(k,{rows:[],oldest:now}); return BG.get(k); };
+  older.forEach(x=>{ const g0=grp(x.itemId||"_none"); g0.rows.push(x); g0.oldest=Math.min(g0.oldest,x.t); });
+  const stalled=I.filter(it=>!isParked(it) && now-lastChange(it)>3*DAY);
+  stalled.forEach(it=>{ const g0=grp(it.id); g0.oldest=Math.min(g0.oldest,lastChange(it)); });
+  const keysB=[...BG.keys()].sort((a,b)=>(a==="_none")-(b==="_none") || BG.get(a).oldest-BG.get(b).oldest);   // longest waiting first
+  const parkBtn=it=>`<button title="Set this whole question aside; nothing is marked decided" onclick="parkAct('${it.id}','${esc(it.title).replace(/'/g,"&#39;")}')">Park</button>`;
+  $("needs").innerHTML = keysB.map(k=>{ const g0=BG.get(k); const rows=g0.rows.sort((a,b)=>a.t-b.t).map(x=>x.lite).join("");
+    if(k==="_none") return `<div class="card bgrp"><h3>Not tied to a question or feature</h3><div class="meta">sessions that stopped on a question without naming what it was for</div>${rows}</div>`;
+    const it=I.find(i=>i.id===k); const quiet=now-lastChange(it)>3*DAY;
+    return `<div class="card item bgrp ${it.kind==="feature"?"feature":""}" data-q="${esc((it.title+' '+it.program).toLowerCase())}">
+      <h3><a ${href(it.page)}>${esc(it.title)}</a> <span class="chip">${esc(it.kind)}</span>${quiet?` <span class="stale">quiet ${ago(lastChange(it)).replace(" ago","")}</span>`:""}</h3>
+      <div class="meta">${esc(it.program)}${g0.rows.length?` · ${g0.rows.length} waiting on you, oldest ${ago(g0.oldest).replace(" ago","")}`:" · nothing waiting on you, just quiet"}</div>
+      ${it.why?`<div class="intent">${esc(it.why)}</div>`:""}
+      <div class="small muted" style="margin:4px 0">Now: ${esc(it.status)}${it.owed?` · owed: ${esc(it.owed)}`:""}</div>
+      ${rows}
+      <div class="cact">${parkBtn(it)}<span style="flex:1">${fuBox(it.id)}</span></div></div>`; }).join("") || '<div class="empty">nothing older than the Now window is waiting on you, and nothing has gone quiet</div>';
   $("needs-hidden").innerHTML = hidden.map(x=>x.row).join("") || '<div class="empty small">none</div>';
   $("hidden-sum").textContent = `Done and snoozed (${hidden.length})`;
+  // Ideas: future stages with no plan, draft specs waiting on a read, pages still in draft wording.
+  const ideas=[];
+  D.briefs.forEach(b=>{ b.unplanned.forEach(x=>ideas.push({kind:"no plan yet",prog:b.title,what:x})); b.drafts.forEach(x=>ideas.push({kind:"draft spec to read",prog:b.title,what:x})); });
+  const ideaRow=x=>`<div class="need" data-q="${esc((x.prog+' '+x.what).toLowerCase())}" style="border-left-color:var(--new)"><span class="kind" style="color:var(--new)">${esc(x.kind)}</span><span class="what"><b>${esc(x.what)}</b><br><span class="small muted">${esc(x.prog)}</span></span></div>`;
+  $("ideas").innerHTML = ideas.map(ideaRow).join("")
+    + ((D.drafts||[]).length?`<div class="need"><span class="kind">approve wording</span><span class="what"><b>${D.drafts.length} question/feature page(s) still show draft wording</b><br><span class="small muted">open a page and press Approve wording, or edit it via its 💬: ${D.drafts.slice(0,5).map(esc).join(" · ")}${D.drafts.length>5?" …":""}</span></span></div>`:"")
+    || '<div class="empty">none</div>';
+  tabCount("backlog", keysB.length, older.length>0);
   // compact table, most recently changed first
   const rowOf = it => {
     const ss = it.sessions.map(id=>sById[id]).filter(s=>s && s.bucket!=="parked");
@@ -369,7 +452,7 @@ function renderItems(since){
   const sorted = I.slice().sort((a,b)=>lastChange(b)-lastChange(a));
   const head = `<tr><th>question or feature</th><th>where it stands</th><th>results</th><th>needs you</th><th>sessions</th><th>last change</th></tr>`;
   const active = sorted.filter(it=>!isParked(it)), parked = sorted.filter(isParked);
-  $("qtable").innerHTML = head + active.map(rowOf).join("");
+  $("qtable").innerHTML = head + active.map(rowOf).join(""); tabCount("questions", active.length, false);
   $("parked").innerHTML = parked.length ? `<table class="qt">${head}${parked.map(rowOf).join("")}</table>` : '<div class="empty small">none</div>';
   $("parked-sum").textContent = `Parked (${parked.length}): set aside, not decided; they come back if a session works on them`;
   // problems with triage
@@ -387,7 +470,7 @@ function renderItems(since){
   // quiet working sessions go grey
   document.querySelectorAll(".card.working").forEach(c=>{});
 }
-function filt(){ const q=$("q").value.toLowerCase(); document.querySelectorAll(".card, table.qt tr[data-q]").forEach(c=>c.style.display=!q||(c.dataset.q||"").includes(q)?"":"none"); }
+function filt(){ const q=$("q").value.toLowerCase(); document.querySelectorAll(".card, table.qt tr[data-q], .need[data-q]").forEach(c=>c.style.display=!q||(c.dataset.q||"").includes(q)?"":"none"); }
 $("since").onchange = ()=>{ $("sinceAt").style.display=$("since").value==="at"?"":"none"; render(); }; $("sinceAt").onchange = render; $("q").oninput = filt;
 render();
 // ---- item view: on the served site, question/feature pages open inside this page so the review server saves comments
@@ -396,11 +479,16 @@ render();
   const sc=document.createElement("script"); sc.textContent="(function(){"+(D.item_js||"")+"\n;window.initItem=initItem;window.pop=pop;window.approve=approve;window.acceptDraft=acceptDraft;})();"; document.head.appendChild(sc);
 })();
 const SERVED = location.protocol.startsWith("http");
+const TABS=["now","backlog","questions","more"];
+function setTab(t){ if(!TABS.includes(t)) t="now"; TABS.forEach(x=>{ $("tab-"+x).classList.toggle("on",x===t); document.querySelector(`#tabs [data-tab="${x}"]`).classList.toggle("on",x===t); });
+  try{localStorage.setItem("wd:tab",t)}catch(e){} }
+document.querySelectorAll("#tabs button").forEach(b=>b.onclick=()=>{ if(location.hash.startsWith("#i=")) location.hash=b.dataset.tab; else { history.replaceState(null,"","#"+b.dataset.tab); setTab(b.dataset.tab); window.scrollTo(0,0); } });
 function route(){
   const m=location.hash.match(/^#i=([\w.-]+)/); const v=$("itemview"), mainEl=$("statusmain");
   if(m && D.item_html[m[1]]){ v.innerHTML=D.item_html[m[1]]; v.style.display=""; mainEl.style.display="none"; window.scrollTo(0,0);
     const it=(D.items||[]).find(i=>i.id===m[1]); initItem(m[1], {title:it.title,why:it.why,answer:it.answer}, (D.item_comments||{})[m[1]]||{}, it.draft_seen||null); }
-  else { v.style.display="none"; v.innerHTML=""; mainEl.style.display=""; }
+  else { v.style.display="none"; v.innerHTML=""; mainEl.style.display="";
+    const h=location.hash.slice(1); let t=TABS.includes(h)?h:null; if(!t){ try{t=localStorage.getItem("wd:tab")}catch(e){} } setTab(t||"now"); }
 }
 document.addEventListener("click", e=>{ const a=e.target.closest("a[href]"); if(!a||!SERVED) return;
   const h=a.getAttribute("href"); const mm=h&&h.match(/^([\w.-]+)\.html$/);

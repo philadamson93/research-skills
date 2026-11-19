@@ -228,6 +228,50 @@ def readback_status(path: Path) -> tuple[str | None, str]:
     return None, ""
 
 
+def log_tail(run: dict, plan: Path) -> str:
+    """Last ~8 KB of the newest file among the run's watch paths (a folder counts by its newest file, one level)."""
+    best, best_t = None, 0.0
+    for w in run.get("watch", []):
+        pth = resolve(w, plan)
+        try:
+            cands = [x for x in pth.iterdir() if x.is_file()] if pth.is_dir() else [pth]
+            for c in cands:
+                t = c.stat().st_mtime
+                if t > best_t:
+                    best, best_t = c, t
+        except OSError:
+            continue
+    if not best:
+        return ""
+    try:
+        with open(best, "rb") as fh:
+            fh.seek(max(0, best.stat().st_size - 8192))
+            return fh.read().decode("utf-8", "replace")
+    except OSError:
+        return ""
+
+
+def judge_from_log(run: dict, plan: Path) -> tuple[str | None, str]:
+    """For a run whose session sleeps on a long job: done / failed / progress read from its own logs.
+    Optional run fields: done_file (exists when finished), done_text, fail_text, progress (regexes on the log tail)."""
+    df = run.get("done_file")
+    if df and resolve(df, plan).exists():
+        return "done", f"finished: {Path(df).name} exists"
+    if not any(run.get(k) for k in ("done_text", "fail_text", "progress")):
+        return None, ""
+    tail = log_tail(run, plan)
+    if run.get("fail_text") and re.search(run["fail_text"], tail):
+        return "failed", "failed: the log shows " + re.search(run["fail_text"], tail).group(0)[:80]
+    if run.get("done_text") and re.search(run["done_text"], tail):
+        return "done", "finished: the log shows " + re.search(run["done_text"], tail).group(0)[:80]
+    if run.get("progress"):
+        hits = re.findall(run["progress"], tail)
+        if hits:
+            last = hits[-1] if isinstance(hits[-1], str) else " ".join(hits[-1])
+            return None, "log: " + last[:80]
+    return None, ""
+
+
 def run_status(run: dict, plan: Path, now: float, hosts_by_name: dict) -> dict:
     """Judge a run by its readback's status line; 'possibly died' only if quiet AND its job is gone."""
     rb = run.get("readback")
@@ -262,6 +306,13 @@ def run_status(run: dict, plan: Path, now: float, hosts_by_name: dict) -> dict:
                 state = "running, job alive" if any(job in c for c in cmds) else "possibly died"
     else:
         state = {"waiting on phil": "waiting on Phil", "done": "done", "failed": "failed"}[st]
+    # The session may be asleep while its job runs, leaving the readback at "running": let the run's own logs speak.
+    if state.startswith("running") or state in ("quiet, can't check the job", "possibly died", "no readback yet", "status unknown"):
+        lst, lsum = judge_from_log(run, plan)
+        if lst:
+            state, summary = lst, lsum + (f" (readback still says: {summary})" if summary else "")
+        elif lsum:
+            summary = f"{summary} · {lsum}" if summary else lsum
     return {**run, "state": state, "summary": summary,
             "newest": datetime.fromtimestamp(newest, timezone.utc).isoformat() if newest else None,
             "age_h": round(age_h, 1) if age_h is not None else None}
@@ -305,7 +356,7 @@ def attach(s: dict, items: list, ids: set, plan: Path) -> str | None:
 
 def load_phil_actions(plan: Path) -> dict:
     """Phil's clicks and comments, as saved by the review server (planning/review_answers/<email>.json)."""
-    merged = {"approve": {}, "accept_draft": {}, "comments": {}, "needs": {}, "problems": {}, "parked": {}, "saved_at": None}
+    merged = {"approve": {}, "accept_draft": {}, "comments": {}, "needs": {}, "problems": {}, "parked": {}, "now_cards": {}, "saved_at": None}
     for f in sorted((plan / "review_answers").glob("*.json")):
         try:
             doc = json.loads(f.read_text())
@@ -329,6 +380,8 @@ def load_phil_actions(plan: Path) -> dict:
                 merged["problems"].update(val)
             elif k == "wd:park":
                 merged["parked"].update(val)
+            elif k == "wd:now":   # Done / Snooze on a Now card (its questions are also written to wd:needs)
+                merged["now_cards"].update(val)
             elif k.startswith("wd:c:"):
                 merged["comments"].setdefault(k[5:], {}).update(val)
     return merged
@@ -435,9 +488,20 @@ def main() -> None:
         except (OSError, json.JSONDecodeError):
             continue
         age_min = (now - (epoch(d.get("written_at")) or 0)) / 60
+        if (d.get("powered_off") or {}).get("dry_run"):
+            d["powered_off"] = None   # a rehearsal: the box is still on
         hosts.append({"host": d["host"], "written_at": d.get("written_at"), "age_min": round(age_min),
                       "machine": d.get("machine"),
-                      "stale": age_min > HOST_STALE_MIN, "liveness_ok": d.get("liveness_ok"),
+                      # A box that stood itself down (nothing running) is quiet on purpose, not broken.
+                      "stale": age_min > HOST_STALE_MIN and not d.get("stood_down") and not (d.get("powered_off") or {}).get("at"),
+                      "liveness_ok": d.get("liveness_ok"),
+                      "powered_off": d.get("powered_off"), "power_off_queued": d.get("power_off_queued"),
+                      "power_off_skipped": d.get("power_off_skipped"),
+                      "stood_down": d.get("stood_down"),
+                      # Was anything running at the last snapshot? If not, a snapshot that stopped most likely means
+                      # the VM was switched off, not that its cron broke.
+                      "was_busy": any(x.get("live") == "busy" for x in d.get("sessions", []))
+                                  or bool((d.get("machine") or {}).get("jobs")),
                       "n": len(d.get("sessions", []))})
         for s in d.get("sessions", []):
             s["bucket"] = bucket(s, now)
@@ -464,6 +528,10 @@ def main() -> None:
         if not isinstance(it, dict) or not it.get("id") or not it.get("title"):
             print(f"warning: skipping {f.name}: no id or title")
             continue
+        if "draft" in it and not isinstance(it["draft"], dict):
+            # e.g. "draft": true from a session that meant "new item, not approved yet" (no approved field already says that)
+            print(f"warning: {f.name}: 'draft' should hold proposed wording, got {it['draft']!r}; ignoring it")
+            it.pop("draft")
         it["file_updated"] = datetime.fromtimestamp(f.stat().st_mtime, timezone.utc).isoformat()
         items.append(it)
         files[it["id"]] = f
@@ -478,10 +546,18 @@ def main() -> None:
             or "dashboard" in (s.get("name") or "").lower()
         s["item"] = None if meta else attach(s, items, ids, plan)
     hosts_by_name = {h["host"]: h for h in hosts}
-    for it in items:
+    broken = []   # one malformed item file must not take the whole page down
+    for it in list(items):
         it["sessions"] = [s["id"] for s in sessions if s.get("item") == it["id"]]
-        it["runs_status"] = [run_status(r, plan, now, hosts_by_name) for r in it.get("runs", [])]
-        derive(it, now)
+        try:
+            it["runs_status"] = [run_status(r, plan, now, hosts_by_name) for r in it.get("runs", [])]
+            derive(it, now)
+        except (AttributeError, TypeError, KeyError, ValueError) as e:
+            print(f"warning: skipping item {it['id']}: {type(e).__name__}: {e}")
+            broken.append(f"[builder] item file {it['id']}.json is left off the page: a field is not in the README format "
+                          f"({type(e).__name__}: {e}). Its session (or the next one) should fix the file.")
+            items.remove(it)
+            continue
         # Free staleness check: a readback, results folder or source the page names changed after the page did.
         page_t = epoch(it["file_updated"]) or 0
         newer = []
@@ -536,7 +612,7 @@ def main() -> None:
         auto.append(f"{len(unatt)} active session(s) not tied to any question or feature: {', '.join(unatt[:6])}.")
     if live_site:
         pages.write_atomic(plan / "dashboard" / "problems-auto.json", json.dumps(auto, indent=1, ensure_ascii=False))
-    problems = auto + load_list("problems-proposed.json") + load_list("problems.json")
+    problems = broken + auto + load_list("problems-proposed.json") + load_list("problems.json")
 
     # Pages: one per item (also embedded in index.html, so the served site saves comments) and one per method.
     gen = now_dt.strftime("%Y-%m-%d %H:%M UTC")

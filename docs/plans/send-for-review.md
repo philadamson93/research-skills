@@ -2,7 +2,7 @@ Reference: docs/claude_ops.md
 Program: /mnt/su-vista-uscentral1/chaudhari_lab/phil/planning/programs/planning-layer.md — stage 8 (new: send for review)
 
 # Send for review: results pages arrive on the dashboard as they are ready
-Status: Approved (2026-11-20)
+Status: Built (2026-11-20) on feat/send-for-review; evaluator PASS on round 2 (planning/research-skills/reviews/send-for-review-implementation-feedback.md). Open: cross-machine delay check (Phil runs check_review_latency.sh on the serving VM), explainer, land.
 
 ## Goal
 When a session has a page ready for Phil (results, figures, explainers), it sends it to the work
@@ -74,12 +74,12 @@ site (the gcsfuse listing assumption is wrong and the server would need a live e
 - `claude_ops.md` — the new rule, one paragraph.
 
 ## Deliverables
-- [ ] `commands/send-for-review.md`
-- [ ] `scripts/dashboard/send_for_review.py`
-- [ ] "To review" tab + viewer in `dashboard_template.html`
-- [ ] index self-heal, verdict merge, item badge, archive in `build_dashboard.py`
-- [ ] tests
-- [ ] `/explain-plan` and `claude_ops.md` edits
+- [x] `commands/send-for-review.md` — 56dc847
+- [x] `scripts/dashboard/send_for_review.py` — c41b66e
+- [x] "To review" tab + viewer in `dashboard_template.html` — c41b66e
+- [x] index self-heal, verdict merge, item badge, archive in `build_dashboard.py` — c41b66e (item page section in `pages.py`)
+- [x] tests — c41b66e, `scripts/dashboard/tests/test_send_for_review.py` (42 pass with the existing ones)
+- [x] `/explain-plan` and `claude_ops.md` edits — 56dc847
 - [x] ~~stray `planning/plan-explainers/` pages moved~~ dropped, see Decided
 - [ ] dashboard item `send-for-review` ticked
 

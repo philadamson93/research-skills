@@ -274,7 +274,7 @@ function render(){
 }
 function lsGet(k,d){try{return JSON.parse(localStorage.getItem(k)||"null")??d}catch(e){return d}}
 function lsSet(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}}
-function hkey(s){let x=0;for(const c of s)x=(x*31+c.charCodeAt(0))|0;return "k"+(x>>>0).toString(36)}
+function hkey(s){let x=0;for(const c of String(s??""))x=(x*31+c.charCodeAt(0))|0;return "k"+(x>>>0).toString(36)}
 const NEEDMETA={};   // key -> {item, decision, text}: stored with each click so sessions can read what Phil closed
 const DAY=24*3600e3;
 function needAct(k,act,days){const st=lsGet("wd:needs",{});const at=Date.now();st[k]={act,at,...(days?{until:at+days*DAY}:{}),...(NEEDMETA[k]||{})};lsSet("wd:needs",st);render()}

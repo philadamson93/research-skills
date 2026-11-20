@@ -638,7 +638,7 @@ def main() -> None:
         page_t = epoch(it["file_updated"]) or 0
         newer = []
         for p_ in [r.get("readback") for r in it.get("runs", [])] + [w for r in it.get("runs", []) for w in r.get("watch", [])] + it.get("sources", []):
-            if not p_ or not (p_.startswith("/mnt/") or p_.startswith("planning/")) or "/programs/" in p_ or p_.startswith("planning/programs"):
+            if not isinstance(p_, str) or not (p_.startswith("/mnt/") or p_.startswith("planning/")) or "/programs/" in p_ or p_.startswith("planning/programs"):
                 continue   # briefs change for many reasons; they don't mean this page is stale
             try:
                 mt = resolve(p_, plan).stat().st_mtime

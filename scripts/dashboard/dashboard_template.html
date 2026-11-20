@@ -256,7 +256,7 @@ function render(){
     return `<div><span class="t">${when(e)}</span><span class="st-${e.state}">${word(e)}</span><span><span class="muted small">${esc(e.s.name)} (${esc(e.s.live)})</span> — ${esc(e.detail)}${older?`<details><summary>${g.length-1} earlier update(s)</summary>${older}</details>`:''}</span></div>`; };
   const itemsById = Object.fromEntries((D.items||[]).map(i=>[i.id,i]));
   const keys=[...byItem.keys()].sort((a,b)=>(a==="_other")-(b==="_other"));
-  $("feed").innerHTML = byItem.size ? keys.map(k=>`<div class="grp">${k==="_other"?"Not tied to a question or feature":esc(itemsById[k].title)}</div>`+byItem.get(k).map(rowOf).join("")).join("") : '<div class="empty">nothing finished or asked in this window</div>';
+  $("feed").innerHTML = byItem.size ? keys.map(k=>`<div class="grp">${k==="_other"?"Not tied to a question or feature":esc((itemsById[k]||{title:k+" (its item file could not be read)"}).title)}</div>`+byItem.get(k).map(rowOf).join("")).join("") : '<div class="empty">nothing finished or asked in this window</div>';
   renderItems(since);
   const by = k => S.filter(s => k.includes(s.bucket)).sort((a,b)=>T(b.updated_at)-T(a.updated_at));
   const fill = (id, list) => $(id).innerHTML = list.length ? list.map(card).join("") : '<div class="empty">none</div>';

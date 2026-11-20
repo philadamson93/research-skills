@@ -177,11 +177,12 @@ Never commit the HTML.
 
 Then:
 
-1. Open it where there's a display (`open <local path>` on the Mac).
-2. Link it: put the mount path in the PR description, or for work that went straight on `main`,
-   in the spec's close-out block next to the ticked deliverables, so the next session finds it.
-3. Hand over one line: the path and what a reader should look at first (usually the numbers or
-   the ❌ rows).
+1. Send it to Phil with `/send-for-review <page> --item <item-id> --look "<what to look at first>"`
+   (usually the numbers or the ❌ rows). That puts it on the dashboard's To review tab and prints its
+   website link.
+2. Link it: put that website link (and the mount path, for sessions) in the PR description, or for work
+   that went straight on `main`, in the spec's close-out block next to the ticked deliverables.
+3. Hand over one line in chat: the website link and what to look at first. Never just a mount path.
 
 Re-running on the same work regenerates the page in place. If the spec's SHA-256 no longer
 matches the one in the page header, the spec changed after the page was built; regenerate before

@@ -26,6 +26,19 @@ Nothing here asks a session anything. It reads what already exists and writes pa
 - `daily_review.py` runs once a day: one Sonnet call over all item files proposes duplicate work and
   missing links into `problems-proposed.json`, capped at $5 a day. It never edits item files.
 
+## Review pages (To review tab)
+
+`send_for_review.py send <page> --item <id> --look "..." [--fyi]` (skill: `/send-for-review`) freezes a copy
+as `planning/dashboard/review-<name>-v<N>.html` with its entry `review-<name>-v<N>.json`, and rewrites
+`review-index.json`. The served page checks that list every 10 s, so a page shows within about a minute
+(the mount's listing cache) without a rebuild. The builder also rebuilds the list from the entry files, merges
+answers (`wd:review` key: `seen`, `verdict` approve|changes, `comment`, `at`) into `phil-actions.json`
+under `review` and `review_pages`, shows a badge on the item's row, and moves pages answered or replaced
+more than 30 days ago to `archive/review/`. `send_for_review.py wait <id>` exits when Phil answers.
+Only answers from the emails listed in `planning/dashboard/review-reviewers.json` count (absent = everyone);
+colleagues can still open pages. `check_review_latency.sh`, run on the VM serving `/phil-dashboard/`, times how
+long a file uploaded from elsewhere takes to show there (pass: 90 s). Spec: `docs/plans/send-for-review.md`.
+
 ## Item file format
 
 JSON, one file per item. **Who may change a field matters**: Phil owns the meaning; sessions own progress.

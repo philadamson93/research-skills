@@ -169,6 +169,9 @@ unless I ask for it.
 - **Hand over a what-changed explainer** with `/explain-plan <spec>`. I don't read markdown. It makes
   a self-contained HTML page on the mount showing what was built (a diagram, a before/after, the
   numbers that moved) and carries the Mac mount write rule. Link it from the PR or close-out block.
+- **Any HTML page for me goes to the dashboard with `/send-for-review`**: results, figures, explainers.
+  It shows up on the website's To review tab within a minute and I answer there. In chat, give me the
+  link it prints, never a mount path to open.
 - Fix the docs the change made stale. Land branch work with `/land`. Mark the spec
   `Status: Completed (date)` and update `docs/plans/README.md`.
 

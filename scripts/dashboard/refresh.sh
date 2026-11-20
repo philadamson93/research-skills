@@ -14,4 +14,5 @@ bin=/mnt/su-vista-uscentral1/chaudhari_lab/phil/planning/dashboard/bin
 mkdir -p "$bin" && cp "$here/snapshot_sessions.py" "$bin/.snapshot_sessions.py.tmp" && mv "$bin/.snapshot_sessions.py.tmp" "$bin/snapshot_sessions.py"
 cp "$here/power_off.py" "$bin/.power_off.py.tmp" && mv "$bin/.power_off.py.tmp" "$bin/power_off.py"
 cp "$here/send_for_review.py" "$bin/.send_for_review.py.tmp" && mv "$bin/.send_for_review.py.tmp" "$bin/send_for_review.py"
+cp "$here/grill_page.py" "$bin/.grill_page.py.tmp" && mv "$bin/.grill_page.py.tmp" "$bin/grill_page.py"
 cp "$here/start_snapshot.sh" "$bin/.start_snapshot.sh.tmp" && chmod +x "$bin/.start_snapshot.sh.tmp" && mv "$bin/.start_snapshot.sh.tmp" "$bin/start_snapshot.sh"

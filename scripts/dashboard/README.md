@@ -34,7 +34,7 @@ as `planning/dashboard/review-<name>-v<N>.html` with its entry `review-<name>-v<
 (the mount's listing cache) without a rebuild. The builder also rebuilds the list from the entry files, merges
 answers (`wd:review` key: `seen`, `verdict` approve|changes, `comment`, `at`) into `phil-actions.json`
 under `review` and `review_pages`, shows a badge on the item's row, and moves pages answered or replaced
-more than 30 days ago to `archive/review/`. `send_for_review.py wait <id>` exits when Phil answers.
+more than 30 days ago to `archive/review/`. `send_for_review.py wait <id>` exits when Phil answers, or with exit 4 as soon as a newer version of the page is sent (so re-sends never stack up waits).
 Only answers from the emails listed in `planning/dashboard/review-reviewers.json` count (absent = everyone);
 colleagues can still open pages. `check_review_latency.sh`, run on the VM serving `/phil-dashboard/`, times how
 long a file uploaded from elsewhere takes to show there (pass: 90 s). Spec: `docs/plans/send-for-review.md`.

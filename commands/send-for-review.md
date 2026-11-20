@@ -37,19 +37,30 @@ item file's `sources`.
 
 ## Wait for the verdict without waiting
 
+Start a wait **only when you are about to end your turn and go quiet**. While Phil is going back and forth
+with you in chat about the page, don't start one: he answers in chat, and a wait per version just piles up
+background shells (eleven of them on one figure, v12 to v22, 2026-11-20).
+
+**One wait per page, at most.** Before starting a wait, check your own background shells; if one is already
+waiting on an earlier version of this page, stop it (`TaskStop`) first. The script also backs this up: a
+wait ends by itself (exit 4) within 30 s of a newer version being sent, from any session or machine.
+
 For a verdict page, start the line the script printed after `wait:` **as a background command** (Bash with
 `run_in_background`), then finish your turn as usual:
 
 ```bash
-python3 <same script> wait <entry-id>          # exits when Phil answers; gives up after 24 h
+python3 <same script> wait <entry-id>          # exits when Phil answers or a newer version is sent; gives up after 24 h
 ```
 
 When it exits you are woken with what Phil said:
 
 - `APPROVED` → record it on the item (status line, checklist) and carry on with the next step.
 - `NEEDS CHANGES` + `comment:` → make the change, re-send the page (same name, so it becomes v2), and
-  start a new wait.
+  start a new wait only if you are going quiet again.
+- `REPLACED` (exit 4) → a newer version was sent; that version's own wait (if any) covers it. Nothing to do.
 - `no verdict … after 24 h` (exit 3) → nothing to do; the verdict will wait on the item for the next session.
+
+Never stop background shells you didn't start (other sessions' servers and waits share the machine).
 
 If your session ends first, nothing is lost: verdicts are in `planning/dashboard/phil-actions.json` under
 `review_pages`, keyed by entry id, for whichever session picks the item up.

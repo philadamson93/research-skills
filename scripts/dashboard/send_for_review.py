@@ -3,6 +3,7 @@
 
     python3 send_for_review.py send PAGE --item ITEM_ID --look "what to look at" [--fyi] [--name NAME] [--by SESSION]
     python3 send_for_review.py wait ENTRY_ID [--hours 24]      # run in the background; exits when Phil answers
+                                                                # or when a newer version is sent (exit 4)
     python3 send_for_review.py index                            # rebuild review-index.json from the entry files
 
 `send` freezes a copy of PAGE into planning/dashboard/ as review-<name>-v<N>.html (the review server serves that
@@ -196,7 +197,10 @@ def send(a) -> int:
     print(f"sent {eid}  item={item or 'unattached'} ({how})  kind={entry['kind']}")
     print(f"link: {SITE}#r={eid}")
     if entry["kind"] == "verdict":
-        print(f"wait: python3 {Path(__file__).resolve()} wait {eid}   (run in the background)")
+        print(f"wait: python3 {Path(__file__).resolve()} wait {eid}   (run in the background, only if you are "
+              "ending your turn; skip it while iterating with Phil in chat)")
+        if entry["replaces"]:
+            print(f"      any wait still running on {entry['replaces']} ends by itself within 30 s")
     return 0
 
 
@@ -231,12 +235,31 @@ def verdicts(plan: Path = PLANNING) -> dict:
     return out
 
 
+def newer_version(dash: Path, eid: str) -> str | None:
+    """The id of a later version of this entry's page, if one was sent (archived ones count), else None."""
+    m = re.match(r"^(?P<name>.+)-v(?P<v>\d+)$", eid)
+    if not m:
+        return None
+    later = [v for v in used_versions(dash, m.group("name")) if v > int(m.group("v"))]
+    return f"{m.group('name')}-v{max(later)}" if later else None
+
+
 def wait(a) -> int:
-    """Exit 0 with the verdict when one appears for the entry, 3 after the time limit. Meant for a background run,
-    so a finished session wakes up when Phil answers."""
+    """Exit 0 with the verdict when one appears for the entry, 3 after the time limit, 4 as soon as a newer version
+    of the page is sent. Meant for a background run, so a finished session wakes up when Phil answers.
+
+    Exit 4 is what keeps waits from piling up: each re-send used to leave the previous version's 24-hour wait
+    sleeping on a page nobody will answer (eleven at once, 2026-11-20). Now the old wait ends by itself within
+    one check, whichever session or machine sent the new version."""
     deadline = time.time() + a.hours * 3600
+    dash = PLANNING / "dashboard"
     while time.time() < deadline:
         v = verdicts().get(a.entry, {})
+        if not v.get("verdict"):
+            newer = newer_version(dash, a.entry)
+            if newer:
+                print(f"REPLACED: {a.entry} by {newer}; this wait ended. Nothing to do here.")
+                return 4
         if v.get("verdict"):
             word = "APPROVED" if v["verdict"] == "approve" else "NEEDS CHANGES"
             print(f"{word}: {a.entry} by {v.get('reviewer', '?')} at "

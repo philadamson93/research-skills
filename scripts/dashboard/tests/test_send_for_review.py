@@ -126,6 +126,22 @@ class Verdicts(Fixture):
         self.assertIn("NEEDS CHANGES", r.stdout)
         self.assertIn("label the y axis", r.stdout)
 
+    def test_wait_ends_when_a_newer_version_is_sent(self):
+        src = self.page()
+        self.send(src)
+        self.assertEqual(sfr.main(["wait", "fig3-v1", "--hours", "0.0003", "--every", "0.2"]), 3)   # no v2 yet: times out
+        self.page(body="v2 body")
+        self.send(src)
+        t = time.time()
+        self.assertEqual(sfr.main(["wait", "fig3-v1", "--hours", "1", "--every", "0.2"]), 4)
+        self.assertLess(time.time() - t, 5)
+        self.answer({"fig3-v1": {"seen": 1, "verdict": "approve", "at": 2}})   # an answer on v1 still beats "replaced"
+        r = subprocess.run([sys.executable, str(HERE / "send_for_review.py"), "wait", "fig3-v1", "--hours", "0.01", "--every", "0.2"],
+                           capture_output=True, text=True, env={**os.environ, "WD_PLANNING": str(self.plan)}, timeout=60)
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertIn("APPROVED", r.stdout)
+        self.assertEqual(sfr.main(["wait", "fig3-v2", "--hours", "0.0003", "--every", "0.2"]), 3)   # v2 itself still waits
+
     def test_builder_merges_verdicts(self):
         self.answer({"fig3-v1": {"seen": 5, "verdict": "approve", "at": 10}, "old-v1": {"seen": 3}})
         acts = b.load_phil_actions(self.plan)

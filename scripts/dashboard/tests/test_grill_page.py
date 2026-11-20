@@ -26,15 +26,39 @@ class GrillPage(unittest.TestCase):
         self.assertIn("<code>val</code>", page)
         self.assertNotIn("<script>alert", page)
         self.assertIn("Round 2 · 2 questions", page)
-        self.assertIn("Approve</b> = yes to every recommendation", page)
+        self.assertIn("<b>Approve</b> with nothing changed = yes to every recommendation", page)
+        # free-form questions: "Recommended" starts selected, Other's box starts filled with the recommendation
+        self.assertIn("name='q2' value='yes' checked> Recommended", page)
+        self.assertIn("<textarea id='t2' placeholder='your answer'>yes</textarea>", page)
+        self.assertIn("&lt;script&gt;alert(1)&lt;/script&gt;</textarea>", page)
+        self.assertIn("\\u003cscript>", page)  # the data block can't close its own <script> tag
         self.assertIn("Settled so far (1)", page)
         self.assertEqual(sfr.relative_refs(page), [])  # send_for_review would accept it
+
+    def test_options_and_multi(self):
+        page = g.build({"title": "Grill: x", "questions": [
+            {"title": "N", "recommend": "200", "options": ["200", {"label": "500", "detail": "a day more GPU"}]},
+            {"title": "Sites", "multi": True, "recommend": ["lung", "liver"], "options": ["lung", "liver", "bone"]}]})
+        self.assertIn("name='q1' value=\"200\" checked> 200<span class=tag>recommended</span>", page)
+        self.assertIn("name='q1' value=\"500\"> 500<span class=d>— a day more GPU</span>", page)
+        self.assertIn("<textarea id='t1' placeholder='your answer'>200</textarea>", page)
+        self.assertIn("type='checkbox' name='q2' value=\"liver\" checked>", page)
+        self.assertIn("type='checkbox' name='q2' value=\"bone\">", page)
+        self.assertIn("Other (add your own)", page)
+        self.assertIn('{"multi": true, "rec": ["lung", "liver"], "title": "Sites"}', page)
+
+    def test_recommendation_must_be_an_option(self):
+        with self.assertRaises(SystemExit):
+            g.build({"title": "x", "questions": [{"title": "N", "recommend": "300", "options": ["200", "500"]}]})
+        with self.assertRaises(SystemExit):
+            g.build({"title": "x", "questions": [{"title": "S", "multi": True, "recommend": ["kidney"], "options": ["lung"]}]})
 
     def test_final_spec_page(self):
         page = g.build({"title": "Grill: probe run", "questions": [], "spec": "# Spec\n<b>x</b>"})
         self.assertIn("the spec below is right", page)
         self.assertIn("&lt;b&gt;x&lt;/b&gt;", page)
         self.assertNotIn("Q1", page)
+        self.assertNotIn("<script>", page)
 
     def test_empty_round_refused(self):
         with self.assertRaises(SystemExit):

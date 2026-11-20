@@ -43,7 +43,9 @@ and the final "is this the shared understanding?" check, is a page sent there:
 
 1. Write the round as JSON in `$CLAUDE_JOB_DIR/tmp` (or `docs/session/`): title `Grill: <the work>`,
    round number, one or two sentences of context, the settled decisions so far, and the frontier questions,
-   each with its body and recommended answer. Format in the docstring of
+   each with its body and recommended answer. When a question has a short list of answers, give them as
+   `options` (with `multi` if several can be picked) and make `recommend` one of them: Phil answers on the page
+   by clicking, the recommendation starts selected, and "Other" opens a box pre-filled with it. Format in the docstring of
    `research-skills/scripts/dashboard/grill_page.py` (mount copy: `planning/dashboard/bin/grill_page.py`).
 2. `python3 <that script> round.json grill-<slug>.html`, then send it with `/send-for-review` as a verdict
    page (no `--fyi`), `--name grill-<slug>` every round so each new round shows as the next version and the
@@ -52,7 +54,8 @@ and the final "is this the shared understanding?" check, is a page sent there:
 3. In chat, print only the link it gives and the question titles, one line each. Start the `wait` line in
    the background and end the turn.
 4. When it wakes you: `APPROVED` with no comment means yes to every recommendation. `NEEDS CHANGES` (or an
-   approval with a comment) means read the comment: `Q2: …` lines override those questions, unmentioned
+   approval with a comment) means read the comment: `Q2: …` lines override those questions (the page writes
+   them when Phil changes an answer: an option label, several joined by `; `, or Other's text), unmentioned
    questions take the recommendation, and anything unclear goes into the next round rather than being
    guessed. Record the answers, recompute the frontier, send the next round.
 5. The final round has no questions and carries the spec text (`"spec"`). Its approval is Phil's confirming

@@ -119,7 +119,7 @@ nav.tabs button.on{color:var(--ink);border-bottom-color:var(--work);font-weight:
   </nav>
 </header>
 <div id="itemview" style="display:none"></div>
-<div id="rview"><div id="rbar"></div><iframe id="rframe" title="page under review" sandbox="allow-scripts allow-popups allow-popups-to-escape-sandbox allow-downloads allow-modals"></iframe></div>
+<div id="rview"><div id="rbar"></div><iframe id="rframe" title="page under review" allow="clipboard-write" sandbox="allow-scripts allow-popups allow-popups-to-escape-sandbox allow-downloads allow-modals"></iframe></div>
 <main id="statusmain">
   <div id="banner"></div>
   <div class="tab" id="tab-review">
@@ -549,6 +549,18 @@ function rvShow(){
   rvBar(); const f=$("rframe"); if(f.dataset.id!==id){ f.src=e.file; f.dataset.id=id; }
   return true;
 }
+// Grill pages (grill_page.py) have answer controls; they post "Qn: answer" lines for every answer that differs from
+// the recommendation. Those replace the Q-lines in the comment box (other text Phil typed stays); nothing is saved
+// until Approve / Needs changes. On load the page is sent the saved comment so its choices come back.
+window.addEventListener("message", ev=>{ const f=$("rframe"); if(!f || ev.source!==f.contentWindow || !ev.data) return;
+  const id=location.hash.slice(3);
+  if(ev.data.wd==="grill-ready"){ f.contentWindow.postMessage({wd:"grill-restore", comment:($("rvc")||{}).value||(rvAns()[id]||{}).comment||""}, "*"); return; }
+  if(ev.data.wd!=="grill-answer" || !Array.isArray(ev.data.lines)) return;
+  const c=$("rvc"); if(!c) return;
+  const keep=c.value.split("\n").filter(l=>!/^Q\d+:/.test(l)).join("\n").trim();
+  const ls=ev.data.lines.map(String).filter(l=>/^Q\d+:/.test(l));
+  c.value=[ls.join("\n"), keep].filter(Boolean).join("\n\n");
+});
 if(SERVED_RV){ rvPoll(); setInterval(()=>{ if(document.visibilityState==="visible"||window.Notification?.permission==="granted") rvPoll(); }, 10000); }
 function filt(){ const q=$("q").value.toLowerCase(); document.querySelectorAll(".card, table.qt tr[data-q], .need[data-q], .rv[data-q]").forEach(c=>c.style.display=!q||(c.dataset.q||"").includes(q)?"":"none"); }
 $("since").onchange = ()=>{ $("sinceAt").style.display=$("since").value==="at"?"":"none"; render(); }; $("sinceAt").onchange = render; $("q").oninput = filt;

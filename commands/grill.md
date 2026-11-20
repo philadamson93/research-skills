@@ -6,7 +6,8 @@ argument-hint: "<rough idea, or path to a Draft spec to finish>"
 
 <!-- The interview below is mattpocock/skills `skills/productivity/grilling/SKILL.md` @ 49dd158,
      unmodified. MIT License, Copyright (c) 2026 Matt Pocock; full text in
-     LICENSES/MIT-mattpocock-skills.txt. Only the "Write it down" section after it is ours. -->
+     LICENSES/MIT-mattpocock-skills.txt. Only the "Where the rounds go" and "Write it down" sections
+     after it are ours. The first one overrides where a round is shown: on the dashboard, not in chat. -->
 
 
 Interview the user relentlessly until you reach a shared understanding. Map this as a **design tree**: every decision branches into the decisions that hang off it.
@@ -34,6 +35,31 @@ Each round the user answers reshapes the tree: settled decisions push the fronti
 Finding _facts_ is your job, never the user's. When a frontier question needs a fact from the environment (filesystem, tools, etc.), dispatch a sub-agent to find it; don't ask the user for anything you could look up yourself. Don't block on it: a running exploration is an unsettled prerequisite, so only the questions downstream of it wait for the sub-agent to report; ask the rest of the frontier now. The _decisions_ are the user's: put each to them and wait.
 
 The session is done when the frontier is empty: every branch of the design tree visited, nothing left silently assumed. Do not act on it until the user confirms you have reached a shared understanding.
+
+## Where the rounds go (VISTA addition, Phil 2026-11-20)
+
+Phil reads and answers grill rounds on the work dashboard's **To review** tab, not in chat. Each round,
+and the final "is this the shared understanding?" check, is a page sent there:
+
+1. Write the round as JSON in `$CLAUDE_JOB_DIR/tmp` (or `docs/session/`): title `Grill: <the work>`,
+   round number, one or two sentences of context, the settled decisions so far, and the frontier questions,
+   each with its body and recommended answer. Format in the docstring of
+   `research-skills/scripts/dashboard/grill_page.py` (mount copy: `planning/dashboard/bin/grill_page.py`).
+2. `python3 <that script> round.json grill-<slug>.html`, then send it with `/send-for-review` as a verdict
+   page (no `--fyi`), `--name grill-<slug>` every round so each new round shows as the next version and the
+   old one is marked replaced, `--item` once the dashboard item exists, and
+   `--look "Grill round N: <the decision that matters most this round>"`.
+3. In chat, print only the link it gives and the question titles, one line each. Start the `wait` line in
+   the background and end the turn.
+4. When it wakes you: `APPROVED` with no comment means yes to every recommendation. `NEEDS CHANGES` (or an
+   approval with a comment) means read the comment: `Q2: …` lines override those questions, unmentioned
+   questions take the recommendation, and anything unclear goes into the next round rather than being
+   guessed. Record the answers, recompute the frontier, send the next round.
+5. The final round has no questions and carries the spec text (`"spec"`). Its approval is Phil's confirming
+   the interview, so the spec becomes Approved.
+
+If Phil answers in chat instead, take the answer from chat. If the send fails (mount not reachable), say so
+and ask the round in chat in the format above.
 
 ## Write it down (VISTA addition)
 

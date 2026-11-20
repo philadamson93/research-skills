@@ -20,6 +20,7 @@ import re
 import time
 
 import pages
+import send_for_review as sfr
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -356,12 +357,13 @@ def attach(s: dict, items: list, ids: set, plan: Path) -> str | None:
 
 def load_phil_actions(plan: Path) -> dict:
     """Phil's clicks and comments, as saved by the review server (planning/review_answers/<email>.json)."""
-    merged = {"approve": {}, "accept_draft": {}, "comments": {}, "needs": {}, "problems": {}, "parked": {}, "now_cards": {}, "saved_at": None}
+    merged = {"approve": {}, "accept_draft": {}, "comments": {}, "needs": {}, "problems": {}, "parked": {}, "now_cards": {}, "review": {}, "saved_at": None}
     for f in sorted((plan / "review_answers").glob("*.json")):
         try:
             doc = json.loads(f.read_text())
         except (OSError, json.JSONDecodeError):
             continue
+        counts_for_review = sfr.reviewers(plan) is None or (doc.get("reviewer") or f.stem).lower() in sfr.reviewers(plan)
         merged["saved_at"] = max(filter(None, [merged["saved_at"], doc.get("saved_at")]), default=None)
         for k, v in (doc.get("state") or {}).items():
             if not k.startswith("wd:"):
@@ -382,6 +384,12 @@ def load_phil_actions(plan: Path) -> dict:
                 merged["parked"].update(val)
             elif k == "wd:now":   # Done / Snooze on a Now card (its questions are also written to wd:needs)
                 merged["now_cards"].update(val)
+            elif k == "wd:review":   # review pages: seen / Approve / Needs changes + comment (send_for_review.py)
+                if not counts_for_review:
+                    continue
+                for eid, v in (val or {}).items():
+                    if isinstance(v, dict) and (v.get("at") or v.get("seen") or 0) >= ((merged["review"].get(eid) or {}).get("at") or (merged["review"].get(eid) or {}).get("seen") or 0):
+                        merged["review"][eid] = v
             elif k.startswith("wd:c:"):
                 merged["comments"].setdefault(k[5:], {}).update(val)
     return merged
@@ -419,7 +427,7 @@ def apply_phil_actions(items: list, files: dict, acts: dict) -> list[str]:
     return changed
 
 
-DERIVED = {"file_updated", "sessions", "runs_status", "page", "needs_you", "cells", "code_summary", "approved_stale", "draft_seen", "maybe_stale"}
+DERIVED = {"reviews", "file_updated", "sessions", "runs_status", "page", "needs_you", "cells", "code_summary", "approved_stale", "draft_seen", "maybe_stale"}
 
 
 def derive(it: dict, now: float) -> None:
@@ -538,6 +546,20 @@ def main() -> None:
     live_site = out.parent.resolve() == (plan / "dashboard").resolve()
     acts = load_phil_actions(plan)
     changed = apply_phil_actions(items, files, acts) if live_site else []
+    # Review pages (send_for_review.py): archive old ones, rebuild the list the page checks every 10 s from the entry
+    # files (so a send that lost a race with another machine's is put back here), and copy each verdict into the
+    # entry list sessions read in phil-actions.json.
+    dash = plan / "dashboard"
+    if live_site:
+        moved = sfr.archive(dash, acts["review"])
+        if moved:
+            print(f"archived {len(moved)} review page(s)")
+        reviews = sfr.rebuild_index(dash)
+    else:
+        reviews = sfr.entries(dash)
+    acts["review_pages"] = {e["id"]: {"title": e["title"], "item": e.get("item"), "kind": e.get("kind"), "sent_at": e.get("sent_at"),
+                                      "by": e.get("by"), "replaced_by": e.get("replaced_by"), **(acts["review"].get(e["id"]) or {})}
+                            for e in reviews}
     if live_site:
         pages.write_atomic(plan / "dashboard" / "phil-actions.json", json.dumps(acts, indent=1, ensure_ascii=False))
     ids = {it["id"] for it in items}
@@ -571,6 +593,10 @@ def main() -> None:
             if mt > page_t + 600:
                 newer.append({"path": p_, "changed": datetime.fromtimestamp(mt, timezone.utc).isoformat()})
         it["maybe_stale"] = newer
+        it["reviews"] = [{"id": e["id"], "title": e["title"], "kind": e.get("kind"), "sent_at": e.get("sent_at"),
+                          "version": e.get("version"), "look": e.get("look"),
+                          **{k: (acts["review"].get(e["id"]) or {}).get(k) for k in ("verdict", "seen", "comment", "at")}}
+                         for e in reviews if e.get("item") == it["id"] and not e.get("replaced_by")]
     edited = [it for it in items if it.get("approved") and it["approved"].get("wording") not in (None, pages.wording_hash(it))]
     for it in edited:
         it["approved_stale"] = True
@@ -634,6 +660,7 @@ def main() -> None:
         "briefs": list(briefs.values()), "unowned_board": unowned_board,
         "stale_board_days": STALE_BOARD_DAYS, "items": items, "problems": problems,
         "drafts": drafts, "methods": methods, "item_html": item_html,
+        "reviews": reviews, "review_answers": acts["review"],
         "item_comments": acts["comments"], "item_css": pages.scoped_css(pages.CSS), "item_js": pages.JS,
     }
     ml = (Path(__file__).with_name("mount_links.js")).read_text()

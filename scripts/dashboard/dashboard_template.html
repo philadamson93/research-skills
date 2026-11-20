@@ -85,6 +85,13 @@ nav.tabs button.on{color:var(--ink);border-bottom-color:var(--work);font-weight:
 .tab{display:none}.tab.on{display:block}
 .bgrp{margin:8px 0}.bgrp .need.sub{border-left-width:3px;margin:4px 0;padding:4px 8px}.bgrp .need.sub .what{min-width:200px}
 .intent{font-size:13px;margin:2px 0}
+.rv{background:var(--panel);border:1px solid var(--line);border-left:4px solid var(--new);border-radius:8px;padding:8px 12px;margin:6px 0}
+.rv.seen{border-left-color:var(--line)}.rv.done{opacity:.6}.rv h3{font-size:14px;margin:0;display:flex;gap:6px;align-items:baseline;flex-wrap:wrap}
+.rv .look{background:var(--wait-bg);border-radius:6px;padding:4px 8px;margin:6px 0 2px}
+#rview{display:none}#rbar{position:sticky;top:0;z-index:6;background:var(--panel);border-bottom:1px solid var(--line);padding:8px 16px;display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+#rbar .t{font-weight:600;flex:1;min-width:200px}#rbar textarea{flex-basis:100%;min-height:44px;font:inherit;background:var(--panel);color:var(--ink);border:1px solid var(--line);border-radius:6px;padding:4px 6px}
+#rbar .ok{background:var(--done-bg);color:var(--done);border-color:var(--done)}#rbar .no{background:var(--wait-bg);color:var(--wait);border-color:var(--wait)}
+#rframe{width:100%;height:calc(100vh - 120px);border:0;background:#fff;display:block}
 .cact{display:flex;gap:4px;align-items:center;margin-top:6px;flex-wrap:wrap}.cact select{font-size:11px;padding:1px 4px}.cact button{font-size:11px;padding:1px 7px}
 </style>
 <script>/*__MOUNT_LINKS__*/</script>
@@ -102,6 +109,7 @@ nav.tabs button.on{color:var(--ink);border-bottom-color:var(--work);font-weight:
     </select><input type="time" id="sinceAt" style="display:none"></label>
   <input id="q" placeholder="filter (name, program, repo)" size="24">
   <nav class="tabs" id="tabs">
+    <button data-tab="review">To review <span class="tc" id="tc-review"></span></button>
     <button data-tab="now">Now <span class="tc" id="tc-now"></span></button>
     <button data-tab="backlog">Backlog <span class="tc" id="tc-backlog"></span></button>
     <button data-tab="questions">Questions and features <span class="tc" id="tc-questions"></span></button>
@@ -109,8 +117,14 @@ nav.tabs button.on{color:var(--ink);border-bottom-color:var(--work);font-weight:
   </nav>
 </header>
 <div id="itemview" style="display:none"></div>
+<div id="rview"><div id="rbar"></div><iframe id="rframe" title="page under review" sandbox="allow-scripts allow-popups allow-popups-to-escape-sandbox allow-downloads allow-modals"></iframe></div>
 <main id="statusmain">
   <div id="banner"></div>
+  <div class="tab" id="tab-review">
+  <section><h2>To review <span class="hint">pages sessions sent you, newest first · new ones appear within about a minute · Approve or Needs changes reaches the session that sent it</span></h2>
+    <div id="rvnotify"></div><div id="rvlist"></div>
+    <details style="margin-top:6px"><summary id="rvdone-sum">Answered, opened and replaced</summary><div id="rvdone"></div></details></section>
+  </div>
   <div class="tab" id="tab-now">
   <div id="machines" class="small" style="margin:6px 0"></div>
   <section><h2>Now and recent <span class="hint" id="nowhint"></span></h2>
@@ -224,6 +238,7 @@ function progCard(b){
 }
 
 function render(){
+  renderReview();
   const since = sinceMs();
   $("awayhint").textContent = $("since").value==="visit" ? (prevVisit?`since ${new Date(prevVisit).toLocaleString()}`:"first visit on this browser: showing 8 h") : "";
   const ev = [];
@@ -446,7 +461,7 @@ function renderItems(since){
     const icons = ss.map(s=>s.bucket==="working"?"🔵":["waiting","asked"].includes(s.bucket)?"🟠":"✓").join("");
     const nn=(it.needs_you||[]).length;
     return `<tr data-q="${esc((it.title+' '+it.program).toLowerCase())}"><td>${isNew?'<span class="new">NEW</span> ':''}<span class="chip">${esc(it.kind)}</span><br><a ${href(it.page)}><b>${esc(it.title)}</b></a><div class="small muted">${esc(it.program)}</div></td>
-      <td class="st">${esc(it.status)}${(it.maybe_stale||[]).length?`<div class="small stale">may be out of date: ${it.maybe_stale.map(x=>esc(x.path.replace(/\/+$/,"").split("/").pop())).slice(0,3).join(", ")} changed after this page</div>`:""}${runsHtml(it)}${it.owed?`<div class="small muted">owed: ${esc(it.owed)}</div>`:''}</td><td>${bar}</td>
+      <td class="st">${rvBadge(it.id)}${esc(it.status)}${(it.maybe_stale||[]).length?`<div class="small stale">may be out of date: ${it.maybe_stale.map(x=>esc(x.path.replace(/\/+$/,"").split("/").pop())).slice(0,3).join(", ")} changed after this page</div>`:""}${runsHtml(it)}${it.owed?`<div class="small muted">owed: ${esc(it.owed)}</div>`:''}</td><td>${bar}</td>
       <td>${nn?`<b style="color:var(--wait)">${nn}</b>`:'<span class="muted">0</span>'}</td><td title="${esc(ss.map(s=>s.name+' ('+s.bucket+')').join('\n'))}">${icons||'<span class="small muted">none</span>'}</td>
       <td class="small ${stale&&!isParked(it)?'stale':''}">${ago(lc)}${stale&&!isParked(it)?'<br>nothing moved in a week':''}${backFromPark(it)?'<br><b>back from parked: new activity</b>':''}<br>${isParked(it)?`<button onclick="unpark('${it.id}')">Unpark</button>`:`<button title="Set this whole question aside; nothing is marked decided" onclick="parkAct('${it.id}','${esc(it.title).replace(/'/g,"&#39;")}')">Park</button>`}</td></tr>`; };
   const sorted = I.slice().sort((a,b)=>lastChange(b)-lastChange(a));
@@ -470,7 +485,70 @@ function renderItems(since){
   // quiet working sessions go grey
   document.querySelectorAll(".card.working").forEach(c=>{});
 }
-function filt(){ const q=$("q").value.toLowerCase(); document.querySelectorAll(".card, table.qt tr[data-q], .need[data-q]").forEach(c=>c.style.display=!q||(c.dataset.q||"").includes(q)?"":"none"); }
+// ---- To review: pages sent with send_for_review.py. The list is review-index.json, checked every 10 s on the served
+// site; answers live in wd:review, which the review server saves to the mount like every other click.
+let RV = D.reviews || [];
+function rvAns(){ return lsGet("wd:review", {}); }
+function rvSet(id, patch){ const st=rvAns(); st[id]={...(st[id]||{}), ...patch}; lsSet("wd:review", st); }
+function rvIsOpen(e){ const a=rvAns()[e.id]||{}; return !e.replaced_by && !(e.kind==="fyi" ? a.seen : a.verdict); }
+function rvItemTitle(e){ const it=(D.items||[]).find(i=>i.id===e.item); return it ? it.title : (e.item ? e.item : null); }
+function rvBadge(itemId){ const mine=RV.filter(e=>e.item===itemId && !e.replaced_by); const open=mine.filter(rvIsOpen);
+  if(open.length) return `<div class="small"><a href="#r=${esc(open[0].id)}"><b style="color:var(--new)">${open.length} page${open.length>1?"s":""} to review</b></a></div>`;
+  const last=mine.map(e=>({e,a:rvAns()[e.id]||{}})).filter(x=>x.a.verdict).sort((x,y)=>y.a.at-x.a.at)[0]; if(!last) return "";
+  return `<div class="small"><a href="#r=${esc(last.e.id)}">${last.a.verdict==="approve"?"✓ you approved":"✎ you asked for changes on"} ${esc(last.e.title)}</a>${last.a.comment?` <span class="muted">· ${esc(last.a.comment)}</span>`:""}</div>`; }
+function rvRow(e){ const a=rvAns()[e.id]||{}; const it=rvItemTitle(e); const open=rvIsOpen(e);
+  const state = e.replaced_by ? `replaced by ${esc(e.replaced_by.replace(/^.*-v/,"v"))}` : a.verdict==="approve" ? "✓ approved" : a.verdict==="changes" ? "✎ needs changes" : (e.kind==="fyi" && a.seen) ? "opened" : "";
+  return `<div class="rv ${a.seen?"seen":""} ${open?"":"done"}" data-q="${esc((e.title+" "+(it||"")+" "+(e.by||"")).toLowerCase())}">
+    <h3>${a.seen?"":'<span class="new">NEW</span>'}<a href="#r=${esc(e.id)}">${esc(e.title)}</a> <span class="chip">${e.kind==="fyi"?"for your information":"needs your verdict"}</span>${e.version>1?`<span class="chip">v${Number(e.version)}</span>`:""}${state?`<span class="small muted">${state}</span>`:""}</h3>
+    <div class="meta small muted">${it?`<a href="index.html#i=${esc(e.item)}">${esc(it)}</a>`:"not tied to a question or feature"} · sent ${ago(T(e.sent_at))} by ${esc(e.by||"a session")} on ${esc(e.host||"?")}</div>
+    ${e.look?`<div class="look">${esc(e.look)}</div>`:""}${a.comment?`<div class="small">Your comment: ${esc(a.comment)}</div>`:""}</div>`; }
+function renderReview(){
+  const open=RV.filter(rvIsOpen), rest=RV.filter(e=>!rvIsOpen(e)); const unseen=open.filter(e=>!(rvAns()[e.id]||{}).seen).length;
+  $("rvlist").innerHTML = open.map(rvRow).join("") || '<div class="empty">nothing waiting for your review</div>';
+  $("rvdone").innerHTML = rest.map(rvRow).join("") || '<div class="empty small">none</div>';
+  $("rvdone-sum").textContent = `Answered, opened and replaced (${rest.length})`;
+  tabCount("review", open.length, unseen>0);
+  document.title = (unseen?`(${unseen} new) `:"") + "Work Dashboard";
+  $("rvnotify").innerHTML = (window.Notification && Notification.permission==="default" && SERVED_RV) ? '<div class="small" style="margin-bottom:6px"><button onclick="Notification.requestPermission().then(renderReview)">Turn on desktop notifications</button> <span class="muted">so a new page pops up even when this tab is in the background</span></div>' : "";
+}
+const SERVED_RV = location.protocol.startsWith("http");
+function rvKnown(){ try{ return JSON.parse(sessionStorage.getItem("wd-rv-known")||"null"); }catch(e){ return null; } }
+function rvPoll(){
+  fetch("review-index.json", {cache:"no-store"}).then(r=>r.ok?r.json():null).then(doc=>{ if(!doc||!Array.isArray(doc.entries)) return;
+    const known=rvKnown(); const ids=doc.entries.map(e=>e.id);
+    if(known && window.Notification && Notification.permission==="granted")
+      doc.entries.filter(e=>!known.includes(e.id) && !e.replaced_by).forEach(e=>{ try{ const n=new Notification("New page to review", {body:e.title+(e.look?"\n"+e.look:""), tag:e.id}); n.onclick=()=>{ focus(); location.hash="r="+e.id; }; }catch(x){} });
+    try{ sessionStorage.setItem("wd-rv-known", JSON.stringify([...new Set([...(known||[]), ...ids])])); }catch(x){}
+    const changed = JSON.stringify(ids.concat(doc.entries.map(e=>e.replaced_by)))!==JSON.stringify(RV.map(e=>e.id).concat(RV.map(e=>e.replaced_by)));
+    RV = doc.entries; if(changed){ render(); if(location.hash.startsWith("#r=")) { if($("rview").style.display==="none") route(); else if(!rvTyping()) rvBar(); } }
+  }).catch(()=>{});
+}
+// A rebuild skipped while typing is done when the comment box loses focus, so a "newer version" banner still shows.
+document.addEventListener("focusout", e=>{ if(e.target.id==="rvc" && location.hash.startsWith("#r=")) setTimeout(()=>{ if(!rvTyping()) rvBar(); else { const id=location.hash.slice(3), x=RV.find(r=>r.id===id); if(x&&x.replaced_by&&!document.querySelector("#rbar .banner")) $("rbar").insertAdjacentHTML("afterbegin",`<span class="banner" style="margin:0">a newer version was sent: <a href="#r=${esc(x.replaced_by)}">open it</a></span>`); } }, 0); });
+function rvTyping(){ const c=$("rvc"); if(!c) return false; const saved=(rvAns()[location.hash.slice(3)]||{}).comment||"";
+  return document.activeElement===c || c.value.trim()!==saved; }
+function rvBar(){
+  const id=location.hash.slice(3); const e=RV.find(x=>x.id===id); if(!e) return false;
+  const a=rvAns()[id]||{}; const it=rvItemTitle(e); const newest=e.replaced_by;
+  $("rbar").innerHTML = `<a href="#review">← to review</a><span class="t">${esc(e.title)} <span class="small muted">v${Number(e.version)} · ${it?esc(it):"not tied to a question"} · sent ${ago(T(e.sent_at))} by ${esc(e.by||"a session")}</span></span>`
+    + (newest?`<span class="banner" style="margin:0">a newer version was sent: <a href="#r=${esc(newest)}">open it</a></span>`:"")
+    + (e.kind==="fyi" ? '<span class="small muted">for your information: opening it is enough</span>'
+      : `${a.verdict?`<span class="small"><b>${a.verdict==="approve"?"✓ You approved":"✎ You asked for changes"}</b> ${ago(a.at)}</span>`:""}<button class="ok" onclick="rvVerdict('approve')">Approve</button><button class="no" onclick="rvVerdict('changes')">Needs changes</button>
+      <textarea id="rvc" placeholder="Comment for the session that sent it (what to change, or anything else)">${esc(a.comment||"")}</textarea>`)
+    + (e.look?`<div class="small" style="flex-basis:100%"><b>Look at:</b> ${esc(e.look)}</div>`:"");
+  return true;
+}
+function rvVerdict(v){ const id=location.hash.slice(3); const c=($("rvc")||{}).value||"";
+  if(v==="changes" && !c.trim() && !confirm("Ask for changes without a comment? The session will not know what to change.")) return;
+  rvSet(id, {verdict:v, comment:c.trim(), at:Date.now()}); rvBar(); render(); }
+function rvShow(){
+  const id=location.hash.slice(3); const e=RV.find(x=>x.id===id); if(!e) return false;
+  if(!(rvAns()[id]||{}).seen){ rvSet(id, {seen:Date.now()}); render(); }
+  rvBar(); const f=$("rframe"); if(f.dataset.id!==id){ f.src=e.file; f.dataset.id=id; }
+  return true;
+}
+if(SERVED_RV){ rvPoll(); setInterval(()=>{ if(document.visibilityState==="visible"||window.Notification?.permission==="granted") rvPoll(); }, 10000); }
+function filt(){ const q=$("q").value.toLowerCase(); document.querySelectorAll(".card, table.qt tr[data-q], .need[data-q], .rv[data-q]").forEach(c=>c.style.display=!q||(c.dataset.q||"").includes(q)?"":"none"); }
 $("since").onchange = ()=>{ $("sinceAt").style.display=$("since").value==="at"?"":"none"; render(); }; $("sinceAt").onchange = render; $("q").oninput = filt;
 render();
 // ---- item view: on the served site, question/feature pages open inside this page so the review server saves comments
@@ -479,12 +557,14 @@ render();
   const sc=document.createElement("script"); sc.textContent="(function(){"+(D.item_js||"")+"\n;window.initItem=initItem;window.pop=pop;window.approve=approve;window.acceptDraft=acceptDraft;})();"; document.head.appendChild(sc);
 })();
 const SERVED = location.protocol.startsWith("http");
-const TABS=["now","backlog","questions","more"];
+const TABS=["review","now","backlog","questions","more"];
 function setTab(t){ if(!TABS.includes(t)) t="now"; TABS.forEach(x=>{ $("tab-"+x).classList.toggle("on",x===t); document.querySelector(`#tabs [data-tab="${x}"]`).classList.toggle("on",x===t); });
   try{localStorage.setItem("wd:tab",t)}catch(e){} }
-document.querySelectorAll("#tabs button").forEach(b=>b.onclick=()=>{ if(location.hash.startsWith("#i=")) location.hash=b.dataset.tab; else { history.replaceState(null,"","#"+b.dataset.tab); setTab(b.dataset.tab); window.scrollTo(0,0); } });
+document.querySelectorAll("#tabs button").forEach(b=>b.onclick=()=>{ if(location.hash.startsWith("#i=")||location.hash.startsWith("#r=")) location.hash=b.dataset.tab; else { history.replaceState(null,"","#"+b.dataset.tab); setTab(b.dataset.tab); window.scrollTo(0,0); } });
 function route(){
   const m=location.hash.match(/^#i=([\w.-]+)/); const v=$("itemview"), mainEl=$("statusmain");
+  const rv=$("rview"); rv.style.display="none";
+  if(location.hash.startsWith("#r=") && rvShow()){ v.style.display="none"; mainEl.style.display="none"; rv.style.display="block"; window.scrollTo(0,0); return; }
   if(m && D.item_html[m[1]]){ v.innerHTML=D.item_html[m[1]]; v.style.display=""; mainEl.style.display="none"; window.scrollTo(0,0);
     const it=(D.items||[]).find(i=>i.id===m[1]); initItem(m[1], {title:it.title,why:it.why,answer:it.answer}, (D.item_comments||{})[m[1]]||{}, it.draft_seen||null); }
   else { v.style.display="none"; v.innerHTML=""; mainEl.style.display="";
@@ -496,7 +576,7 @@ document.addEventListener("click", e=>{ const a=e.target.closest("a[href]"); if(
   if(mm && D.item_html[mm[1]]){ e.preventDefault(); location.hash="i="+mm[1]; } });
 window.addEventListener("hashchange", route); route();
 // Reload every 3 minutes while visible, to pick up a rebuilt page.
-setInterval(()=>{ if(document.visibilityState==="visible" && !location.hash.startsWith("#i=") && !document.querySelector("textarea:focus")) location.reload(); }, 180000);
+setInterval(()=>{ if(document.visibilityState==="visible" && !location.hash.startsWith("#i=") && !location.hash.startsWith("#r=") && !document.querySelector("textarea:focus")) location.reload(); }, 180000);
 </script>
 </body>
 </html>

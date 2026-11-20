@@ -152,6 +152,14 @@ def item_body(it: dict, by_id: dict, sessions: list, generated: str) -> str:
                         f'<div class="small"><code>{E(c.get("where", ""))}</code></div>'
                         f'{f"<div class=small muted>used by: " + ", ".join(E(by_id.get(u, {}).get("title", u)) for u in c.get("used_by", [])) + "</div>" if c.get("used_by") else ""}</div>'
                         for i, c in enumerate(it.get("code", []))) or '<div class="muted">none listed</div>'
+    def _rv(r):
+        word = {"approve": "✓ approved", "changes": "✎ you asked for changes"}.get(r.get("verdict") or "",
+                                                                             "opened" if r.get("kind") == "fyi" and r.get("seen") else "waiting for you")
+        return (f'<div class="box"><a href="index.html#r={E(r["id"])}"><b>{E(r.get("title", ""))}</b></a> <span class="small muted">v{E(r.get("version", ""))}'
+                f' · sent {E((r.get("sent_at") or "")[:10])} · {E(word)}</span>'
+                + (f'<div class="small">Your comment: {E(r["comment"])}</div>' if r.get("comment") else "") + '</div>')
+    rv_html = "".join(_rv(r) for r in sorted(it.get("reviews") or [], key=lambda r: r.get("sent_at") or "", reverse=True)) \
+        or '<div class="muted">none sent</div>'
     links = "".join(f'<a href="index.html#i={E(l)}">{E(by_id[l]["title"])}</a> · ' for l in it.get("links", []) if l in by_id)
     methods = "".join(f'<a class="chip" href="method-{E(m)}.html">{E(m)}</a>' for m in it.get("methods", []))
     sess = "".join(f'<div class="small">{E(s["bucket"])} · {E(s["name"])} <span class="muted">· {E(s["host"])} · <code>claude attach {E(s["id"])}</code></span></div>'
@@ -166,6 +174,7 @@ def item_body(it: dict, by_id: dict, sessions: list, generated: str) -> str:
 <div class="small muted">Now: {E(it.get("status", ""))}</div>{draft_html}</section>
 <section><h2>{res_title}</h2>{body}</section>
 {f'<section><h2>Results</h2>{_findings(it["findings"])}</section>' if lay != "findings" and it.get("findings") else ""}
+<section><h2>Pages sent for review</h2>{rv_html}</section>
 <section><h2>Decisions for you</h2>{dec_html}</section>
 <section><h2>Runs</h2>{runs_html}</section>
 <section><h2>Code</h2>{code_html}</section>

@@ -273,6 +273,40 @@ def judge_from_log(run: dict, plan: Path) -> tuple[str | None, str]:
     return None, ""
 
 
+_WANDB_KEY = None
+
+
+def wandb_state(ref: str) -> dict | None:
+    """State of one wandb run, "entity/project/run_id", via the public GraphQL API with the key in ~/.netrc.
+    None on any problem (no key, no network, unknown run): the run is then judged as before."""
+    global _WANDB_KEY
+    try:
+        ent, proj, rid = ref.strip("/").split("/")[-3:]
+        if _WANDB_KEY is None:
+            import netrc
+            _WANDB_KEY = (netrc.netrc().authenticators("api.wandb.ai") or (None, None, ""))[2]
+        if not _WANDB_KEY:
+            return None
+        import base64
+        import urllib.request
+        q = {"query": "query($e:String!,$p:String!,$r:String!){ project(name:$p, entityName:$e){ run(name:$r){ state heartbeatAt summaryMetrics } } }",
+             "variables": {"e": ent, "p": proj, "r": rid}}
+        req = urllib.request.Request("https://api.wandb.ai/graphql", data=json.dumps(q).encode(), headers={
+            "Authorization": "Basic " + base64.b64encode(f"api:{_WANDB_KEY}".encode()).decode(), "Content-Type": "application/json"})
+        node = (((json.load(urllib.request.urlopen(req, timeout=20)).get("data") or {}).get("project") or {}).get("run"))
+        if not node:
+            return None
+        sm = {}
+        try:
+            sm = json.loads(node.get("summaryMetrics") or "{}")
+        except (TypeError, ValueError):
+            pass
+        step = next((f"{k} {sm[k]}" for k in ("epoch", "train/epoch", "_step") if isinstance(sm.get(k), (int, float))), "")
+        return {"state": node.get("state"), "heartbeat": node.get("heartbeatAt"), "step": step}
+    except Exception:  # noqa: BLE001 - wandb is a second opinion; never let it break the page
+        return None
+
+
 def run_status(run: dict, plan: Path, now: float, hosts_by_name: dict) -> dict:
     """Judge a run by its readback's status line; 'possibly died' only if quiet AND its job is gone."""
     rb = run.get("readback")
@@ -314,6 +348,26 @@ def run_status(run: dict, plan: Path, now: float, hosts_by_name: dict) -> dict:
             state, summary = lst, lsum + (f" (readback still says: {summary})" if summary else "")
         elif lsum:
             summary = f"{summary} · {lsum}" if summary else lsum
+    # wandb knows within minutes when a training run dies, even with its session asleep and its box quiet.
+    refs = run.get("wandb") or []
+    refs = [refs] if isinstance(refs, str) else refs
+    wbs = [w for w in (wandb_state(r) for r in refs) if w and w.get("state")]
+    wb = None
+    if wbs:   # several runs under one entry: any failure is a failure, done only when all finished
+        bad = [w for w in wbs if w["state"] in ("failed", "crashed", "killed")]
+        wb = bad[0] if bad else (wbs[0] if all(w["state"] == "finished" for w in wbs) else
+                                 next((w for w in wbs if w["state"] != "finished"), wbs[0]))
+    if wb and wb.get("state"):
+        hb = wb.get("heartbeat") or ""
+        hb_t = epoch(hb if hb.endswith("Z") or "+" in hb else hb + "Z") if hb else None
+        word = {"finished": "done", "failed": "failed", "crashed": "failed", "killed": "failed"}.get(wb["state"])
+        note = f"wandb: {wb['state']}{', ' + wb['step'] if wb['step'] else ''}{', last heartbeat ' + hb[:16].replace('T', ' ') + ' UTC' if hb else ''}"
+        if word and state not in ("done", "failed", "waiting on Phil"):
+            state, summary = word, note + (f" (readback still says: {summary})" if summary else "")
+        else:
+            summary = f"{summary} · {note}" if summary else note
+        if hb_t:
+            newest = max(newest, hb_t)
     return {**run, "state": state, "summary": summary,
             "newest": datetime.fromtimestamp(newest, timezone.utc).isoformat() if newest else None,
             "age_h": round(age_h, 1) if age_h is not None else None}

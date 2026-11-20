@@ -74,6 +74,7 @@ JSON, one file per item. **Who may change a field matters**: Phil owns the meani
             "watch": ["planning/<repo>/runs/<run>/train.log"],   // log or output folder on the mount
             "done_text": "Training complete", "fail_text": "Traceback|out of memory",   // judged from the log tail
             "progress": "epoch \\d+/\\d+", "done_file": "planning/<repo>/runs/<run>/final.pt",   // all optional
+            "wandb": "padamson/contrastive-3d/<run_id>",   // optional (or a list): state + heartbeat from wandb
             "next": "Score against LOCKED_X.txt; start from <originator readback>"}],   // result goes to: a test/readback, never a session
   "code": [{"what": "Agent over time", "where": "vista_eval_vlm feat/died-ehr-over-time",
             "state": "unmerged", "used_by": ["agents-vs-embeddings"]}],   // throwaway | unmerged | permanent

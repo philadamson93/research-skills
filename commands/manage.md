@@ -38,8 +38,31 @@ the other session nothing and delivers one notice when it next goes idle or exit
 - A notice scopes work to that one session. A full sweep is for the first tick and the heartbeat.
 
 **Keep a long fallback wakeup** — 1200s or more. It catches what subscriptions cannot: a session
-that dies without notifying, a board edited elsewhere, a plan that appeared on the mount, and idle
-sessions you are barred from subscribing to. A wakeup with nothing to report is the system working.
+that dies without notifying, a board edited elsewhere, a plan that appeared on the mount, a run
+whose log stopped moving, and idle sessions you are barred from subscribing to. A wakeup with
+nothing to report is the system working.
+
+⛔ **Never end a turn without a pending wakeup.** Subscriptions are not one: an idle session sends
+nothing, and a run stuck inside a busy session never makes it idle. On 11-23 the manager's only
+wake was "disk under 30 GB"; a tumor-board driver sat 9 hours on its first log line and nobody saw.
+`ScheduleWakeup` works only under `/loop` — outside it, the wakeup is a **background Bash task**,
+which re-invokes you when it exits:
+
+```bash
+# run_in_background: true — exits (and wakes you) on the first of: 25 min, disk < 30 GB,
+# or any watched progress log quiet past its limit. LOGS="path:minutes ..."
+end=$(( $(date +%s) + 1500 )); while [ $(date +%s) -lt $end ]; do
+  [ "$(df -BG --output=avail / | tail -1 | tr -dc 0-9)" -lt 30 ] && { echo DISK; exit; }
+  for e in $LOGS; do f=${e%:*}; m=${e##*:}; [ -n "$(find "$f" -mmin +$m 2>/dev/null)" ] && { echo "STALE $f"; exit; }; done
+  sleep 60; done; echo HEARTBEAT
+```
+
+- Put `LOGS` on the same line as the loop. Each entry is a run's progress log and its *Quiet for*
+  (from the hand-off header, or 60 minutes if it gives none).
+- **Re-arm every time it fires, before doing anything else.** Last action of every turn: confirm
+  exactly one is pending. A second copy doubles every wake; none is the 11-23 failure.
+- Add a log to `LOGS` the moment you learn of a run — a peer reporting "running unattended, progress
+  log at X" is exactly that moment.
 
 ⚠ **Do not build a watcher on `state.json`'s `state` or `tempo`.** They are not rewritten on the
 working→idle transition and have been observed inverted in both directions. `tokens` and `inFlight`
@@ -215,6 +238,7 @@ Each check answers yes or no about a file or a process.
 | **Completed with open deliverables** | A spec marked `Status: Completed` that still has an unticked `- [ ]` under *Deliverables*. |
 | **spec over a page** | A spec (it has *Done when*) past about 80 lines. That is two pieces of work, or implementation steps crept in. Older long-format plans are exempt. |
 | **two sessions, one worktree** | Two live sessions sharing a `cwd`. One session's reset destroys the other's uncommitted work. |
+| **run stalled** | A run's progress log (named in its hand-off, readback or the owning session's message) has not changed for longer than its *Quiet for* (default 60 min) while the run is meant to be going. Judge by the log, never by "its processes are alive": on 11-23 a driver waited 9 hours on a wait loop that matched its own command line, and the manager's process count (`pgrep -c -f <script>`) counted that same loop and read healthy. Nudge the owning session with the log path and its last line's time. |
 | **heavy job on a shared box** | A session on a shared, Claude-hosting box (phil-sllm-01/02) is running, or its last message is about to start, a job expected to need more than ~8 GB memory, more than 4 cores, or more than 30 minutes — model fits, grids, bootstraps, embedding runs. Those belong on phil-hcpu via a mount hand-off; on the shared box they squeeze out every other session (11-04: three longitudinal sessions' fits drove free memory to 3 GB and got each other's runs killed). Measure with `free -g`, `uptime` and `ps -eo pid,ppid,pcpu,rss,etime,comm` (process names only — never command lines), then match to the session via its last message or output folder. Nudge that one session to hand off to hcpu; a run already near the end may finish. |
 | **session on a Completed plan** | A live session whose plan doc is marked Completed — either the plan is stale or the work is redundant. |
 | **session maps to no program** | A live session resolving to no board entry. Untracked work. |
@@ -347,6 +371,8 @@ step. They commit and merge.
 (`tasks`, `queued`, `kinds`) is trustworthy, and a session has been seen idle while holding a
 running test gate. But `inFlight` is not sufficient: a detached `codex exec` was invisible to it.
 Look for a live process too, and read the session's last message for a launch it awaits.
+
+⚠ **A `pgrep -f <text>` count is not evidence a run is alive.** It also matches any wait loop, watcher or shell whose command line contains that text — including your own. Liveness comes from the progress log moving, or from `pgrep -x <name>` on a process name, never a command-line search.
 
 ⚠ **Never `pgrep -af` or `ps -ef` to find a session's processes.** `-a` prints the command line,
 and a `claude -p` child carries its prompt there — in these repos that means report text and

@@ -21,6 +21,33 @@ with which session, and which have no live session left to raise them. Those are
 - **Never resolve a conflict between sessions.** Name it and stop.
 - **Never read code or diffs.** Every finding is a yes-or-no fact about a file or a process.
 
+## The one exception — stop what is about to take a box down
+
+Phil, 2026-11-25: "approved to stop things like this that are urgent without my permission … I
+won't usually respond in time." On 11-25 phil-hcpu-01 fell from 49 to 11 GB available in 40
+minutes; Phil's answer arrived after the culprit had already ended. On 11-24 the same box hung
+outright at 18:37 with nothing logged.
+
+**Urgent means all three:**
+1. A shared box (no swap) is heading for memory or disk exhaustion — available memory under about
+   12 GB *and* falling, or projected to hit zero within about 15 minutes at the measured rate.
+2. You have measured which process is driving it: its own memory growing, or the bucket-mount
+   program (`gcsfuse`) growing while this process holds files open on the mount
+   (`ls -l /proc/<pid>/fd | grep -c su-vista`).
+3. Messaging the owning session first will not land in time — it is mid-command, idle, or has not
+   answered within a few minutes.
+
+**Then, without waiting for Phil:**
+- Re-check that the PID is still the same process (same start time), then `kill -TERM`; `kill -KILL`
+  only if it is still alive 30 seconds later.
+- Stop the smallest thing that ends the growth: one process, not its session, never more than one
+  at a time, re-measuring between stops.
+- Immediately tell the owning session (what you stopped, why, the numbers) and Phil (digest top
+  line plus your reply), and log it under the digest's errors section if it turns out to be wrong.
+
+**Still Phil's, however urgent:** remounting the bucket, restarting `gcsfuse`, rebooting, deleting
+files, or stopping a whole Claude session. Anything that breaks more than the one runaway process.
+
 ## Cadence — wait to be told, don't poll
 
 `SendMessage` with `notify_when_idle: true` and an empty `message` is a pure subscription: it costs
@@ -240,6 +267,7 @@ Each check answers yes or no about a file or a process.
 | **two sessions, one worktree** | Two live sessions sharing a `cwd`. One session's reset destroys the other's uncommitted work. |
 | **run stalled** | A run's progress log (named in its hand-off, readback or the owning session's message) has not changed for longer than its *Quiet for* (default 60 min) while the run is meant to be going. Judge by the log, never by "its processes are alive": on 11-23 a driver waited 9 hours on a wait loop that matched its own command line, and the manager's process count (`pgrep -c -f <script>`) counted that same loop and read healthy. Nudge the owning session with the log path and its last line's time. |
 | **heavy job on a shared box** | A session on a shared, Claude-hosting box (phil-sllm-01/02) is running, or its last message is about to start, a job expected to need more than ~8 GB memory, more than 4 cores, or more than 30 minutes — model fits, grids, bootstraps, embedding runs. Those belong on phil-hcpu via a mount hand-off; on the shared box they squeeze out every other session (11-04: three longitudinal sessions' fits drove free memory to 3 GB and got each other's runs killed). Measure with `free -g`, `uptime` and `ps -eo pid,ppid,pcpu,rss,etime,comm` (process names only — never command lines), then match to the session via its last message or output folder. Nudge that one session to hand off to hcpu; a run already near the end may finish. |
+| **bucket mount eating memory** | The mount program `gcsfuse` holds more than ~10 GB, or grows while no job's own memory does. It buffers every file open on the mount: a `find`/`bfs`/`rg` walking the whole mount, or a job streaming large files into it, can each take 30–40 GB (11-25 on phil-hcpu-01: a leftover search from `/` with 2,384 mount files open plus a pilot streaming 12 × 290 MB files took gcsfuse to 43 GB and the box to 11 GB available; on 11-24 the kernel's out-of-memory kill was triggered by gcsfuse). Find the cause with `ls -l /proc/<pid>/fd \| grep -c su-vista` per process. Tell the owning session to write big files to local disk and search only `planning/`; if it is about to take the box down, see *The one exception*. |
 | **session on a Completed plan** | A live session whose plan doc is marked Completed — either the plan is stale or the work is redundant. |
 | **session maps to no program** | A live session resolving to no board entry. Untracked work. |
 | **board over cap** | A board past 100 lines, an item marked landed, or **any line past ~600 characters**. Line count alone measures the wrong thing — every board passes it while single lines run past 3,000 characters and bury anything urgent inside them. Report the line, not just the board. |
@@ -516,3 +544,5 @@ to Phil. Launch exactly one replacement, and never a second because the first lo
 - **Don't advance past a gate** because the next step looks obvious.
 - **Don't keep a check that cries wolf** — retire it on its tally and say so.
 - **Don't trust a zero** from a check you have not proven can return non-zero.
+- **Don't wait for Phil on a runaway that is about to take a box down** — stop that one process
+  (see *The one exception*), then tell the owner and Phil. Nothing broader than that one process.
